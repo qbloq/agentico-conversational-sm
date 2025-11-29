@@ -1,0 +1,47 @@
+{
+  "name": "conversational-sales-engine",
+  "version": "1.0.0",
+  "description": "Conversational AI Sales Engine - Monorepo",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "pnpm -r build",
+    "build:supabase": "npx tsx scripts/build-supabase.ts",
+    "build:supabase:watch": "npx tsx scripts/build-supabase.ts --watch",
+    "test": "pnpm -r test",
+    "test:run": "pnpm -r test:run",
+    "lint": "pnpm -r lint",
+    "typecheck": "pnpm -r typecheck",
+    "dev": "pnpm -r dev",
+    "seed:kb": "npx tsx scripts/seed-knowledge-base.ts",
+    "supabase:dev": "pnpm build:supabase && supabase functions serve --no-verify-jwt",
+    "supabase:deploy": "pnpm build:supabase && supabase functions deploy"
+  },
+  "keywords": [
+    "sales",
+    "ai",
+    "conversational",
+    "llm",
+    "chatbot",
+    "supabase"
+  ],
+  "author": "Parallelo",
+  "license": "MIT",
+  "packageManager": "pnpm@10.24.0",
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "devDependencies": {
+    "@google/generative-ai": "^0.24.1",
+    "@supabase/supabase-js": "^2.39.0",
+    "@types/node": "^20.10.0",
+    "dotenv": "^17.2.3",
+    "esbuild": "^0.27.0",
+    "openai": "^4.24.0",
+    "tsx": "^4.7.0",
+    "typescript": "^5.3.0"
+  },
+  "dependencies": {
+    "@parallelo/sales-engine": "workspace:*"
+  }
+}

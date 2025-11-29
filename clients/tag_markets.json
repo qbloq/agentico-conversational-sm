@@ -1,0 +1,39 @@
+{
+  "clientId": "tag_markets",
+  "schemaName": "client_tag_markets",
+  "storageBucket": "media-tag-markets",
+  
+  "channels": {
+    "whatsapp": {
+      "phoneNumberId": "${TAG_WHATSAPP_PHONE_NUMBER_ID}",
+      "accessToken": "vault:tag_whatsapp_access_token",
+      "appSecret": "vault:tag_whatsapp_app_secret"
+    }
+  },
+  
+  "llm": {
+    "provider": "gemini",
+    "model": "gemini-2.0-flash",
+    "fallbackProvider": "anthropic",
+    "fallbackModel": "claude-sonnet-4-20250514"
+  },
+  
+  "escalation": {
+    "enabled": true,
+    "notifyWhatsApp": "${TAG_ESCALATION_WHATSAPP}",
+    "highValueThreshold": 5000
+  },
+  
+  "business": {
+    "name": "TAG Markets",
+    "description": "Broker de trading con cuentas amplificadas 12x. Ofrece cuentas Pro, Zero e Islámicas con MetaTrader 5.",
+    "language": "es",
+    "timezone": "America/Mexico_City"
+  },
+  
+  "knowledgeBase": {
+    "sourceFile": "../design/kb/faq-enriched.json",
+    "embeddingProvider": "gemini",
+    "embeddingModel": "text-embedding-004"
+  }
+}
