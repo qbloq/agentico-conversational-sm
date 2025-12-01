@@ -54,6 +54,7 @@ export function createSupabaseSessionStore(
   return {
     async findByKey(key: SessionKey): Promise<Session | null> {
       const { data, error } = await supabase
+        .schema(schemaName)
         .from(sessionsTable)
         .select('*')
         .eq('channel_type', key.channelType)
@@ -70,6 +71,7 @@ export function createSupabaseSessionStore(
     
     async findById(id: string): Promise<Session | null> {
       const { data, error } = await supabase
+        .schema(schemaName)
         .from(sessionsTable)
         .select('*')
         .eq('id', id)
@@ -84,6 +86,7 @@ export function createSupabaseSessionStore(
     
     async create(key: SessionKey, contactId: string): Promise<Session> {
       const { data, error } = await supabase
+        .schema(schemaName)
         .from(sessionsTable)
         .insert({
           contact_id: contactId,
@@ -118,6 +121,7 @@ export function createSupabaseSessionStore(
       if (updates.lastMessageAt !== undefined) dbUpdates.last_message_at = updates.lastMessageAt.toISOString();
       
       const { data, error } = await supabase
+        .schema(schemaName)
         .from(sessionsTable)
         .update(dbUpdates)
         .eq('id', id)

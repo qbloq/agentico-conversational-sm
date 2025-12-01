@@ -85,6 +85,22 @@ function createMockDeps(): EngineDependencies {
       findByCategory: vi.fn().mockResolvedValue([mockKnowledgeEntry]),
       findByTags: vi.fn().mockResolvedValue([mockKnowledgeEntry]),
     },
+    mediaService: {
+      download: vi.fn(),
+      upload: vi.fn(),
+      transcribe: vi.fn().mockResolvedValue({
+        text: 'This is a transcribed audio message',
+        confidence: 0.98,
+        duration: 5,
+      }),
+      analyzeImage: vi.fn().mockResolvedValue({
+        description: 'A receipt for $500 USD from Chase Bank',
+        confidence: 0.95,
+      }),
+    },
+    notificationService: {
+      sendEscalationAlert: vi.fn().mockResolvedValue(undefined),
+    },
     clientConfig: {
       clientId: 'tag_markets',
       schemaName: 'client_tag_markets',
@@ -182,8 +198,12 @@ describe('ConversationEngine', () => {
     const engine = createConversationEngine();
     const deps = createMockDeps();
     
-    // Mock an escalated session
-    const escalatedSession = { ...mockSession, isEscalated: true };
+    // Mock an escalated session RECENTLY (so it doesn't resume)
+    const escalatedSession = { 
+      ...mockSession, 
+      isEscalated: true, 
+      lastMessageAt: new Date() 
+    };
     (deps.sessionStore.findByKey as ReturnType<typeof vi.fn>).mockResolvedValue(escalatedSession);
     
     const sessionKey: SessionKey = {
@@ -208,5 +228,86 @@ describe('ConversationEngine', () => {
     // Should return empty responses for escalated sessions
     expect(result.responses).toHaveLength(0);
     expect(deps.llmProvider.generateResponse).not.toHaveBeenCalled();
+  });
+
+  it('should transcribe audio messages automatically', async () => {
+    const engine = createConversationEngine();
+    const deps = createMockDeps();
+    
+    const message: NormalizedMessage = {
+      id: 'msg-audio',
+      timestamp: new Date(),
+      type: 'audio',
+      mediaUrl: 'https://example.com/audio.ogg',
+    };
+    
+    const result = await engine.processMessage({
+      sessionKey: { channelType: 'whatsapp', channelId: '1', channelUserId: '1' },
+      message,
+      deps,
+    });
+    
+    expect(deps.mediaService.transcribe).toHaveBeenCalledWith('https://example.com/audio.ogg');
+    // The engine should modify the message object in place or pass the transcribed text
+    // to LLM. Check if LLM received the text.
+    expect(deps.llmProvider.generateResponse).toHaveBeenCalledWith(
+      expect.objectContaining({
+        messages: expect.arrayContaining([
+          expect.objectContaining({ role: 'user', content: 'This is a transcribed audio message' })
+        ])
+      })
+    );
+  });
+
+  it('should resume escalated session after 1 hour of silence', async () => {
+    const engine = createConversationEngine();
+    const deps = createMockDeps();
+    
+    // Session escalated 2 hours ago
+    const twoHoursAgo = new Date(Date.now() - 2 * 60 * 60 * 1000);
+    const escalatedSession = { 
+      ...mockSession, 
+      isEscalated: true,
+      lastMessageAt: twoHoursAgo 
+    };
+    (deps.sessionStore.findByKey as ReturnType<typeof vi.fn>).mockResolvedValue(escalatedSession);
+    
+    const message: NormalizedMessage = {
+      id: 'msg-resume',
+      timestamp: new Date(),
+      type: 'text',
+      content: 'Hola, ya regresé',
+    };
+    
+    const result = await engine.processMessage({
+      sessionKey: { channelType: 'whatsapp', channelId: '1', channelUserId: '1' },
+      message,
+      deps,
+    });
+    
+    // Should NOT return empty responses (should process)
+    expect(result.responses).not.toHaveLength(0);
+    expect(result.sessionUpdates?.isEscalated).toBe(false);
+    expect(result.sessionUpdates?.status).toBe('active');
+  });
+
+  it('should send notification on escalation', async () => {
+    const engine = createConversationEngine();
+    const deps = createMockDeps();
+    
+    const message: NormalizedMessage = {
+      id: 'msg-esc',
+      timestamp: new Date(),
+      type: 'text',
+      content: 'Quiero hablar con un humano urgentemente',
+    };
+    
+    await engine.processMessage({
+      sessionKey: { channelType: 'whatsapp', channelId: '1', channelUserId: '1' },
+      message,
+      deps,
+    });
+    
+    expect(deps.notificationService.sendEscalationAlert).toHaveBeenCalled();
   });
 });

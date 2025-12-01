@@ -24,6 +24,8 @@ const isWatch = process.argv.includes('--watch');
 const entryPoints = {
   'sales-engine': path.join(SALES_ENGINE_SRC, 'index.ts'),
   'sales-engine-llm': path.join(SALES_ENGINE_SRC, 'llm/index.ts'),
+  'sales-engine-media': path.join(SALES_ENGINE_SRC, 'media/index.ts'),
+  'sales-engine-escalation': path.join(SALES_ENGINE_SRC, 'escalation/index.ts'),
 };
 
 // Deno-compatible banner

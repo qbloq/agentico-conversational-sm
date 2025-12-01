@@ -302,7 +302,7 @@ async function normalizeAndUploadMedia(
     try {
       // 1. Get download URL from Meta
       const metaUrlResponse = await fetch(
-        `https://graph.facebook.com/v18.0/${mediaId}`,
+        `https://graph.facebook.com/v24.0/${mediaId}`,
         { headers: { 'Authorization': `Bearer ${accessToken}` } }
       );
       const { url: downloadUrl } = await metaUrlResponse.json();
@@ -384,7 +384,7 @@ async function sendWhatsAppMessage(
   accessToken: string
 ): Promise<void> {
   const baseUrl = Deno.env.get('WHATSAPP_API_BASE_URL') || 'https://graph.facebook.com';
-  const url = `${baseUrl}/v18.0/${phoneNumberId}/messages`;
+  const url = `${baseUrl}/v24.0/${phoneNumberId}/messages`;
   
   const response = await fetch(url, {
     method: 'POST',

@@ -38,6 +38,10 @@ importers:
         version: 5.9.3
 
   packages/sales-engine:
+    dependencies:
+      assemblyai:
+        specifier: ^4.19.0
+        version: 4.19.0
     devDependencies:
       '@anthropic-ai/sdk':
         specifier: ^0.71.0
@@ -866,6 +870,10 @@ packages:
   array-union@2.1.0:
     resolution: {integrity: sha512-HGyxoOTYUyCM6stUe6EJgnd4EoewAI7zMdfqO+kGjnlZmBDz/cR5pf8r/cR4Wq60sL/p0IkcjUEEPwS3GFrIyw==}
     engines: {node: '>=8'}
+
+  assemblyai@4.19.0:
+    resolution: {integrity: sha512-3yMTZoipmae16Xj3htLKtG/m7PMOt/enIn16u3leX9iF+GiTpzuj60aUqA3zq19lkoDauVlpWVy6PIYssWN1Nw==}
+    engines: {node: '>=18'}
 
   assertion-error@1.1.0:
     resolution: {integrity: sha512-jgsaNduz+ndvGyFt3uSuWqvy4lCnIJiovtouQN5JZHOKCS2QuhEdbcQHFhVksz2N2U9hXJo8odG7ETyWlEeuDw==}
@@ -2267,6 +2275,13 @@ snapshots:
   argparse@2.0.1: {}
 
   array-union@2.1.0: {}
+
+  assemblyai@4.19.0:
+    dependencies:
+      ws: 8.18.3
+    transitivePeerDependencies:
+      - bufferutil
+      - utf-8-validate
 
   assertion-error@1.1.0: {}
 

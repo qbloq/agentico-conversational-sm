@@ -52,6 +52,7 @@ export function createSupabaseMessageStore(
   return {
     async getRecent(sessionId: string, limit: number): Promise<Message[]> {
       const { data, error } = await supabase
+        .schema(schemaName)
         .from(tableName)
         .select('*')
         .eq('session_id', sessionId)
@@ -71,6 +72,7 @@ export function createSupabaseMessageStore(
       message: Omit<Message, 'id' | 'sessionId' | 'createdAt'>
     ): Promise<Message> {
       const { data, error } = await supabase
+        .schema(schemaName)
         .from(tableName)
         .insert({
           session_id: sessionId,

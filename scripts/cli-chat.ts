@@ -69,7 +69,7 @@ async function main() {
   // 5. Initialize Providers
   const llmProvider = createGeminiProvider({
     apiKey: googleKey,
-    model: 'gemini-2.0-flash', // Hardcoded for now or use config
+    model: 'gemini-2.5-flash', // Hardcoded for now or use config
   });
   
   const embeddingProvider = createGeminiEmbeddingProvider({

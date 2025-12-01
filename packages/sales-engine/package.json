@@ -14,6 +14,14 @@
     "./llm": {
       "import": "./dist/llm/index.js",
       "types": "./dist/llm/index.d.ts"
+    },
+    "./media": {
+      "import": "./dist/media/index.js",
+      "types": "./dist/media/index.d.ts"
+    },
+    "./escalation": {
+      "import": "./dist/escalation/index.js",
+      "types": "./dist/escalation/index.d.ts"
     }
   },
   "files": [
@@ -62,5 +70,8 @@
     "openai": {
       "optional": true
     }
+  },
+  "dependencies": {
+    "assemblyai": "^4.19.0"
   }
 }

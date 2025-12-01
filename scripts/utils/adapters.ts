@@ -369,7 +369,7 @@ export function createSupabaseKnowledgeStore(
       // Use the RPC function we created
       
       // Debug embedding
-      console.log('Vector search:', { 
+      console.log('Vector search :: dev', { 
         schema: schemaName, 
         embeddingType: typeof embedding,
         isArray: Array.isArray(embedding),
@@ -378,7 +378,6 @@ export function createSupabaseKnowledgeStore(
 
       // Explicitly cast embedding to string if needed by PostgREST
       // But usually array works. Let's verify args order.
-      
       const { data, error } = await supabase.rpc('match_knowledge', {
         schema_name: schemaName,
         query_embedding: embedding,
@@ -390,6 +389,7 @@ export function createSupabaseKnowledgeStore(
         return [];
       }
       
+      console.log('Vector search results:', data.length);
       return (data || []).map((row: any) => ({
         id: row.id,
         title: row.title,

@@ -8,6 +8,9 @@ import type { ConversationState, Session } from '../engine/types.js';
  * Configuration for each state
  */
 export interface StateConfig {
+  /** The identifier for this state */
+  state: ConversationState;
+
   /** What the bot should accomplish in this state */
   objective: string;
   
@@ -40,6 +43,7 @@ export interface StateTransition {
  */
 export const STATE_CONFIGS: Record<ConversationState, StateConfig> = {
   initial: {
+    state: 'initial',
     objective: 'Greet the user warmly and identify if they have trading experience',
     ragCategories: ['Preguntas Frecuentes', 'Manejo de la Cuenta'],
     allowedTransitions: ['qualifying', 'escalated'],
@@ -47,6 +51,7 @@ export const STATE_CONFIGS: Record<ConversationState, StateConfig> = {
   },
   
   qualifying: {
+    state: 'qualifying',
     objective: 'Assess trading experience level and understand their needs',
     ragCategories: ['Preguntas Frecuentes', 'Conceptos generales de Trading'],
     allowedTransitions: ['diagnosing', 'pitching', 'escalated'],
@@ -54,6 +59,7 @@ export const STATE_CONFIGS: Record<ConversationState, StateConfig> = {
   },
   
   diagnosing: {
+    state: 'diagnosing',
     objective: 'Understand specific pain points and what they are looking for',
     ragCategories: ['Tipos de Cuentas', 'Condiciones De Trading'],
     allowedTransitions: ['pitching', 'escalated'],
@@ -61,6 +67,7 @@ export const STATE_CONFIGS: Record<ConversationState, StateConfig> = {
   },
   
   pitching: {
+    state: 'pitching',
     objective: 'Present TAG Markets offering tailored to their needs',
     ragCategories: ['Tipos de Cuentas', '12x Cuentas Amplificadas', 'Condiciones De Trading'],
     allowedTransitions: ['handling_objection', 'closing', 'escalated'],
@@ -68,6 +75,7 @@ export const STATE_CONFIGS: Record<ConversationState, StateConfig> = {
   },
   
   handling_objection: {
+    state: 'handling_objection',
     objective: 'Address concerns and objections with empathy and facts',
     ragCategories: ['Preguntas Frecuentes', 'Depósitos y Retiros', 'Plataformas De Trading'],
     allowedTransitions: ['pitching', 'closing', 'escalated'],
@@ -76,6 +84,7 @@ export const STATE_CONFIGS: Record<ConversationState, StateConfig> = {
   },
   
   closing: {
+    state: 'closing',
     objective: 'Guide user to registration with clear next steps',
     ragCategories: ['Manejo de la Cuenta', 'Guías & Tutoriales'],
     allowedTransitions: ['post_registration', 'handling_objection', 'escalated'],
@@ -83,12 +92,14 @@ export const STATE_CONFIGS: Record<ConversationState, StateConfig> = {
   },
   
   post_registration: {
+    state: 'post_registration',
     objective: 'Confirm registration and guide to first deposit',
     ragCategories: ['Depósitos y Retiros', 'Guías & Tutoriales'],
     allowedTransitions: ['deposit_support', 'completed', 'escalated'],
   },
   
   deposit_support: {
+    state: 'deposit_support',
     objective: 'Help with deposit process and troubleshoot issues',
     ragCategories: ['Depósitos y Retiros', 'Plataformas De Trading'],
     allowedTransitions: ['completed', 'escalated'],
@@ -96,18 +107,21 @@ export const STATE_CONFIGS: Record<ConversationState, StateConfig> = {
   },
   
   follow_up: {
+    state: 'follow_up',
     objective: 'Re-engage user who went quiet with value reminder',
     ragCategories: ['Tipos de Cuentas', '12x Cuentas Amplificadas'],
     allowedTransitions: ['qualifying', 'pitching', 'completed', 'escalated'],
   },
   
   escalated: {
+    state: 'escalated',
     objective: 'Human agent has taken over - bot should not respond',
     ragCategories: [],
     allowedTransitions: ['qualifying', 'completed'], // Only human can transition out
   },
   
   completed: {
+    state: 'completed',
     objective: 'Conversation successfully concluded',
     ragCategories: [],
     allowedTransitions: ['follow_up'], // Can re-open for follow-up

@@ -138,10 +138,10 @@ async function sendWebhook(text: string) {
     
   const authKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY;
 
-  console.log('Auth key:', authKey);
-  console.log('Webhook URL:', WEBHOOK_URL);
-  console.log('Signature:', signature);
-  console.log('Body:', body);
+  // console.log('Auth key:', authKey);
+  // console.log('Webhook URL:', WEBHOOK_URL);
+  // console.log('Signature:', signature);
+  // console.log('Body:', body);
   try {
     const response = await fetch(WEBHOOK_URL, {
       method: 'POST',

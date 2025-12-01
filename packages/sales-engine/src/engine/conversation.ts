@@ -199,7 +199,9 @@ export function createConversationEngine(): ConversationEngine {
         stateConfig.ragCategories
         
       );
-      console.log('relevantKnowledge', JSON.stringify(relevantKnowledge, null, 2));
+
+      console.log('state', stateConfig.state);
+      // console.log('relevantKnowledge', JSON.stringify(relevantKnowledge, null, 2));
       // 9. Build LLM prompt
       const systemPrompt = buildSystemPrompt(clientConfig, stateConfig, relevantKnowledge);
       const conversationHistory = formatConversationHistory(recentMessages);

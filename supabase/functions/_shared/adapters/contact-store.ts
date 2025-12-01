@@ -65,6 +65,7 @@ export function createSupabaseContactStore(
     ): Promise<Contact> {
       // 1. Check if identity exists
       const { data: identity } = await supabase
+        .schema(schemaName)
         .from(identitiesTable)
         .select('contact_id')
         .eq('channel_type', channelType)
@@ -74,6 +75,7 @@ export function createSupabaseContactStore(
       if (identity) {
         // 2a. Identity exists - get the contact
         const { data: contact, error } = await supabase
+          .schema(schemaName)
           .from(contactsTable)
           .select('*')
           .eq('id', identity.contact_id)
@@ -85,6 +87,7 @@ export function createSupabaseContactStore(
         
         // Update last_seen_at
         await supabase
+          .schema(schemaName)
           .from(identitiesTable)
           .update({ last_seen_at: new Date().toISOString() })
           .eq('channel_type', channelType)
@@ -95,6 +98,7 @@ export function createSupabaseContactStore(
       
       // 2b. Identity doesn't exist - create new contact + identity
       const { data: newContact, error: contactError } = await supabase
+        .schema(schemaName)
         .from(contactsTable)
         .insert({})
         .select()
@@ -106,6 +110,7 @@ export function createSupabaseContactStore(
       
       // Create identity mapping
       const { error: identityError } = await supabase
+        .schema(schemaName)
         .from(identitiesTable)
         .insert({
           contact_id: newContact.id,
@@ -122,6 +127,7 @@ export function createSupabaseContactStore(
     
     async findById(id: string): Promise<Contact | null> {
       const { data, error } = await supabase
+        .schema(schemaName)
         .from(contactsTable)
         .select('*')
         .eq('id', id)
@@ -151,6 +157,7 @@ export function createSupabaseContactStore(
       if (updates.metadata !== undefined) dbUpdates.metadata = updates.metadata;
       
       const { data, error } = await supabase
+        .schema(schemaName)
         .from(contactsTable)
         .update(dbUpdates)
         .eq('id', id)
