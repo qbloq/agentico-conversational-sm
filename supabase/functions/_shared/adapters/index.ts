@@ -8,3 +8,5 @@ export { createSupabaseContactStore } from './contact-store.ts';
 export { createSupabaseSessionStore } from './session-store.ts';
 export { createSupabaseMessageStore } from './message-store.ts';
 export { createSupabaseKnowledgeStore } from './knowledge-store.ts';
+export { createSupabaseLLMLogger, createBatchLLMLogger } from './llm-logger.ts';
+export type { LLMLogger, LLMLogEntry } from './llm-logger.ts';

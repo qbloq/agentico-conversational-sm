@@ -2,6 +2,11 @@
  * Core types for the conversation engine
  */
 
+import type { MediaService } from '../media/types.js';
+import type { NotificationService } from '../escalation/types.js';
+
+export type { MediaService, NotificationService };
+
 // =============================================================================
 // Session & Contact Types
 // =============================================================================
@@ -132,8 +137,8 @@ export interface NormalizedMessage {
 export interface ImageAnalysis {
   description: string;
   extractedText?: string;
-  isReceipt: boolean;
-  confidence: number;
+  isReceipt?: boolean;
+  confidence?: number;
 }
 
 export interface InteractivePayload {
@@ -243,6 +248,11 @@ export interface EngineDependencies {
   llmProvider: LLMProvider;
   embeddingProvider: EmbeddingProvider;
   knowledgeStore: KnowledgeStore;
+  mediaService: MediaService;
+  notificationService: NotificationService;
+  
+  // Logging (optional)
+  llmLogger?: LLMLogger;
   
   // Client configuration
   clientConfig: ClientConfig;
@@ -320,6 +330,39 @@ export interface LLMResponse {
 export interface EmbeddingProvider {
   generateEmbedding(text: string): Promise<number[]>;
   readonly dimensions: number;
+}
+
+// =============================================================================
+// LLM Logging
+// =============================================================================
+
+/**
+ * Log entry for an LLM call (for cost tracking)
+ */
+export interface LLMLogEntry {
+  clientId: string;
+  sessionId?: string;
+  requestType: 'chat' | 'embedding' | 'vision' | 'transcription';
+  provider: string;
+  model: string;
+  promptTokens: number;
+  completionTokens: number;
+  totalTokens: number;
+  costUsd: number;
+  inputPreview?: string;
+  outputPreview?: string;
+  inputHash?: string;
+  latencyMs?: number;
+  finishReason?: 'stop' | 'length' | 'content_filter' | 'error';
+  isError?: boolean;
+  errorMessage?: string;
+}
+
+/**
+ * Interface for LLM usage logging
+ */
+export interface LLMLogger {
+  log(entry: LLMLogEntry): Promise<void>;
 }
 
 // =============================================================================

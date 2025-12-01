@@ -27,3 +27,20 @@ export { createOpenAIProvider, createOpenAIEmbeddingProvider } from './openai.js
 
 // Factory
 export { createLLMProvider, createEmbeddingProvider } from './factory.js';
+
+// Pricing & Cost Calculation
+export { MODEL_PRICING, calculateCost, calculateTranscriptionCost, ASSEMBLYAI_PRICING } from './pricing.js';
+export type { ModelPricing } from './pricing.js';
+
+// Logging
+export {
+  noopLogger,
+  consoleLogger,
+  truncateForPreview,
+  hashInput,
+  createChatLogEntry,
+  createEmbeddingLogEntry,
+  createVisionLogEntry,
+  createTranscriptionLogEntry,
+} from './logger.js';
+export type { LLMLogEntry, LLMLogger } from './logger.js';

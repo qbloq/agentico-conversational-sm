@@ -17,6 +17,7 @@ import type {
   KnowledgeEntry,
 } from './types.js';
 import { StateMachine } from '../state/machine.js';
+import { calculateCost } from '../llm/pricing.js';
 
 /**
  * Conversation Engine interface
@@ -32,8 +33,44 @@ export function createConversationEngine(): ConversationEngine {
   return {
     async processMessage(input: EngineInput): Promise<EngineOutput> {
       const { sessionKey, message, deps } = input;
-      const { contactStore, sessionStore, messageStore, llmProvider, embeddingProvider, knowledgeStore, clientConfig } = deps;
+      const { 
+        contactStore, 
+        sessionStore, 
+        messageStore, 
+        llmProvider, 
+        embeddingProvider, 
+        knowledgeStore, 
+        mediaService,
+        notificationService,
+        llmLogger,
+        clientConfig 
+      } = deps;
       
+      // 0. Process Media (if applicable)
+      if (message.type === 'audio' && message.mediaUrl && !message.transcription) {
+        try {
+          const transcription = await mediaService.transcribe(message.mediaUrl);
+          message.transcription = transcription.text;
+          // Use transcription as content for processing
+          message.content = transcription.text;
+        } catch (error) {
+          console.error('Audio transcription failed:', error);
+          message.content = '[Audio transcription failed]';
+        }
+      } else if (message.type === 'image' && message.mediaUrl && !message.imageAnalysis) {
+        try {
+          const analysis = await mediaService.analyzeImage(message.mediaUrl);
+          message.imageAnalysis = analysis;
+          // Append analysis to content for context
+          message.content = message.content 
+            ? `${message.content}\n\n[Image Content: ${analysis.description}]`
+            : `[Image Content: ${analysis.description}]`;
+        } catch (error) {
+          console.error('Image analysis failed:', error);
+          message.content = message.content || '[Image analysis failed]';
+        }
+      }
+
       // 1. Get or create contact
       const contact = await contactStore.findOrCreateByChannelUser(
         sessionKey.channelType,
@@ -46,12 +83,37 @@ export function createConversationEngine(): ConversationEngine {
         session = await sessionStore.create(sessionKey, contact.id);
       }
       
-      // 3. Check if escalated - don't process if human has taken over
+      let resumeUpdates: Partial<Session> = {};
+
+      // 3. Check escalation status & Resume Logic
       if (session.isEscalated) {
-        return {
-          responses: [],
-          sessionUpdates: { lastMessageAt: new Date() },
-        };
+        const now = new Date();
+        const lastMessageTime = session.lastMessageAt ? new Date(session.lastMessageAt).getTime() : 0;
+        const hoursSinceLastMessage = (now.getTime() - lastMessageTime) / (1000 * 60 * 60);
+        
+        // Resume if silent for more than 1 hour
+        if (hoursSinceLastMessage >= 1) {
+          session.isEscalated = false;
+          session.status = 'active';
+          resumeUpdates = { isEscalated: false, status: 'active' };
+        } else {
+          // Still escalated - don't process
+          // But we SHOULD save the message so history is complete
+          await messageStore.save(session.id, {
+            direction: 'inbound',
+            type: message.type,
+            content: message.content,
+            mediaUrl: message.mediaUrl,
+            transcription: message.transcription,
+            imageAnalysis: message.imageAnalysis,
+            platformMessageId: message.id,
+          });
+          
+          return {
+            responses: [],
+            sessionUpdates: { lastMessageAt: new Date() },
+          };
+        }
       }
       
       // 4. Save inbound message
@@ -75,6 +137,24 @@ export function createConversationEngine(): ConversationEngine {
       // 7. Check for escalation triggers
       const escalation = await checkEscalationTriggers(message, session, contact, clientConfig);
       if (escalation.shouldEscalate) {
+        // Send notification if enabled
+        if (clientConfig.escalation.enabled && clientConfig.escalation.notifyWhatsApp) {
+          try {
+            await notificationService.sendEscalationAlert(
+              clientConfig.escalation.notifyWhatsApp,
+              {
+                reason: escalation.reason,
+                userName: contact.fullName || contact.phone || 'Unknown User',
+                userPhone: contact.phone || sessionKey.channelUserId,
+                summary: (message.content || '').slice(0, 100), // Limit length
+              }
+            );
+          } catch (error) {
+            console.error('Failed to send escalation notification:', error);
+            // Continue returning response to user even if notification fails
+          }
+        }
+
         return {
           responses: [createEscalationResponse(escalation, clientConfig)],
           sessionUpdates: {
@@ -88,18 +168,44 @@ export function createConversationEngine(): ConversationEngine {
       
       // 8. Retrieve relevant knowledge (RAG)
       const messageText = message.content || message.transcription || '';
+      
+      // Generate embedding with logging
+      const embeddingStartTime = Date.now();
       const embedding = await embeddingProvider.generateEmbedding(messageText);
+      const embeddingLatency = Date.now() - embeddingStartTime;
+      
+      // Log embedding call (fire and forget)
+      if (llmLogger) {
+        const embeddingTokens = Math.ceil(messageText.length / 4); // Rough estimate
+        llmLogger.log({
+          clientId: clientConfig.clientId,
+          sessionId: session.id,
+          requestType: 'embedding',
+          provider: 'gemini', // TODO: get from embeddingProvider.name if available
+          model: 'text-embedding-004',
+          promptTokens: embeddingTokens,
+          completionTokens: 0,
+          totalTokens: embeddingTokens,
+          costUsd: calculateCost('text-embedding-004', embeddingTokens, 0),
+          inputPreview: messageText.slice(0, 500),
+          latencyMs: embeddingLatency,
+          finishReason: 'stop',
+        }).catch(err => console.error('[LLM Logger] Embedding log failed:', err));
+      }
+      
       const relevantKnowledge = await retrieveKnowledge(
         knowledgeStore,
         embedding,
         stateConfig.ragCategories
+        
       );
-      
+      console.log('relevantKnowledge', JSON.stringify(relevantKnowledge, null, 2));
       // 9. Build LLM prompt
       const systemPrompt = buildSystemPrompt(clientConfig, stateConfig, relevantKnowledge);
       const conversationHistory = formatConversationHistory(recentMessages);
       
       // 10. Generate response
+      const llmStartTime = Date.now();
       const llmResponse = await llmProvider.generateResponse({
         systemPrompt,
         messages: [
@@ -109,6 +215,27 @@ export function createConversationEngine(): ConversationEngine {
         temperature: 0.7,
         maxTokens: 500,
       });
+      const llmLatency = Date.now() - llmStartTime;
+      
+      // Log LLM chat call (fire and forget)
+      if (llmLogger) {
+        const fullInput = `${systemPrompt}\n\n${conversationHistory.map(m => `${m.role}: ${m.content}`).join('\n')}\nuser: ${messageText}`;
+        llmLogger.log({
+          clientId: clientConfig.clientId,
+          sessionId: session.id,
+          requestType: 'chat',
+          provider: llmProvider.name,
+          model: clientConfig.llm.model,
+          promptTokens: llmResponse.usage.promptTokens,
+          completionTokens: llmResponse.usage.completionTokens,
+          totalTokens: llmResponse.usage.totalTokens,
+          costUsd: calculateCost(clientConfig.llm.model, llmResponse.usage.promptTokens, llmResponse.usage.completionTokens),
+          inputPreview: fullInput.slice(0, 500),
+          outputPreview: llmResponse.content.slice(0, 500),
+          latencyMs: llmLatency,
+          finishReason: llmResponse.finishReason,
+        }).catch(err => console.error('[LLM Logger] Chat log failed:', err));
+      }
       
       // 11. Evaluate state transition
       const suggestedState = stateMachine.suggestTransition(messageText);
@@ -145,7 +272,7 @@ export function createConversationEngine(): ConversationEngine {
       
       return {
         responses: [botResponse],
-        sessionUpdates,
+        sessionUpdates: { ...sessionUpdates, ...resumeUpdates },
       };
     },
   };
@@ -166,11 +293,13 @@ async function checkEscalationTriggers(
   // Explicit request patterns (Spanish)
   const explicitPatterns = [
     'hablar con humano',
+    'hablar con un humano',
     'persona real',
     'agente',
     'representante',
     'quiero hablar con alguien',
     'necesito ayuda humana',
+    'soporte humano',
   ];
   
   for (const pattern of explicitPatterns) {

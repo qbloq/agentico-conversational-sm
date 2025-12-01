@@ -13,9 +13,17 @@ import {
   createSupabaseSessionStore,
   createSupabaseMessageStore,
   createSupabaseKnowledgeStore,
+  createSupabaseLLMLogger,
 } from '../_shared/adapters/index.ts';
 import { createConversationEngine } from '../_shared/sales-engine.bundle.ts';
 import { createGeminiProvider, createGeminiEmbeddingProvider } from '../_shared/sales-engine-llm.bundle.ts';
+import { 
+  MediaServiceImpl, 
+  AssemblyAITranscriber, 
+  GeminiVisionAnalyzer, 
+  SupabaseStorageProvider 
+} from '../_shared/sales-engine-media.bundle.ts';
+import { WhatsAppNotificationService } from '../_shared/sales-engine-escalation.bundle.ts';
 import type { NormalizedMessage, ChannelType } from '../_shared/sales-engine.bundle.ts';
 
 // WhatsApp message types
@@ -137,6 +145,7 @@ async function handleIncomingMessage(req: Request): Promise<Response> {
         // Route to client
         const supabase = createSupabaseClient();
         const route = await routeByChannelId(supabase, 'whatsapp', phoneNumberId);
+        console.log('Route:', route);
         
         if (!route) {
           console.error(`No client found for phone_number_id: ${phoneNumberId}`);
@@ -149,15 +158,12 @@ async function handleIncomingMessage(req: Request): Promise<Response> {
           continue;
         }
         
-        // Create schema-scoped Supabase client
-        const clientSupabase = createSupabaseClient(route.schemaName);
-        
-        // Process each message
+        // Process each message (use public supabase client, adapters use .schema())
         for (const message of messages) {
           const contact = contacts?.find(c => c.wa_id === message.from);
           
           await processMessage(
-            clientSupabase,
+            supabase,
             route.schemaName,
             route.config,
             phoneNumberId,
@@ -210,9 +216,35 @@ async function processMessage(
   const embeddingProvider = createGeminiEmbeddingProvider({
     apiKey: Deno.env.get('GOOGLE_API_KEY') || '',
   });
+
+  // Create Media Services
+  const storageProvider = new SupabaseStorageProvider(supabase);
+  const transcriber = new AssemblyAITranscriber(Deno.env.get('ASSEMBLYAI_API_KEY') || '');
+  const vision = new GeminiVisionAnalyzer(Deno.env.get('GOOGLE_API_KEY') || '');
   
-  // Normalize message
-  const normalizedMessage = normalizeWhatsAppMessage(message);
+  const mediaService = new MediaServiceImpl(
+    storageProvider,
+    transcriber,
+    vision,
+    clientConfig.storageBucket
+  );
+
+  // Create Notification Service
+  const notificationService = new WhatsAppNotificationService({
+    phoneNumberId,
+    accessToken: clientConfig.channels.whatsapp?.accessToken || '',
+    templateName: Deno.env.get('WHATSAPP_TPL_ESCALATION_01') || 'escalation_alert',
+  });
+
+  // Create LLM Logger
+  const llmLogger = createSupabaseLLMLogger(supabase);
+  
+  // Normalize message and handle media upload
+  const normalizedMessage = await normalizeAndUploadMedia(
+    message, 
+    mediaService, 
+    clientConfig.channels.whatsapp?.accessToken || ''
+  );
   
   // Process through engine
   const result = await engine.processMessage({
@@ -229,6 +261,9 @@ async function processMessage(
       knowledgeStore,
       llmProvider,
       embeddingProvider,
+      mediaService,
+      notificationService,
+      llmLogger,
       clientConfig,
     },
   });
@@ -242,29 +277,58 @@ async function processMessage(
       clientConfig.channels.whatsapp?.accessToken || ''
     );
   }
-  
-  // Handle escalation notification
-  if (result.escalation?.shouldEscalate && clientConfig.escalation.notifyWhatsApp) {
-    await sendEscalationNotification(
-      clientConfig.escalation.notifyWhatsApp,
-      message.from,
-      contact?.profile.name || 'Unknown',
-      result.escalation.reason,
-      clientConfig.channels.whatsapp?.accessToken || '',
-      phoneNumberId
-    );
-  }
 }
 
 /**
- * Normalize WhatsApp message to engine format
+ * Normalize WhatsApp message and upload media if present
  */
-function normalizeWhatsAppMessage(message: WhatsAppMessage): NormalizedMessage {
+async function normalizeAndUploadMedia(
+  message: WhatsAppMessage,
+  mediaService: MediaServiceImpl,
+  accessToken: string
+): Promise<NormalizedMessage> {
   const base = {
     id: message.id,
     timestamp: new Date(parseInt(message.timestamp) * 1000),
   };
   
+  let mediaUrl: string | undefined;
+  let mediaId: string | undefined;
+
+  if (message.type === 'image') mediaId = message.image?.id;
+  if (message.type === 'audio') mediaId = message.audio?.id;
+
+  if (mediaId) {
+    try {
+      // 1. Get download URL from Meta
+      const metaUrlResponse = await fetch(
+        `https://graph.facebook.com/v18.0/${mediaId}`,
+        { headers: { 'Authorization': `Bearer ${accessToken}` } }
+      );
+      const { url: downloadUrl } = await metaUrlResponse.json();
+
+      if (downloadUrl) {
+        // 2. Download content
+        const fileBuffer = await mediaService.download(downloadUrl, {
+          'Authorization': `Bearer ${accessToken}`
+        });
+
+        // 3. Upload to Supabase (public bucket)
+        // Path: year/month/day/message_id.ext
+        const date = new Date();
+        const ext = message.type === 'audio' ? 'ogg' : 'jpg'; // Simplified extension logic
+        const path = `${date.getFullYear()}/${date.getMonth() + 1}/${date.getDate()}/${message.id}.${ext}`;
+        const mimeType = message.type === 'audio' ? (message.audio?.mime_type || 'audio/ogg') : (message.image?.mime_type || 'image/jpeg');
+
+        const uploaded = await mediaService.upload(fileBuffer, path, mimeType);
+        mediaUrl = uploaded.url;
+        console.log(`Media uploaded to: ${mediaUrl}`);
+      }
+    } catch (error) {
+      console.error('Failed to process media:', error);
+    }
+  }
+
   switch (message.type) {
     case 'text':
       return {
@@ -278,14 +342,14 @@ function normalizeWhatsAppMessage(message: WhatsAppMessage): NormalizedMessage {
         ...base,
         type: 'image',
         content: message.image?.caption,
-        mediaUrl: message.image?.id, // Will need to fetch actual URL
+        mediaUrl,
       };
     
     case 'audio':
       return {
         ...base,
         type: 'audio',
-        mediaUrl: message.audio?.id,
+        mediaUrl,
       };
     
     case 'interactive':
@@ -344,24 +408,4 @@ async function sendWhatsAppMessage(
   }
   
   console.log(`Message sent to ${to}`);
-}
-
-/**
- * Send escalation notification to human agent
- */
-async function sendEscalationNotification(
-  agentPhone: string,
-  userPhone: string,
-  userName: string,
-  reason: string,
-  accessToken: string,
-  phoneNumberId: string
-): Promise<void> {
-  const message = `🚨 *Escalación Requerida*\n\n` +
-    `*Usuario:* ${userName}\n` +
-    `*Teléfono:* ${userPhone}\n` +
-    `*Razón:* ${reason}\n\n` +
-    `Por favor, toma el control de esta conversación.`;
-  
-  await sendWhatsAppMessage(phoneNumberId, agentPhone, message, accessToken);
 }

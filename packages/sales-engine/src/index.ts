@@ -54,6 +54,10 @@ export type {
   LLMResponse,
   EmbeddingProvider,
   
+  // LLM Logging
+  LLMLogger,
+  LLMLogEntry,
+  
   // Client Config
   ClientConfig,
   WhatsAppConfig,
@@ -75,9 +79,26 @@ export type { ConversationEngine } from './engine/conversation.js';
 export { StateMachine, STATE_CONFIGS } from './state/machine.js';
 export type { StateConfig, StateTransition } from './state/machine.js';
 
+export { WhatsAppNotificationService } from './escalation/whatsapp-notification.js';
+
 // =============================================================================
 // LLM Providers (re-exported from llm submodule)
 // =============================================================================
 
 // These are available via '@parallelo/sales-engine/llm'
 // import { createGeminiProvider } from '@parallelo/sales-engine/llm';
+
+// =============================================================================
+// LLM Cost Logging (helpers from llm submodule)
+// =============================================================================
+
+// Types are exported from ./engine/types.js above
+export {
+  noopLogger,
+  consoleLogger,
+  createChatLogEntry,
+  createEmbeddingLogEntry,
+  createVisionLogEntry,
+  createTranscriptionLogEntry,
+} from './llm/logger.js';
+export { calculateCost, calculateTranscriptionCost, MODEL_PRICING } from './llm/pricing.js';
