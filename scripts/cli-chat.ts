@@ -135,15 +135,19 @@ async function main() {
         },
       });
 
+      // Persist session updates (state transitions, context, etc.)
+      if (result.sessionUpdates && Object.keys(result.sessionUpdates).length > 0) {
+        // Get current session to get its ID
+        const currentSession = await sessionStore.findByKey(sessionKey);
+        if (currentSession) {
+          await sessionStore.update(currentSession.id, result.sessionUpdates);
+        }
+      }
+
       // Output responses
       for (const response of result.responses) {
         console.log(`Bot > ${response.content}`);
       }
-      
-      // Debug info (optional)
-      // if (result.stateTransition) {
-      //   console.log(`[State: ${result.stateTransition.from} -> ${result.stateTransition.to}]`);
-      // }
 
     } catch (error) {
       console.error('❌ Error:', error);

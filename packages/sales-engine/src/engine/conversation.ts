@@ -15,8 +15,10 @@ import type {
   EngineDependencies,
   EscalationResult,
   KnowledgeEntry,
+  ConversationState,
 } from './types.js';
 import { StateMachine } from '../state/machine.js';
+import type { StructuredLLMResponse } from '../llm/types.js';
 import { calculateCost } from '../llm/pricing.js';
 
 /**
@@ -202,11 +204,12 @@ export function createConversationEngine(): ConversationEngine {
 
       console.log('state', stateConfig.state);
       // console.log('relevantKnowledge', JSON.stringify(relevantKnowledge, null, 2));
-      // 9. Build LLM prompt
-      const systemPrompt = buildSystemPrompt(clientConfig, stateConfig, relevantKnowledge);
+      // 9. Build LLM prompt with state transition context
+      const transitionContext = stateMachine.buildTransitionContext();
+      const systemPrompt = buildSystemPrompt(clientConfig, relevantKnowledge, transitionContext);
       const conversationHistory = formatConversationHistory(recentMessages);
       
-      // 10. Generate response
+      // 10. Generate response with structured output
       const llmStartTime = Date.now();
       const llmResponse = await llmProvider.generateResponse({
         systemPrompt,
@@ -215,9 +218,12 @@ export function createConversationEngine(): ConversationEngine {
           { role: 'user', content: messageText },
         ],
         temperature: 0.7,
-        maxTokens: 500,
+        maxTokens: 800, // Increased to accommodate JSON structure
       });
       const llmLatency = Date.now() - llmStartTime;
+      
+      // 11. Parse structured response
+      const structuredResponse = parseStructuredResponse(llmResponse.content);
       
       // Log LLM chat call (fire and forget)
       if (llmLogger) {
@@ -239,33 +245,52 @@ export function createConversationEngine(): ConversationEngine {
         }).catch(err => console.error('[LLM Logger] Chat log failed:', err));
       }
       
-      // 11. Evaluate state transition
-      const suggestedState = stateMachine.suggestTransition(messageText);
+      // 12. Evaluate state transition from LLM recommendation
       let sessionUpdates: Partial<Session> = {
         lastMessageAt: new Date(),
         updatedAt: new Date(),
       };
       
-      if (suggestedState && stateMachine.canTransitionTo(suggestedState)) {
-        stateMachine.transitionTo(suggestedState, 'Pattern match from user message');
-        sessionUpdates = {
-          ...sessionUpdates,
-          previousState: session.currentState,
-          currentState: suggestedState,
+      // Apply LLM-recommended transition if valid
+      if (structuredResponse.transition) {
+        const targetState = structuredResponse.transition.to as ConversationState;
+        if (stateMachine.canTransitionTo(targetState) && structuredResponse.transition.confidence >= 0.6) {
+          stateMachine.transitionTo(targetState, structuredResponse.transition.reason);
+          sessionUpdates = {
+            ...sessionUpdates,
+            previousState: session.currentState,
+            currentState: targetState,
+          };
+          console.log(`[State Transition] ${session.currentState} -> ${targetState}: ${structuredResponse.transition.reason}`);
+        }
+      }
+      
+      // Update session context with extracted data
+      if (structuredResponse.extractedData) {
+        sessionUpdates.context = {
+          ...session.context,
+          ...structuredResponse.extractedData,
         };
       }
       
-      // 12. Create bot response
+      // Check for AI uncertainty escalation
+      if (structuredResponse.isUncertain) {
+        console.log('[AI Uncertainty] LLM flagged uncertainty, consider escalation');
+        // Could trigger soft escalation here in future
+      }
+      
+      // 13. Create bot response
       const botResponse: BotResponse = {
         type: 'text',
-        content: llmResponse.content,
+        content: structuredResponse.response,
         metadata: {
           tokensUsed: llmResponse.usage.totalTokens,
           state: stateMachine.getState(),
+          transition: structuredResponse.transition,
         },
       };
       
-      // 13. Save outbound message
+      // 14. Save outbound message
       await messageStore.save(session.id, {
         direction: 'outbound',
         type: 'text',
@@ -385,10 +410,69 @@ async function retrieveKnowledge(
   return uniqueEntries.slice(0, 5);
 }
 
+/**
+ * Parse LLM response to extract structured data
+ * The LLM is instructed to return JSON, but we handle graceful fallback
+ */
+function parseStructuredResponse(content: string): StructuredLLMResponse {
+  // Try to extract JSON from the response
+  const jsonMatch = content.match(/```json\s*([\s\S]*?)\s*```/) || 
+                    content.match(/\{[\s\S]*"response"[\s\S]*\}/);
+  
+  if (jsonMatch) {
+    try {
+      const jsonStr = jsonMatch[1] || jsonMatch[0];
+      const parsed = JSON.parse(jsonStr);
+      
+      // Validate that response exists and is not empty
+      const response = parsed.response;
+      if (typeof response === 'string' && response.trim().length > 0) {
+        return {
+          content: content,
+          response: response,
+          transition: parsed.transition,
+          extractedData: parsed.extractedData,
+          isUncertain: parsed.isUncertain,
+          usage: { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
+          finishReason: 'stop',
+        };
+      } else {
+        // JSON parsed but response is empty - log warning
+        console.warn('[parseStructuredResponse] LLM returned empty response field. Raw content:', content.slice(0, 200));
+      }
+    } catch (err) {
+      // JSON parsing failed - log for debugging
+      console.warn('[parseStructuredResponse] JSON parse failed:', err, 'Content:', content.slice(0, 200));
+    }
+  }
+  
+  // Fallback: try to extract any meaningful text, stripping JSON artifacts
+  let fallbackResponse = content;
+  
+  // If content looks like it contains JSON, try to strip it and find plain text
+  if (content.includes('```json') || content.includes('"response"')) {
+    // Remove JSON code blocks
+    fallbackResponse = content.replace(/```json[\s\S]*?```/g, '').trim();
+    // If nothing left, use original
+    if (!fallbackResponse) {
+      fallbackResponse = content;
+    }
+  }
+  
+  console.warn('[parseStructuredResponse] Using fallback response. Original content:', content.slice(0, 200));
+  
+  return {
+    content: content,
+    response: fallbackResponse,
+    usage: { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
+    finishReason: 'stop',
+  };
+}
+
 function buildSystemPrompt(
   config: EngineDependencies['clientConfig'],
-  stateConfig: { objective: string; ragCategories: string[] },
-  knowledge: KnowledgeEntry[]
+  knowledge: KnowledgeEntry[],
+  transitionContext: string
 ): string {
   const knowledgeContext = knowledge
     .map(k => `Q: ${k.title}\nA: ${k.summary || k.answer.slice(0, 300)}`)
@@ -400,18 +484,44 @@ You are a sales representative for ${config.business.name}. ${config.business.de
 # Language
 Always respond in ${config.business.language}. Be friendly, professional, and helpful.
 
-# Current Objective
-${stateConfig.objective}
+${transitionContext}
 
 # Relevant Knowledge
 ${knowledgeContext || 'No specific knowledge retrieved for this query.'}
 
+# Response Format
+You MUST respond with a JSON object in a code block. The format is:
+\`\`\`json
+{
+  "response": "Your conversational response to the user in ${config.business.language}",
+  "transition": {
+    "to": "state_name",
+    "reason": "Brief explanation of why transitioning",
+    "confidence": 0.8
+  },
+  "extractedData": {
+    "userName": "if user mentioned their name",
+    "email": "if user provided email",
+    "hasExperience": true,
+    "interestLevel": "high",
+    "concerns": ["any concerns they raised"]
+  },
+  "isUncertain": false
+}
+\`\`\`
+
+Rules for the JSON response:
+- "response" is REQUIRED - this is what gets sent to the user
+- "transition" is OPTIONAL - only include if you detect completion signals and recommend moving to a new state
+- "extractedData" is OPTIONAL - only include fields where you extracted new information
+- "isUncertain" should be true if you're not confident in your response and a human might help better
+
 # Guidelines
-- Be concise but warm
+- Be concise but warm (2-4 sentences typically)
 - Use emojis sparingly (1-2 per message max)
 - Ask clarifying questions when needed
 - Never make up information - use the knowledge provided
-- If you don't know something, say so and offer to connect with a human
+- If you don't know something, set isUncertain to true
 - Guide the conversation toward registration when appropriate
 
 # Prohibited
