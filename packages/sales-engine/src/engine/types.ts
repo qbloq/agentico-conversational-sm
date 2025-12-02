@@ -272,11 +272,48 @@ export interface EngineDependencies {
   mediaService: MediaService;
   notificationService: NotificationService;
   
+  // Few-shot examples (optional)
+  exampleStore?: ExampleStore;
+  
   // Logging (optional)
   llmLogger?: LLMLogger;
   
   // Client configuration
   clientConfig: ClientConfig;
+}
+
+/**
+ * Conversation example store interface (for few-shot prompting)
+ */
+export interface ExampleStore {
+  findByState(
+    state: ConversationState,
+    options?: { limit?: number; category?: string }
+  ): Promise<ConversationExample[]>;
+  findSimilar(
+    embedding: number[],
+    options?: { state?: ConversationState; limit?: number }
+  ): Promise<ConversationExample[]>;
+}
+
+/**
+ * A conversation example with state annotations
+ */
+export interface ConversationExample {
+  id: string;
+  exampleId: string;
+  scenario: string;
+  category: string;
+  outcome: string;
+  primaryState: ConversationState | null;
+  stateFlow: ConversationState[];
+  messages: Array<{
+    role: 'customer' | 'agent';
+    content: string;
+    state: ConversationState;
+  }>;
+  notes?: string;
+  similarity?: number;
 }
 
 // =============================================================================

@@ -16,10 +16,12 @@ import type {
   EscalationResult,
   KnowledgeEntry,
   ConversationState,
+  ConversationExample,
 } from './types.js';
 import { StateMachine } from '../state/machine.js';
 import type { StructuredLLMResponse } from '../llm/types.js';
 import { calculateCost } from '../llm/pricing.js';
+import { formatExamples } from '../examples/formatter.js';
 
 /**
  * Conversation Engine interface
@@ -42,6 +44,7 @@ export function createConversationEngine(): ConversationEngine {
         llmProvider, 
         embeddingProvider, 
         knowledgeStore, 
+        exampleStore,
         mediaService,
         notificationService,
         llmLogger,
@@ -199,14 +202,26 @@ export function createConversationEngine(): ConversationEngine {
         knowledgeStore,
         embedding,
         stateConfig.ragCategories
-        
       );
 
+      // 8b. Retrieve relevant conversation examples (few-shot)
+      let relevantExamples: ConversationExample[] = [];
+      if (exampleStore) {
+        relevantExamples = await retrieveExamples(
+          exampleStore,
+          stateConfig.state,
+          embedding
+        );
+      }
+
       console.log('state', stateConfig.state);
-      // console.log('relevantKnowledge', JSON.stringify(relevantKnowledge, null, 2));
+      if (relevantExamples.length > 0) {
+        console.log('examples', relevantExamples.map(e => e.exampleId).join(', '));
+      }
+      
       // 9. Build LLM prompt with state transition context
       const transitionContext = stateMachine.buildTransitionContext();
-      const systemPrompt = buildSystemPrompt(clientConfig, relevantKnowledge, transitionContext);
+      const systemPrompt = buildSystemPrompt(clientConfig, relevantKnowledge, transitionContext, relevantExamples);
       const conversationHistory = formatConversationHistory(recentMessages);
       
       // 10. Generate response with structured output
@@ -218,7 +233,7 @@ export function createConversationEngine(): ConversationEngine {
           { role: 'user', content: messageText },
         ],
         temperature: 0.7,
-        maxTokens: 800, // Increased to accommodate JSON structure
+        maxTokens: 1500, // Increased to accommodate JSON structure + longer responses
       });
       const llmLatency = Date.now() - llmStartTime;
       
@@ -411,6 +426,36 @@ async function retrieveKnowledge(
 }
 
 /**
+ * Retrieve relevant conversation examples for few-shot prompting
+ * Prioritizes state-based matching, falls back to semantic similarity
+ */
+async function retrieveExamples(
+  store: NonNullable<EngineDependencies['exampleStore']>,
+  currentState: ConversationState,
+  _embedding: number[]
+): Promise<ConversationExample[]> {
+  // Primary: Get examples for current state
+  const stateExamples = await store.findByState(currentState, { 
+    limit: 2,
+    category: 'happy_path' // Prefer successful examples
+  });
+  
+  if (stateExamples.length >= 1) {
+    return stateExamples.slice(0, 2);
+  }
+  
+  // Fallback: Get any examples for this state (any category)
+  const anyStateExamples = await store.findByState(currentState, { limit: 2 });
+  if (anyStateExamples.length > 0) {
+    return anyStateExamples;
+  }
+  
+  // Last resort: Could use semantic search here in future
+  // For now, return empty - better to have no examples than irrelevant ones
+  return [];
+}
+
+/**
  * Parse LLM response to extract structured data
  * The LLM is instructed to return JSON, but we handle graceful fallback
  */
@@ -446,14 +491,26 @@ function parseStructuredResponse(content: string): StructuredLLMResponse {
     }
   }
   
-  // Fallback: try to extract any meaningful text, stripping JSON artifacts
+  // Fallback: try to extract the response text from truncated/malformed JSON
   let fallbackResponse = content;
   
-  // If content looks like it contains JSON, try to strip it and find plain text
-  if (content.includes('```json') || content.includes('"response"')) {
-    // Remove JSON code blocks
+  // Try to extract the "response" field value even from truncated JSON
+  const responseMatch = content.match(/"response"\s*:\s*"([\s\S]*?)(?:"|$)/);
+  if (responseMatch && responseMatch[1]) {
+    // Unescape JSON string escapes
+    fallbackResponse = responseMatch[1]
+      .replace(/\\n/g, '\n')
+      .replace(/\\"/g, '"')
+      .replace(/\\\\/g, '\\')
+      .trim();
+    
+    // If it ends abruptly, add ellipsis
+    if (!fallbackResponse.endsWith('.') && !fallbackResponse.endsWith('!') && !fallbackResponse.endsWith('?')) {
+      fallbackResponse += '...';
+    }
+  } else if (content.includes('```json') || content.includes('"response"')) {
+    // Remove JSON code blocks entirely
     fallbackResponse = content.replace(/```json[\s\S]*?```/g, '').trim();
-    // If nothing left, use original
     if (!fallbackResponse) {
       fallbackResponse = content;
     }
@@ -472,11 +529,17 @@ function parseStructuredResponse(content: string): StructuredLLMResponse {
 function buildSystemPrompt(
   config: EngineDependencies['clientConfig'],
   knowledge: KnowledgeEntry[],
-  transitionContext: string
+  transitionContext: string,
+  examples: ConversationExample[] = []
 ): string {
   const knowledgeContext = knowledge
     .map(k => `Q: ${k.title}\nA: ${k.summary || k.answer.slice(0, 300)}`)
     .join('\n\n');
+  
+  // Format examples for injection (only if we have them)
+  const examplesContext = examples.length > 0 
+    ? formatExamples(examples, { maxMessages: 6, includeScenario: true })
+    : '';
   
   return `# Role
 You are a sales representative for ${config.business.name}. ${config.business.description}
@@ -488,6 +551,8 @@ ${transitionContext}
 
 # Relevant Knowledge
 ${knowledgeContext || 'No specific knowledge retrieved for this query.'}
+
+${examplesContext}
 
 # Response Format
 You MUST respond with a JSON object in a code block. The format is:
@@ -523,6 +588,7 @@ Rules for the JSON response:
 - Never make up information - use the knowledge provided
 - If you don't know something, set isUncertain to true
 - Guide the conversation toward registration when appropriate
+${examples.length > 0 ? '- Study the reference examples above and match their conversational style and approach' : ''}
 
 # Prohibited
 - Never discuss competitors negatively

@@ -16,8 +16,39 @@ import {
   ConversationState,
   Contact,
   Message,
-  KnowledgeEntry
+  KnowledgeEntry,
 } from '@parallelo/sales-engine';
+
+// Types for ExampleStore (matches engine/types.ts interface)
+interface ExampleStoreMessage {
+  role: 'customer' | 'agent';
+  content: string;
+  state: ConversationState;
+}
+
+interface ConversationExample {
+  id: string;
+  exampleId: string;
+  scenario: string;
+  category: string;
+  outcome: string;
+  primaryState: ConversationState | null;
+  stateFlow: ConversationState[];
+  messages: ExampleStoreMessage[];
+  notes?: string;
+  similarity?: number;
+}
+
+interface ExampleStore {
+  findByState(
+    state: ConversationState,
+    options?: { limit?: number; category?: string }
+  ): Promise<ConversationExample[]>;
+  findSimilar(
+    embedding: number[],
+    options?: { state?: ConversationState; limit?: number }
+  ): Promise<ConversationExample[]>;
+}
 
 // ============================================================================
 // SESSION STORE
@@ -369,12 +400,12 @@ export function createSupabaseKnowledgeStore(
       // Use the RPC function we created
       
       // Debug embedding
-      console.log('Vector search :: dev', { 
-        schema: schemaName, 
-        embeddingType: typeof embedding,
-        isArray: Array.isArray(embedding),
-        limit 
-      });
+      // console.log('Vector search :: dev', { 
+      //   schema: schemaName, 
+      //   embeddingType: typeof embedding,
+      //   isArray: Array.isArray(embedding),
+      //   limit 
+      // });
 
       // Explicitly cast embedding to string if needed by PostgREST
       // But usually array works. Let's verify args order.
@@ -389,7 +420,7 @@ export function createSupabaseKnowledgeStore(
         return [];
       }
       
-      console.log('Vector search results:', data.length);
+      // console.log('Vector search results:', data.length);
       return (data || []).map((row: any) => ({
         id: row.id,
         title: row.title,
@@ -450,6 +481,97 @@ export function createSupabaseKnowledgeStore(
         semanticTags: row.semantic_tags || [],
         summary: row.summary,
       }));
+    },
+  };
+}
+
+// ============================================================================
+// EXAMPLE STORE (for few-shot prompting)
+// ============================================================================
+
+interface ExampleRow {
+  id: string;
+  example_id: string;
+  scenario: string;
+  category: string;
+  outcome: string;
+  primary_state: string | null;
+  state_flow: string[] | null;
+  messages: Array<{ role: string; content: string; state?: string }>;
+  notes: string | null;
+  similarity?: number;
+}
+
+function rowToExample(row: ExampleRow): ConversationExample {
+  return {
+    id: row.id,
+    exampleId: row.example_id,
+    scenario: row.scenario,
+    category: row.category,
+    outcome: row.outcome,
+    primaryState: row.primary_state as ConversationState | null,
+    stateFlow: (row.state_flow || []) as ConversationState[],
+    messages: row.messages.map(m => ({
+      role: m.role as 'customer' | 'agent',
+      content: m.content,
+      state: (m.state || 'initial') as ConversationState,
+    })),
+    notes: row.notes || undefined,
+    similarity: row.similarity,
+  };
+}
+
+export function createSupabaseExampleStore(
+  supabase: SupabaseClient
+): ExampleStore {
+  // Note: Examples are in the public schema (shared across clients)
+  return {
+    async findByState(
+      state: ConversationState,
+      options: { limit?: number; category?: string } = {}
+    ): Promise<ConversationExample[]> {
+      const { limit = 5, category } = options;
+
+      let query = supabase
+        .from('conversation_examples')
+        .select('id, example_id, scenario, category, outcome, primary_state, state_flow, messages, notes')
+        .eq('primary_state', state)
+        .eq('is_active', true);
+
+      if (category) {
+        query = query.eq('category', category);
+      }
+
+      const { data, error } = await query.limit(limit);
+
+      if (error) {
+        console.error('Error fetching examples by state:', error);
+        return [];
+      }
+
+      return (data || []).map(rowToExample);
+    },
+
+    async findSimilar(
+      embedding: number[],
+      options: { state?: ConversationState; limit?: number } = {}
+    ): Promise<ConversationExample[]> {
+      const { state, limit = 5 } = options;
+
+      // Use the RPC function from the migration
+      const { data, error } = await supabase.rpc('search_conversation_examples', {
+        p_state: state || null,
+        p_category: null,
+        p_embedding: embedding,
+        p_limit: limit,
+      });
+
+      if (error) {
+        console.error('Error fetching similar examples:', error);
+        return [];
+      }
+
+      return (data || []).map(rowToExample);
     },
   };
 }

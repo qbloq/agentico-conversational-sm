@@ -102,3 +102,33 @@ export {
   createTranscriptionLogEntry,
 } from './llm/logger.js';
 export { calculateCost, calculateTranscriptionCost, MODEL_PRICING } from './llm/pricing.js';
+
+// =============================================================================
+// Conversation Examples (Few-Shot Prompting)
+// =============================================================================
+
+export type {
+  ExampleMessage,
+  ExampleCategory,
+  ExampleOutcome,
+  ConversationExample,
+  ExampleRetrievalOptions,
+  ExampleStore,
+  FormatOptions,
+  FormattableExample,
+} from './examples/index.js';
+
+// Also export the engine's ExampleStore interface for dependency injection
+export type {
+  ExampleStore as EngineExampleStore,
+  ConversationExample as EngineConversationExample,
+} from './engine/types.js';
+
+export {
+  SupabaseExampleStore,
+  InMemoryExampleStore,
+  formatExample,
+  formatExamples,
+  extractAgentResponses,
+  summarizeExample,
+} from './examples/index.js';

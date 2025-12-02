@@ -43,12 +43,12 @@ export function createSupabaseKnowledgeStore(
   return {
     async findSimilar(embedding: number[], limit: number): Promise<KnowledgeEntry[]> {
       // Debug embedding
-      console.log('Vector search :: prod', { 
-        schema: schemaName, 
-        embeddingType: typeof embedding,
-        isArray: Array.isArray(embedding),
-        limit 
-      });
+      // console.log('Vector search :: prod', { 
+      //   schema: schemaName, 
+      //   embeddingType: typeof embedding,
+      //   isArray: Array.isArray(embedding),
+      //   limit 
+      // });
 
 
       // Use pgvector's cosine similarity search

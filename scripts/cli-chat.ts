@@ -21,7 +21,8 @@ import {
   createSupabaseContactStore,
   createSupabaseSessionStore,
   createSupabaseMessageStore,
-  createSupabaseKnowledgeStore
+  createSupabaseKnowledgeStore,
+  createSupabaseExampleStore,
 } from './utils/adapters.js';
 
 // Load environment variables
@@ -64,6 +65,7 @@ async function main() {
   const sessionStore = createSupabaseSessionStore(supabase, SCHEMA_NAME);
   const messageStore = createSupabaseMessageStore(supabase, SCHEMA_NAME);
   const knowledgeStore = createSupabaseKnowledgeStore(supabase, SCHEMA_NAME);
+  const exampleStore = createSupabaseExampleStore(supabase);
   console.log('✅ Database adapters initialized');
 
   // 5. Initialize Providers
@@ -129,6 +131,7 @@ async function main() {
           sessionStore,
           messageStore,
           knowledgeStore,
+          exampleStore,
           llmProvider,
           embeddingProvider,
           clientConfig,
