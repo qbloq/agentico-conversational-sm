@@ -25,19 +25,40 @@ export interface SessionKey {
 
 /**
  * Conversation states (state machine)
+ * 
+ * Categories:
+ * - Entry: initial, returning_customer, promotion_inquiry
+ * - Qualification: qualifying, diagnosing
+ * - Sales Flow: pitching, handling_objection, closing, post_registration
+ * - Education Flow: education_redirect
+ * - Support Flow: technical_support, deposit_support, platform_support, withdrawal_support
+ * - Terminal: completed, escalated, follow_up, disqualified
  */
 export type ConversationState =
+  // Entry States
   | 'initial'
+  | 'returning_customer'
+  | 'promotion_inquiry'
+  // Qualification States
   | 'qualifying'
   | 'diagnosing'
+  // Sales Flow
   | 'pitching'
   | 'handling_objection'
   | 'closing'
   | 'post_registration'
+  // Education Flow
+  | 'education_redirect'
+  // Support Flow
+  | 'technical_support'
   | 'deposit_support'
+  | 'platform_support'
+  | 'withdrawal_support'
+  // Terminal States
   | 'follow_up'
   | 'escalated'
-  | 'completed';
+  | 'completed'
+  | 'disqualified';
 
 /**
  * Session status

@@ -45,178 +45,343 @@ export interface StateTransition {
 
 /**
  * State configurations for the sales conversation flow
- * Based on the sales_bot.spec.md decision tree
+ * Based on conversational_ux.md design document
+ * 
+ * State Categories:
+ * - Entry: initial, returning_customer, promotion_inquiry
+ * - Qualification: qualifying, diagnosing
+ * - Sales Flow: pitching, handling_objection, closing, post_registration
+ * - Education Flow: education_redirect
+ * - Support Flow: technical_support, deposit_support, platform_support, withdrawal_support
+ * - Terminal: completed, escalated, follow_up, disqualified
  */
 export const STATE_CONFIGS: Record<ConversationState, StateConfig> = {
+  // ===========================================================================
+  // ENTRY STATES
+  // ===========================================================================
+  
   initial: {
     state: 'initial',
-    objective: 'Greet the user warmly and validate their interest',
-    description: 'First contact with the user. Acknowledge their message, introduce yourself briefly, and confirm they are interested in learning about leveraged trading accounts.',
+    objective: 'Greet user and detect intent/segment',
+    description: 'First contact. Warm greeting, detect if new prospect, returning customer, or specific inquiry (promotions, support). Route to appropriate flow based on intent.',
     completionSignals: [
-      'User confirms interest in leveraged accounts',
-      'User asks a question about the product',
-      'User responds to greeting',
+      'User responds with identifiable intent',
+      'User asks about product information',
+      'User mentions existing account',
+      'User asks about promotions or bonuses',
+      'User reports an issue',
     ],
-    ragCategories: ['Preguntas Frecuentes', 'Manejo de la Cuenta'],
-    allowedTransitions: ['qualifying', 'escalated'],
+    ragCategories: ['Preguntas Frecuentes'],
+    allowedTransitions: ['qualifying', 'returning_customer', 'promotion_inquiry', 'technical_support', 'escalated'],
     transitionGuidance: {
-      qualifying: 'Move here after user responds to greeting or shows any interest. This is the natural next step for any engaged user.',
-      escalated: 'Only if user explicitly asks for human help or shows immediate frustration.',
+      qualifying: 'User shows interest in product info or wants to learn about leveraged accounts.',
+      returning_customer: 'User indicates they already have an account ("ya tengo cuenta", "soy cliente").',
+      promotion_inquiry: 'User mentions bonus, free account, promo, or Instagram ad.',
+      technical_support: 'User reports an issue immediately (login, platform, etc.).',
+      escalated: 'User explicitly requests human agent.',
     },
+    maxMessages: 2,
   },
+  
+  returning_customer: {
+    state: 'returning_customer',
+    objective: 'Identify existing customer needs and route appropriately',
+    description: 'User has indicated they already have an account. Determine if they need support, want to add funds, or have questions.',
+    completionSignals: [
+      'User specifies their need',
+      'User asks about withdrawals',
+      'User asks about deposits',
+      'User reports a platform issue',
+    ],
+    ragCategories: ['Manejo de la Cuenta', 'Depósitos y Retiros'],
+    allowedTransitions: ['withdrawal_support', 'deposit_support', 'platform_support', 'technical_support', 'pitching', 'escalated'],
+    transitionGuidance: {
+      withdrawal_support: 'User asks about withdrawals or has pending withdrawal.',
+      deposit_support: 'User asks about deposits or adding funds.',
+      platform_support: 'User has MT5 or trading issues.',
+      technical_support: 'User has login or account access issues.',
+      pitching: 'User wants to open an additional account.',
+      escalated: 'Complex issue or user requests human.',
+    },
+    maxMessages: 2,
+  },
+  
+  promotion_inquiry: {
+    state: 'promotion_inquiry',
+    objective: 'Clarify promotion terms and convert interest to registration',
+    description: 'User saw an ad about free account/bonus. Clarify that bonus requires purchasing a real account. Convert interest to understanding the value proposition.',
+    completionSignals: [
+      'User understands the promotion terms',
+      'User wants to learn more about the product',
+      'User is not interested after clarification',
+    ],
+    ragCategories: ['Promociones', '12x Cuentas Amplificadas'],
+    allowedTransitions: ['qualifying', 'pitching', 'disqualified', 'escalated'],
+    transitionGuidance: {
+      qualifying: 'User wants to learn more about the product after promotion clarification.',
+      pitching: 'User understands promotion and wants to proceed with purchase.',
+      disqualified: 'User only wanted free account, not interested in paying.',
+      escalated: 'User frustrated or confused after explanation.',
+    },
+    maxMessages: 3,
+  },
+  
+  // ===========================================================================
+  // QUALIFICATION STATES
+  // ===========================================================================
   
   qualifying: {
     state: 'qualifying',
-    objective: 'Assess trading experience level and understand their needs',
-    description: 'Determine if the user has trading experience and what they are looking for. Ask about their background with trading/investing. This helps tailor the pitch.',
+    objective: 'Assess trading experience and understand needs',
+    description: 'Determine user\'s trading background. This is the key branching point between sales flow and education flow. Ask about experience level to tailor the conversation.',
     completionSignals: [
       'User indicates experience level (beginner/experienced)',
-      'User explains what they are looking for',
+      'User says they have been trading for X time',
+      'User asks for signals or help trading (beginner signal)',
       'User asks specific product questions (ready for pitch)',
     ],
     ragCategories: ['Preguntas Frecuentes', 'Conceptos generales de Trading'],
-    allowedTransitions: ['diagnosing', 'pitching', 'escalated'],
+    allowedTransitions: ['pitching', 'diagnosing', 'education_redirect', 'escalated'],
     transitionGuidance: {
-      diagnosing: 'If user is new to trading or seems confused, dig deeper into their needs and pain points.',
-      pitching: 'If user has experience or directly asks about the product/pricing, move to presenting the offer.',
-      escalated: 'If user requests human help or shows frustration.',
-    },
-    maxMessages: 5,
-  },
-  
-  diagnosing: {
-    state: 'diagnosing',
-    objective: 'Understand specific pain points and what they are looking for',
-    description: 'For users who need more guidance. Understand their goals, concerns about trading, and what would make them feel confident to start.',
-    completionSignals: [
-      'User shares their goals or concerns',
-      'User asks how TAG can help them',
-      'User seems ready to hear the offer',
-    ],
-    ragCategories: ['Tipos de Cuentas', 'Condiciones De Trading'],
-    allowedTransitions: ['pitching', 'escalated'],
-    transitionGuidance: {
-      pitching: 'Once you understand their needs, present the TAG offering tailored to what they shared.',
-      escalated: 'If user requests human help or the conversation is going nowhere.',
+      pitching: 'User has trading experience (1+ year) or directly asks about the product.',
+      diagnosing: 'User has some experience but needs more context before pitching.',
+      education_redirect: 'User is complete beginner, asks for signals, or says they have no experience.',
+      escalated: 'User requests human help.',
     },
     maxMessages: 4,
   },
   
+  diagnosing: {
+    state: 'diagnosing',
+    objective: 'Understand specific needs and pain points',
+    description: 'For users who need more context before pitching. Understand their goals, current challenges, and what they are looking for in a broker.',
+    completionSignals: [
+      'User shares their goals or concerns',
+      'User asks about specific features',
+      'User seems ready to hear the offer',
+      'User reveals they need education first',
+    ],
+    ragCategories: ['Tipos de Cuentas', 'Condiciones De Trading'],
+    allowedTransitions: ['pitching', 'education_redirect', 'escalated'],
+    transitionGuidance: {
+      pitching: 'User ready to hear the offer after sharing their needs.',
+      education_redirect: 'User reveals they need education first.',
+      escalated: 'User requests human help or conversation going nowhere.',
+    },
+    maxMessages: 3,
+  },
+  
+  // ===========================================================================
+  // EDUCATION FLOW
+  // ===========================================================================
+  
+  education_redirect: {
+    state: 'education_redirect',
+    objective: 'Redirect beginner to appropriate educational resources',
+    description: 'User is not ready for leveraged accounts. Redirect to TAG Academy or educational content. Maintain relationship for future conversion.',
+    completionSignals: [
+      'User accepts education path',
+      'User declines education',
+      'User insists on leveraged account despite warning',
+    ],
+    ragCategories: ['Academia', 'Conceptos generales de Trading'],
+    allowedTransitions: ['completed', 'pitching', 'disqualified', 'escalated'],
+    transitionGuidance: {
+      completed: 'User accepts education redirect.',
+      pitching: 'User insists they want leveraged account despite beginner warning.',
+      disqualified: 'User not interested in education.',
+      escalated: 'User requests human help.',
+    },
+    maxMessages: 3,
+  },
+  
+  // ===========================================================================
+  // SALES FLOW
+  // ===========================================================================
+  
   pitching: {
     state: 'pitching',
-    objective: 'Present TAG Markets offering tailored to their needs',
-    description: 'Explain the 12x leveraged accounts, key benefits (100% profits, instant withdrawals, no exam). Adapt the pitch based on their experience level and stated needs.',
+    objective: 'Present TAG Markets x12 offering tailored to user needs',
+    description: 'Core sales pitch. Explain the 12x leverage, key benefits (100% profits, no exam, day-1 withdrawals), and differentiation. Adapt based on qualification insights.',
     completionSignals: [
-      'User expresses interest in signing up',
-      'User asks how to register',
+      'User shows buying intent (asks how to register)',
       'User raises objection or concern',
-      'User says they understand and want to proceed',
+      'User asks about pricing/minimum deposit',
+      'User says they want to start',
     ],
-    ragCategories: ['Tipos de Cuentas', '12x Cuentas Amplificadas', 'Condiciones De Trading'],
-    allowedTransitions: ['handling_objection', 'closing', 'escalated'],
+    ragCategories: ['12x Cuentas Amplificadas', 'Tipos de Cuentas', 'Condiciones De Trading'],
+    allowedTransitions: ['closing', 'handling_objection', 'escalated'],
     transitionGuidance: {
-      handling_objection: 'If user raises concerns, doubts, or objections (safety, legitimacy, pricing, etc.).',
-      closing: 'If user shows buying signals: asks about registration, pricing, or says they want to start.',
-      escalated: 'If user requests human help or shows frustration.',
+      closing: 'User shows buying signals: asks about registration, pricing, or says they want to start.',
+      handling_objection: 'User raises concerns, doubts, or objections (safety, legitimacy, pricing).',
+      escalated: 'User requests human help.',
     },
-    maxMessages: 6,
+    maxMessages: 5,
   },
   
   handling_objection: {
     state: 'handling_objection',
-    objective: 'Address concerns and objections with empathy and facts',
-    description: 'User has raised a concern or objection. Listen, acknowledge their concern, and address it with facts from the knowledge base. Common objections: safety/scam concerns, pricing, platform questions.',
+    objective: 'Address concerns with empathy and facts',
+    description: 'User has raised a concern or objection. Listen, acknowledge, and address with facts. Common objections: legitimacy/scam, pricing, complexity, drawdown rule.',
     completionSignals: [
       'User accepts the explanation',
       'User asks a new question (objection resolved)',
-      'User wants to proceed despite initial concern',
+      'User wants to proceed',
     ],
-    ragCategories: ['Preguntas Frecuentes', 'Depósitos y Retiros', 'Plataformas De Trading'],
+    ragCategories: ['Preguntas Frecuentes', 'Regulación', 'Condiciones De Trading'],
     allowedTransitions: ['pitching', 'closing', 'escalated'],
     transitionGuidance: {
-      pitching: 'If objection is resolved and user wants to hear more about the product.',
-      closing: 'If objection is resolved and user is ready to sign up.',
-      escalated: 'If user remains unconvinced after multiple attempts or requests human help.',
+      pitching: 'Objection resolved, user wants more info.',
+      closing: 'Objection resolved, user ready to proceed.',
+      escalated: 'User remains unconvinced or requests human.',
     },
-    maxMessages: 5,
+    maxMessages: 4,
   },
   
   closing: {
     state: 'closing',
     objective: 'Guide user to registration with clear next steps',
-    description: 'User is ready to sign up. Provide registration link, explain the process (Register → KYC → Deposit), and capture their email for attribution.',
+    description: 'User is ready to sign up. Provide registration link, explain the process (Register → KYC → Deposit → Amplify → MT5), capture attribution.',
     completionSignals: [
       'User confirms they registered',
-      'User provides email',
-      'User asks about deposit methods',
+      'User asks about next steps after registration',
+      'User has last-minute hesitation',
     ],
     ragCategories: ['Manejo de la Cuenta', 'Guías & Tutoriales'],
     allowedTransitions: ['post_registration', 'handling_objection', 'escalated'],
     transitionGuidance: {
-      post_registration: 'Once user confirms they have registered or asks about next steps after registration.',
-      handling_objection: 'If user raises last-minute concerns or hesitation.',
-      escalated: 'If user requests human help.',
+      post_registration: 'User confirms registration or asks about next steps.',
+      handling_objection: 'User raises last-minute concerns.',
+      escalated: 'User requests human help.',
     },
+    maxMessages: 3,
   },
   
   post_registration: {
     state: 'post_registration',
     objective: 'Confirm registration and guide to first deposit',
-    description: 'User has registered. Congratulate them, explain KYC process if needed, and guide them to make their first deposit.',
+    description: 'User has registered. Congratulate, verify KYC status, and guide to deposit. Explain deposit methods and next steps.',
     completionSignals: [
       'User confirms deposit made',
-      'User asks about deposit issues',
-      'User says they will deposit later',
+      'User has deposit questions',
+      'User asks about MT5 setup',
     ],
     ragCategories: ['Depósitos y Retiros', 'Guías & Tutoriales'],
-    allowedTransitions: ['deposit_support', 'completed', 'escalated'],
+    allowedTransitions: ['deposit_support', 'platform_support', 'completed', 'escalated'],
     transitionGuidance: {
-      deposit_support: 'If user has questions or issues with the deposit process.',
-      completed: 'If user confirms successful deposit or explicitly ends the conversation positively.',
-      escalated: 'If user has persistent issues or requests human help.',
+      deposit_support: 'User has questions or issues with deposit.',
+      platform_support: 'User asks about MT5 setup.',
+      completed: 'User confirms successful deposit.',
+      escalated: 'User has persistent issues or requests human.',
     },
+    maxMessages: 4,
+  },
+  
+  // ===========================================================================
+  // SUPPORT FLOW
+  // ===========================================================================
+  
+  technical_support: {
+    state: 'technical_support',
+    objective: 'Resolve login, registration, or account access issues',
+    description: 'User cannot log in, register, or access their account. Common issues: password reset, KYC verification, email not recognized.',
+    completionSignals: [
+      'Issue resolved',
+      'User can access their account',
+      'Issue requires backend intervention',
+    ],
+    ragCategories: ['Manejo de la Cuenta', 'Guías & Tutoriales'],
+    allowedTransitions: ['post_registration', 'completed', 'escalated'],
+    transitionGuidance: {
+      post_registration: 'Login issue resolved, user can proceed with onboarding.',
+      completed: 'Issue resolved.',
+      escalated: 'Technical issue requires backend intervention.',
+    },
+    maxMessages: 5,
   },
   
   deposit_support: {
     state: 'deposit_support',
     objective: 'Help with deposit process and troubleshoot issues',
-    description: 'User needs help with deposits. Explain available methods (Crypto, Card, PSE), troubleshoot issues, analyze payment receipts if shared.',
+    description: 'User needs help making a deposit or has a failed deposit. Explain methods (Crypto, Card, PSE), troubleshoot rejections, guide crypto deposits.',
     completionSignals: [
-      'User confirms deposit successful',
-      'Issue resolved',
-      'User needs human intervention for complex issue',
+      'Deposit successful',
+      'Issue identified and explained',
+      'User needs MT5 help after deposit',
     ],
-    ragCategories: ['Depósitos y Retiros', 'Plataformas De Trading'],
+    ragCategories: ['Depósitos y Retiros', 'Guías & Tutoriales'],
+    allowedTransitions: ['platform_support', 'completed', 'escalated'],
+    transitionGuidance: {
+      platform_support: 'Deposit done, user needs MT5 help.',
+      completed: 'Deposit confirmed successful.',
+      escalated: 'Deposit stuck, needs manual review.',
+    },
+    maxMessages: 5,
+  },
+  
+  platform_support: {
+    state: 'platform_support',
+    objective: 'Help with MT5 setup and trading issues',
+    description: 'User has MT5 or trading platform issues. Common: server not found, trade disabled, wrong symbols. Key fix: use .f suffix on symbols.',
+    completionSignals: [
+      'User can trade successfully',
+      'Issue resolved',
+      'Persistent platform issue',
+    ],
+    ragCategories: ['Plataformas De Trading', 'Guías & Tutoriales'],
     allowedTransitions: ['completed', 'escalated'],
     transitionGuidance: {
-      completed: 'If deposit is confirmed successful or issue is resolved.',
-      escalated: 'If technical issue persists and requires human intervention.',
+      completed: 'User confirms they can trade.',
+      escalated: 'Persistent platform issue.',
     },
+    maxMessages: 5,
   },
+  
+  withdrawal_support: {
+    state: 'withdrawal_support',
+    objective: 'Guide withdrawal process and handle delays',
+    description: 'User wants to withdraw or has a pending withdrawal. Explain process (MT5 → Amplify → Wallet), check status, reassure on timing.',
+    completionSignals: [
+      'User understands process',
+      'Withdrawal confirmed',
+      'Withdrawal delayed needs investigation',
+    ],
+    ragCategories: ['Depósitos y Retiros', 'Guías & Tutoriales'],
+    allowedTransitions: ['completed', 'escalated'],
+    transitionGuidance: {
+      completed: 'Withdrawal confirmed or user satisfied.',
+      escalated: 'Withdrawal delayed >24h, needs investigation.',
+    },
+    maxMessages: 4,
+  },
+  
+  // ===========================================================================
+  // TERMINAL STATES
+  // ===========================================================================
   
   follow_up: {
     state: 'follow_up',
-    objective: 'Re-engage user who went quiet with value reminder',
-    description: 'User has not responded for a while. Send a friendly follow-up reminding them of the value proposition. Do not be pushy.',
+    objective: 'Re-engage dormant conversation',
+    description: 'Scheduled follow-up for users who went quiet. Gentle reminder of value proposition. Not pushy.',
     completionSignals: [
       'User re-engages with interest',
       'User explicitly declines',
       'User asks to stop messages',
     ],
-    ragCategories: ['Tipos de Cuentas', '12x Cuentas Amplificadas'],
+    ragCategories: ['12x Cuentas Amplificadas', 'Tipos de Cuentas'],
     allowedTransitions: ['qualifying', 'pitching', 'completed', 'escalated'],
     transitionGuidance: {
-      qualifying: 'If user re-engages but seems to need more information.',
-      pitching: 'If user re-engages with interest in the product.',
-      completed: 'If user explicitly declines or asks to stop.',
-      escalated: 'If user requests human help.',
+      qualifying: 'User re-engages but needs more information.',
+      pitching: 'User re-engages with interest.',
+      completed: 'User explicitly declines or asks to stop.',
+      escalated: 'User requests human help.',
     },
   },
   
   escalated: {
     state: 'escalated',
-    objective: 'Human agent has taken over - bot should not respond',
-    description: 'Conversation has been handed off to a human agent. Bot should not send automatic responses.',
+    objective: 'Human agent has taken over',
+    description: 'Conversation handed off to human agent. Bot should not send automatic responses. Triggered by: explicit request, persistent issues, frustration.',
     completionSignals: [],
     ragCategories: [],
     allowedTransitions: ['qualifying', 'completed'],
@@ -229,12 +394,24 @@ export const STATE_CONFIGS: Record<ConversationState, StateConfig> = {
   completed: {
     state: 'completed',
     objective: 'Conversation successfully concluded',
-    description: 'Conversation has ended successfully. User has either converted or explicitly ended the conversation.',
+    description: 'Positive conclusion. User converted, issue resolved, or gracefully ended.',
     completionSignals: [],
     ragCategories: [],
     allowedTransitions: ['follow_up'],
     transitionGuidance: {
-      follow_up: 'For scheduled follow-up messages after some time has passed.',
+      follow_up: 'For scheduled follow-up messages after time has passed.',
+    },
+  },
+  
+  disqualified: {
+    state: 'disqualified',
+    objective: 'Gracefully end non-viable conversation',
+    description: 'User is not a fit (only wanted free stuff, wrong number, spam). End politely without burning bridge.',
+    completionSignals: [],
+    ragCategories: [],
+    allowedTransitions: ['follow_up'],
+    transitionGuidance: {
+      follow_up: 'For potential re-engagement after cooling off period.',
     },
   },
 };

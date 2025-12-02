@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Sample Conversations Viewer</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+  <style>
+    [x-cloak] { display: none !important; }
+  </style>
+</head>
+<body class="bg-gray-900 text-gray-100 min-h-screen">
+  <div x-data="conversationViewer()" x-init="init()" class="max-w-7xl mx-auto p-6">
+    <!-- Header -->
+    <header class="mb-8">
+      <h1 class="text-3xl font-bold text-white mb-2">💬 Sample Conversations</h1>
+      <p class="text-gray-400">Training data for TAG Markets GenAI bot</p>
+    </header>
+
+    <!-- Stats Bar -->
+    <div x-show="conversations.length > 0" class="grid grid-cols-2 md:grid-cols-5 gap-4 mb-8">
+      <div class="bg-gray-800 rounded-lg p-4 text-center">
+        <div class="text-2xl font-bold text-blue-400" x-text="conversations.length"></div>
+        <div class="text-sm text-gray-400">Total</div>
+      </div>
+      <div class="bg-gray-800 rounded-lg p-4 text-center">
+        <div class="text-2xl font-bold text-green-400" x-text="stats.happy_path || 0"></div>
+        <div class="text-sm text-gray-400">Happy Path</div>
+      </div>
+      <div class="bg-gray-800 rounded-lg p-4 text-center">
+        <div class="text-2xl font-bold text-yellow-400" x-text="stats.deviation || 0"></div>
+        <div class="text-sm text-gray-400">Deviations</div>
+      </div>
+      <div class="bg-gray-800 rounded-lg p-4 text-center">
+        <div class="text-2xl font-bold text-orange-400" x-text="stats.edge_case || 0"></div>
+        <div class="text-sm text-gray-400">Edge Cases</div>
+      </div>
+      <div class="bg-gray-800 rounded-lg p-4 text-center">
+        <div class="text-2xl font-bold text-purple-400" x-text="stats.complex || 0"></div>
+        <div class="text-sm text-gray-400">Complex</div>
+      </div>
+    </div>
+
+    <!-- Filters -->
+    <div class="flex flex-wrap gap-4 mb-6">
+      <div class="flex gap-2">
+        <button @click="filter = 'all'" 
+                :class="filter === 'all' ? 'bg-blue-600' : 'bg-gray-700 hover:bg-gray-600'"
+                class="px-4 py-2 rounded-lg text-sm font-medium transition">
+          All
+        </button>
+        <button @click="filter = 'happy_path'" 
+                :class="filter === 'happy_path' ? 'bg-green-600' : 'bg-gray-700 hover:bg-gray-600'"
+                class="px-4 py-2 rounded-lg text-sm font-medium transition">
+          Happy Path
+        </button>
+        <button @click="filter = 'deviation'" 
+                :class="filter === 'deviation' ? 'bg-yellow-600' : 'bg-gray-700 hover:bg-gray-600'"
+                class="px-4 py-2 rounded-lg text-sm font-medium transition">
+          Deviations
+        </button>
+        <button @click="filter = 'edge_case'" 
+                :class="filter === 'edge_case' ? 'bg-orange-600' : 'bg-gray-700 hover:bg-gray-600'"
+                class="px-4 py-2 rounded-lg text-sm font-medium transition">
+          Edge Cases
+        </button>
+        <button @click="filter = 'complex'" 
+                :class="filter === 'complex' ? 'bg-purple-600' : 'bg-gray-700 hover:bg-gray-600'"
+                class="px-4 py-2 rounded-lg text-sm font-medium transition">
+          Complex
+        </button>
+      </div>
+      
+      <!-- Outcome Filter -->
+      <select x-model="outcomeFilter" class="bg-gray-700 rounded-lg px-4 py-2 text-sm">
+        <option value="all">All Outcomes</option>
+        <option value="success">✅ Success</option>
+        <option value="redirect">↪️ Redirect</option>
+        <option value="escalation">⬆️ Escalation</option>
+        <option value="dropout">❌ Dropout</option>
+      </select>
+    </div>
+
+    <!-- File Input -->
+    <div x-show="!conversations.length" class="bg-gray-800 rounded-lg p-8 text-center mb-8">
+      <p class="text-gray-400 mb-4">Load sample_conversations.json to view conversations</p>
+      <input type="file" @change="loadFile($event)" accept=".json" 
+             class="block mx-auto text-sm text-gray-400 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:bg-blue-600 file:text-white hover:file:bg-blue-700">
+    </div>
+
+    <!-- Conversation List -->
+    <div class="grid gap-6">
+      <template x-for="conv in filteredConversations" :key="conv.id">
+        <div class="bg-gray-800 rounded-xl overflow-hidden shadow-lg">
+          <!-- Conversation Header -->
+          <div class="px-6 py-4 border-b border-gray-700 flex items-center justify-between">
+            <div class="flex items-center gap-3">
+              <span class="text-gray-500 font-mono text-sm" x-text="conv.id"></span>
+              <span :class="categoryClass(conv.category)" 
+                    class="px-3 py-1 rounded-full text-xs font-medium"
+                    x-text="formatCategory(conv.category)"></span>
+              <span :class="outcomeClass(conv.outcome)"
+                    class="px-3 py-1 rounded-full text-xs font-medium"
+                    x-text="formatOutcome(conv.outcome)"></span>
+            </div>
+            <span class="text-gray-500 text-sm" x-text="conv.messages.length + ' messages'"></span>
+          </div>
+          
+          <!-- Scenario -->
+          <div class="px-6 py-3 bg-gray-750 border-b border-gray-700">
+            <p class="text-gray-300 text-sm"><span class="text-gray-500">Scenario:</span> <span x-text="conv.scenario"></span></p>
+          </div>
+
+          <!-- Messages -->
+          <div class="p-6 space-y-4 max-h-96 overflow-y-auto">
+            <template x-for="(msg, idx) in conv.messages" :key="idx">
+              <div :class="msg.role === 'customer' ? 'flex justify-start' : 'flex justify-end'">
+                <div :class="msg.role === 'customer' 
+                      ? 'bg-gray-700 rounded-tr-2xl rounded-br-2xl rounded-bl-2xl' 
+                      : 'bg-blue-600 rounded-tl-2xl rounded-bl-2xl rounded-br-2xl'"
+                     class="max-w-[80%] px-4 py-3">
+                  <div class="text-xs mb-1" 
+                       :class="msg.role === 'customer' ? 'text-gray-400' : 'text-blue-200'"
+                       x-text="msg.role === 'customer' ? '👤 Customer' : '🤖 Agent'"></div>
+                  <p class="text-sm whitespace-pre-wrap" x-text="msg.content"></p>
+                </div>
+              </div>
+            </template>
+          </div>
+
+          <!-- Notes -->
+          <div x-show="conv.notes" class="px-6 py-3 bg-gray-750 border-t border-gray-700">
+            <p class="text-gray-400 text-sm italic"><span class="text-gray-500">Notes:</span> <span x-text="conv.notes"></span></p>
+          </div>
+        </div>
+      </template>
+    </div>
+
+    <!-- Empty State -->
+    <div x-show="filteredConversations.length === 0 && conversations.length > 0" 
+         class="text-center py-12 text-gray-500">
+      No conversations match the current filters.
+    </div>
+  </div>
+
+  <script>
+    function conversationViewer() {
+      return {
+        conversations: [],
+        filter: 'all',
+        outcomeFilter: 'all',
+        stats: {},
+
+        async init() {
+          // Try to load from default path
+          try {
+            const response = await fetch('data/sample_conversations.json');
+            if (response.ok) {
+              this.conversations = await response.json();
+              this.calculateStats();
+            }
+          } catch (e) {
+            console.log('Could not auto-load file, waiting for manual upload');
+          }
+        },
+
+        loadFile(event) {
+          const file = event.target.files[0];
+          if (!file) return;
+          
+          const reader = new FileReader();
+          reader.onload = (e) => {
+            try {
+              this.conversations = JSON.parse(e.target.result);
+              this.calculateStats();
+            } catch (err) {
+              alert('Invalid JSON file');
+            }
+          };
+          reader.readAsText(file);
+        },
+
+        calculateStats() {
+          this.stats = this.conversations.reduce((acc, c) => {
+            acc[c.category] = (acc[c.category] || 0) + 1;
+            return acc;
+          }, {});
+        },
+
+        get filteredConversations() {
+          return this.conversations.filter(c => {
+            const categoryMatch = this.filter === 'all' || c.category === this.filter;
+            const outcomeMatch = this.outcomeFilter === 'all' || c.outcome === this.outcomeFilter;
+            return categoryMatch && outcomeMatch;
+          });
+        },
+
+        categoryClass(category) {
+          const classes = {
+            happy_path: 'bg-green-900 text-green-300',
+            deviation: 'bg-yellow-900 text-yellow-300',
+            edge_case: 'bg-orange-900 text-orange-300',
+            complex: 'bg-purple-900 text-purple-300'
+          };
+          return classes[category] || 'bg-gray-700 text-gray-300';
+        },
+
+        outcomeClass(outcome) {
+          const classes = {
+            success: 'bg-emerald-900 text-emerald-300',
+            redirect: 'bg-blue-900 text-blue-300',
+            escalation: 'bg-amber-900 text-amber-300',
+            dropout: 'bg-red-900 text-red-300'
+          };
+          return classes[outcome] || 'bg-gray-700 text-gray-300';
+        },
+
+        formatCategory(category) {
+          return category?.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase()) || category;
+        },
+
+        formatOutcome(outcome) {
+          const icons = { success: '✅', redirect: '↪️', escalation: '⬆️', dropout: '❌' };
+          return (icons[outcome] || '') + ' ' + (outcome?.charAt(0).toUpperCase() + outcome?.slice(1) || outcome);
+        }
+      };
+    }
+  </script>
+</body>
+</html>

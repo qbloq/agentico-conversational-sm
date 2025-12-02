@@ -1,0 +1,278 @@
+{
+  "happy_paths": [
+    {
+      "name": "Inquiry to Successful Account Setup",
+      "steps": [
+        "Customer asks for information about the x12 leveraged account.",
+        "Agent provides a detailed explanation of the product, including rules, benefits, and the 10% drawdown rule.",
+        "Customer asks clarifying questions about minimum deposits, rules, and withdrawals.",
+        "Agent answers questions and provides the registration link.",
+        "Customer registers and verifies their account.",
+        "Agent guides the customer on how to make a deposit.",
+        "Customer successfully deposits funds.",
+        "Agent instructs the customer on how to use the 'Amplify' feature to apply the x12 leverage.",
+        "Agent provides instructions to link the account to the MT5 platform (Server: TMFINANCIALS).",
+        "Customer confirms the account is set up and ready to trade."
+      ],
+      "frequency": 28
+    },
+    {
+      "name": "Successful Withdrawal Process",
+      "steps": [
+        "Customer asks how to withdraw profits.",
+        "Agent explains the process: transfer funds from the trading account to the main wallet via the 'Amplify' section.",
+        "Agent provides a help link with detailed withdrawal instructions.",
+        "Customer follows the steps and successfully initiates a withdrawal to their crypto wallet.",
+        "Agent congratulates the customer on their profit."
+      ],
+      "frequency": 2
+    }
+  ],
+  "deviations": [
+    {
+      "name": "Deposit Failure or Issue",
+      "description": "Customer's attempt to deposit funds fails or does not reflect in their wallet. This is often due to credit/debit card rejections, high fees prompting hesitation, or confusion with cryptocurrency transfers.",
+      "trigger": "Customer states their deposit was rejected, they see a high commission fee, or the deposited funds are not appearing in their account.",
+      "frequency": 9
+    },
+    {
+      "name": "Inexperienced User / Beginner",
+      "description": "Customer reveals they have little or no trading experience, asking for signals, guidance, or stating they are new. The agent then pivots from selling the leveraged account to recommending an educational academy.",
+      "trigger": "Customer asks 'who will help me trade?', 'do you provide signals?', or states 'I'm new to this'.",
+      "frequency": 17
+    },
+    {
+      "name": "Login or Registration Problem",
+      "description": "Customer is unable to log in to the client portal or complete their registration. This often involves incorrect password errors even after a reset, or the system not accepting their credentials.",
+      "trigger": "Customer states 'I can't log in', 'my password isn't working', or sends a screenshot of a login error.",
+      "frequency": 7
+    },
+    {
+      "name": "Post-Setup Trading Problem",
+      "description": "After successfully setting up and funding their account, the customer is unable to execute trades on the MT5 platform. The most common cause is using the wrong asset symbol (e.g., 'XAUUSD' instead of 'XAUUSD.f').",
+      "trigger": "Customer reports 'trade is disabled', 'invalid volume', or 'money insufficient' errors when trying to place a trade.",
+      "frequency": 7
+    },
+    {
+      "name": "Withdrawal Delay",
+      "description": "Customer has initiated a withdrawal, but the funds have not arrived in their crypto wallet after several hours. The agent typically escalates this to the support team.",
+      "trigger": "Customer asks 'where is my withdrawal?' or states that the withdrawal they made yesterday has not arrived.",
+      "frequency": 2
+    },
+    {
+      "name": "Off-Topic or Wrong Number",
+      "description": "The customer's message is irrelevant, appears to be for a different person/company, or is spam/inappropriate content.",
+      "trigger": "Messages like 'Estas equivocado' (You're mistaken), personal greetings to someone else, or random URLs.",
+      "frequency": 12
+    }
+  ],
+  "enquiries": [
+    {
+      "intent": "request_human_agent",
+      "example_phrases": [
+        "Hablar con un Agente"
+      ],
+      "frequency": 52,
+      "category": "General Inquiry"
+    },
+    {
+      "intent": "request_product_info",
+      "example_phrases": [
+        "Quiero mas información gracias",
+        "me puedes explicar más al respecto porfa",
+        "cómo funciona la cuenta x12",
+        "me gustaría que me dieran toda la info correspondiente"
+      ],
+      "frequency": 148,
+      "category": "Product Information"
+    },
+    {
+      "intent": "ask_about_withdrawals",
+      "example_phrases": [
+        "como es el tema de los retiros ??",
+        "Métodos de retiro?",
+        "Los retiros se hacen por qué medio?",
+        "Cuando puedo retirar",
+        "cuanto se demora en verse reflejadel retiro en crypto?"
+      ],
+      "frequency": 23,
+      "category": "Account Management"
+    },
+    {
+      "intent": "ask_about_drawdown",
+      "example_phrases": [
+        "La única regla en este tipo de cuentas es que no puedes perder más del 10%?",
+        "esa cuenta que drowdau puede tener",
+        "El 10% de perdida es acumulable o se reinicia cada mes ?",
+        "perder el 10% de la cuenta : se cuenta cuando la operación ya allá cerrado?"
+      ],
+      "frequency": 18,
+      "category": "Rules & Conditions"
+    },
+    {
+      "intent": "ask_about_beginner_support",
+      "example_phrases": [
+        "Y quien me ayuda a operar?",
+        "Pero no ayudan con señales o algo?",
+        "Soy nuevo haciendo trading",
+        "No tengo experiencia",
+        "Quiero aprender a hacerlo bn"
+      ],
+      "frequency": 17,
+      "category": "Product Information"
+    },
+    {
+      "intent": "ask_about_promotions_bonuses",
+      "example_phrases": [
+        "Y cómo sería la promoción De insta",
+        "Quiero mi cuenta grátis",
+        "al crear mi cuenta con ustedes me regalan otra cuenta ??",
+        "cómo funciona la cuenta extra?",
+        "que por la compra de una cuenta te dan otra cuenta de 600 real"
+      ],
+      "frequency": 17,
+      "category": "Promotions & Bonuses"
+    },
+    {
+      "intent": "ask_how_to_register",
+      "example_phrases": [
+        "como lo hago",
+        "como seria el registro?",
+        "Me regala el link para el registro",
+        "Como hago para crear la cuenta?"
+      ],
+      "frequency": 16,
+      "category": "Account Management"
+    },
+    {
+      "intent": "ask_about_rules",
+      "example_phrases": [
+        "Reglas y condiciones",
+        "que tiene de diferente TAG?",
+        "Tag market no tiene reglas como las de las cuentas de fondeo verdad",
+        "Y que reglas tiene ?"
+      ],
+      "frequency": 14,
+      "category": "Rules & Conditions"
+    },
+    {
+      "intent": "ask_minimum_deposit",
+      "example_phrases": [
+        "Cuánto es lo mínimo que se puede depositar para probar?",
+        "Cuánto es lo mínimo?",
+        "Cuanto seria lo mínimo en dolares con lo que puedo abrir las ctas",
+        "cuanto es el monto minimo para invertir"
+      ],
+      "frequency": 12,
+      "category": "Pricing & Costs"
+    },
+    {
+      "intent": "ask_about_tradable_assets",
+      "example_phrases": [
+        "Y que opera en general, todo? Forex, criptos?",
+        "se pueden operar Índices como US30 o NAS100",
+        "puedo hacer forex con este broker",
+        "Que mercados están disponibles"
+      ],
+      "frequency": 11,
+      "category": "Product Information"
+    },
+    {
+      "intent": "report_deposit_issue",
+      "example_phrases": [
+        "Y por lo que veo no se a reflejado",
+        "No me deja hacer el depósito",
+        "me sale dinero insuficiente",
+        "me la rechaza",
+        "se quedo redirexcionando"
+      ],
+      "frequency": 9,
+      "category": "Technical Support"
+    },
+    {
+      "intent": "ask_about_commissions_fees",
+      "example_phrases": [
+        "Las comisiones",
+        "Hablo de los fees Del broker",
+        "Cobran 1 USD por cada 0.1 lote?",
+        "que comisión ganan ustedes por retiro"
+      ],
+      "frequency": 8,
+      "category": "Pricing & Costs"
+    },
+    {
+      "intent": "report_login_issue",
+      "example_phrases": [
+        "No me deja entrar con mi mail",
+        "La generó nuevamente Y no me deja ingresar",
+        "No me ingresa el usuario",
+        "me dice que la contraseña no es"
+      ],
+      "frequency": 7,
+      "category": "Technical Support"
+    },
+    {
+      "intent": "report_trading_platform_issue",
+      "example_phrases": [
+        "Sabes por qué no me deja operar y sale este mensaje ?",
+        "No me dejó abrir la posición",
+        "no me salen los graficos",
+        "me dice que solo lectura"
+      ],
+      "frequency": 7,
+      "category": "Technical Support"
+    },
+    {
+      "intent": "ask_about_copy_trading",
+      "example_phrases": [
+        "Puedo crear una cuenta y conectarla a una persona que tiene un copy Trading?",
+        "hay algún grupo que envía señales?",
+        "quiero información del Copi",
+        "Puedo ser parte del copy traiding?"
+      ],
+      "frequency": 7,
+      "category": "Product Information"
+    },
+    {
+      "intent": "ask_about_company_regulation",
+      "example_phrases": [
+        "Y quiero saber si ustedes están regulados",
+        "Este broker cuenta con regulación donde ?",
+        "estoy revisando qué regulaciones tiene el broker y las reseñas",
+        "Hola esta regulado el broker de donde es"
+      ],
+      "frequency": 6,
+      "category": "Company Information"
+    },
+    {
+      "intent": "ask_about_referral_program",
+      "example_phrases": [
+        "Quisiera saber el sistema de brokerage Por traer cliente",
+        "TAG maneja tema de referidos??",
+        "me gustaría poder ser IB para promocionar este producto"
+      ],
+      "frequency": 5,
+      "category": "Promotions & Bonuses"
+    },
+    {
+      "intent": "report_withdrawal_issue",
+      "example_phrases": [
+        "Mira que hace 3 horas hice el retiro y no ha cargado",
+        "aún no se ve reflejado el saldo en al wallet",
+        "No he podido hacer el retiro a mi Wallet"
+      ],
+      "frequency": 2,
+      "category": "Technical Support"
+    },
+    {
+      "intent": "ask_about_account_types",
+      "example_phrases": [
+        "Bien me gustaría saber la diferencia en las clases de cuentas",
+        "Cero,pro,islamica",
+        "la cuenta que me ofreces cuál es, la pro, zero o islamic?"
+      ],
+      "frequency": 2,
+      "category": "Product Information"
+    }
+  ]
+}

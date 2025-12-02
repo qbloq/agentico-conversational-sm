@@ -1,0 +1,2498 @@
+[
+  {
+    "id": "conv_001",
+    "scenario": "Product inquiry leads to full information and registration intent.",
+    "category": "happy_path",
+    "messages": [
+      {
+        "role": "customer",
+        "content": "Hola, vi un anuncio en insta y quiero saber como funciona lo de la cuenta x12"
+      },
+      {
+        "role": "agent",
+        "content": "¡Hola! Claro que sí, con gusto te explico. Mi nombre es LIA, tu asistente virtual de TAG Markets. Para darte la mejor información, ¿me podrías contar qué experiencia tienes haciendo trading?"
+      },
+      {
+        "role": "customer",
+        "content": "llevo como un año operando pero con poco capital"
+      },
+      {
+        "role": "agent",
+        "content": "Perfecto, este modelo te va a interesar. Te comparto la información completa:\n\nLas Cuentas Apalancadas X12 te permiten operar con un capital 12 veces mayor al que depositas. Por ejemplo, si depositas 100 USD, operas con 1,200 USD.\n\nLa única regla es no perder más del 10% del balance total de la cuenta apalancada (en el ejemplo, 120 USD).\n\n- **Retiros:** Puedes retirar tus ganancias desde el día 1. Tu depósito inicial lo puedes retirar después de 30 días.\n- **Sin Pruebas:** No necesitas pasar ningún examen o challenge.\n- **Ganancias 100% Tuyas:** No hay reparto de profits.\n- **Comisión:** Fija de $1 por 0.1 lote.\n- **Plataforma:** Operamos en MT5."
+      },
+      {
+        "role": "customer",
+        "content": "Suena bien. O sea que si le meto 100, no puedo perder mas de 120 dolares y me cierran la cuenta?"
+      },
+      {
+        "role": "agent",
+        "content": "Exacto. Esa es la única regla de gestión de riesgo. ¿Te gustaría iniciar tu registro para obtener una cuenta?"
+      },
+      {
+        "role": "customer",
+        "content": "si, pasame el link porfa"
+      },
+      {
+        "role": "agent",
+        "content": "¡Claro! Aquí puedes registrarte y verificar tus documentos: https://portal.tagmarkets.com/live_signup?sidc=BOT-GEN-AI\n\nUna vez completes el registro, me avisas para guiarte con el depósito."
+      }
+    ],
+    "outcome": "success",
+    "notes": "Best version of the core happy path: user requests info, understands the concept, and moves to registration. Good bot persona."
+  },
+  {
+    "id": "conv_002",
+    "scenario": "Existing user asking about the withdrawal process.",
+    "category": "happy_path",
+    "messages": [
+      {
+        "role": "customer",
+        "content": "Hola, ya tengo mi cuenta y tuve algunas ganancias. Como hago para retirar?"
+      },
+      {
+        "role": "agent",
+        "content": "¡Hola! Felicidades por tus ganancias. El proceso de retiro es sencillo. Debes hacerlo a través de una billetera de criptomonedas, como Binance. ¿Ya tienes una configurada?"
+      },
+      {
+        "role": "customer",
+        "content": "Si, ya tengo binance."
+      },
+      {
+        "role": "agent",
+        "content": "Perfecto. El primer paso es transferir las ganancias de tu cuenta de MT5 a tu wallet en el portal de TAG Markets. Esto se hace desde la sección 'Amplify' en tu panel.\nLuego, desde tu wallet del portal, solicitas el retiro a tu billetera de Binance. Aquí tienes una guía con el paso a paso: https://intercom.help/tag-markets/es/articles/9705803-como-realizar-un-retiro"
+      },
+      {
+        "role": "customer",
+        "content": "listo, gracias. voy a revisarlo."
+      }
+    ],
+    "outcome": "success",
+    "notes": "Excellent, detailed explanation of the withdrawal process, including the two-step transfer (MT5 -> Portal -> External Wallet)."
+  },
+  {
+    "id": "conv_003",
+    "scenario": "Quick question about the minimum deposit amount.",
+    "category": "happy_path",
+    "messages": [
+      {
+        "role": "customer",
+        "content": "cuanto es lo minimo para empezar?"
+      },
+      {
+        "role": "agent",
+        "content": "¡Hola! El depósito mínimo para una cuenta apalancada x12 es de 50 USD, con lo que operarías con 600 USD. Tenemos varios niveles:\n\n- Depositas 50 USD -> Operas con 600 USD\n- Depositas 100 USD -> Operas con 1,200 USD\n- Depositas 200 USD -> Operas con 2,400 USD"
+      },
+      {
+        "role": "customer",
+        "content": "ok gracias"
+      }
+    ],
+    "outcome": "success",
+    "notes": "A very common, short interaction. The bot provides a direct and comprehensive answer."
+  },
+  {
+    "id": "conv_004",
+    "scenario": "Beginner user who is not suitable for the product gets redirected to the academy.",
+    "category": "deviation",
+    "messages": [
+      {
+        "role": "customer",
+        "content": "Hola, quiero aprender a invertir, como empiezo?"
+      },
+      {
+        "role": "agent",
+        "content": "¡Hola! Gracias por tu interés. Te comento, TAG Markets es un broker para traders que ya tienen experiencia y una estrategia definida. Nuestro modelo de cuentas apalancadas conlleva un alto riesgo y no es recomendable para principiantes."
+      },
+      {
+        "role": "customer",
+        "content": "ah ok, y ustedes no enseñan?"
+      },
+      {
+        "role": "agent",
+        "content": "Nosotros no somos una academia, pero estamos asociados con la mejor de Latinoamérica, Premium Academy de David Guerrero. Ellos te pueden llevar de cero a trader rentable. Si te interesa, te puedo dar más información sobre sus programas."
+      },
+      {
+        "role": "customer",
+        "content": "si por favor, me interesa aprender bien primero"
+      }
+    ],
+    "outcome": "redirect",
+    "notes": "Crucial conversation for filtering unqualified leads. Correctly identifies an unsuitable user and redirects them to a partner service."
+  },
+  {
+    "id": "conv_005",
+    "scenario": "User made a deposit via bank transfer (PSE) and it's not reflected yet, causing concern.",
+    "category": "deviation",
+    "messages": [
+      {
+        "role": "customer",
+        "content": "Hola, hice un depósito de 200 usd hace como 3 horas por pse y no me aparece el saldo en la wallet."
+      },
+      {
+        "role": "agent",
+        "content": "Hola, buenos días. Entiendo tu preocupación. ¿Me podrías compartir tu correo electrónico con el que te registraste para verificar con soporte?"
+      },
+      {
+        "role": "customer",
+        "content": "si claro es traderpro22@gmail.com"
+      },
+      {
+        "role": "agent",
+        "content": "Gracias. Te confirmo que los depósitos por PSE pueden tardar hasta 24 horas hábiles en verse reflejados. Como lo hiciste hoy, es normal que aún no aparezca. Debería estar cargado a más tardar mañana. Si para mañana en la tarde no lo ves, por favor escríbeme de nuevo."
+      },
+      {
+        "role": "customer",
+        "content": "Uff ok, pensé que era inmediato. Bueno, entonces espero. Gracias."
+      }
+    ],
+    "outcome": "escalation",
+    "notes": "Handles a common payment issue by setting correct expectations and providing a follow-up plan. Marked as escalation because it required checking with support."
+  },
+  {
+    "id": "conv_006",
+    "scenario": "User is confused about a promotion seen on social media about a free bonus account.",
+    "category": "deviation",
+    "messages": [
+      {
+        "role": "customer",
+        "content": "Hola, vi una promo de que si abro una cuenta de 100 me dan otra de 600. Es verdad?"
+      },
+      {
+        "role": "agent",
+        "content": "Hola, ¡así es! Tenemos esa promoción activa. Te explico cómo funciona."
+      },
+      {
+        "role": "agent",
+        "content": "Al activar tu cuenta apalancada principal, por ejemplo, depositando 100 USD para operar con 1,200 USD, te obsequiamos una segunda cuenta, una 'cuenta bono', con 600 USD."
+      },
+      {
+        "role": "customer",
+        "content": "Y esa cuenta de 600 la puedo usar como quiera?"
+      },
+      {
+        "role": "agent",
+        "content": "La cuenta bono tiene dos condiciones para poder retirar las ganancias: debes mover un total de 15 lotes en tus operaciones y no perder más del 10% del capital (60 USD). Una vez cumplas los lotes, puedes hacer un único retiro del total de las ganancias y la cuenta se desactiva. Es un obsequio para que puedas capitalizarte más."
+      },
+      {
+        "role": "customer",
+        "content": "Ahhh ok, ya entendi. Es aparte de la cuenta principal. Gracias por la aclaracion"
+      }
+    ],
+    "outcome": "success",
+    "notes": "Agent successfully clarifies the rules and conditions of a bonus account, a common point of confusion."
+  },
+  {
+    "id": "conv_007",
+    "scenario": "User is confused about a promotion for a 'free' or 'bonus' account and drops out.",
+    "category": "deviation",
+    "messages": [
+      {
+        "role": "customer",
+        "content": "Hola, vengo a reclamar mi cuenta gratis que vi en un anuncio"
+      },
+      {
+        "role": "agent",
+        "content": "¡Hola! Bienvenido a TAG Markets. Te refieres a nuestra promoción de cuenta bono, ¿verdad?"
+      },
+      {
+        "role": "customer",
+        "content": "si, la que regalan al registrarse"
+      },
+      {
+        "role": "agent",
+        "content": "Para aclarar, la cuenta bono es un obsequio que te damos por la compra de una cuenta apalancada. Por ejemplo, si adquieres una cuenta de 100 USD (para operar con 1,200 USD), te obsequiamos una cuenta bono adicional de 600 USD para que operes."
+      },
+      {
+        "role": "customer",
+        "content": "ahhh osea que no es gratis? tengo que pagar primero?"
+      },
+      {
+        "role": "agent",
+        "content": "Exacto. Es un bono adicional a tu compra, no una cuenta sin depósito. Es una excelente forma de duplicar tu capital de trading."
+      },
+      {
+        "role": "customer",
+        "content": "ah ok. pense que era otra cosa. gracias por la aclaracion"
+      }
+    ],
+    "outcome": "dropout",
+    "notes": "Important variation of the bonus account clarification, where the user drops out after understanding the conditions."
+  },
+  {
+    "id": "conv_008",
+    "scenario": "User contacts the business by mistake, thinking it's a different service.",
+    "category": "edge_case",
+    "messages": [
+      {
+        "role": "customer",
+        "content": "Buenas, para pedir una cita para el arreglo de la lavadora."
+      },
+      {
+        "role": "agent",
+        "content": "Hola, buenas tardes. Te comunicas con TAG Markets, una plataforma de trading. Creo que te has equivocado de número."
+      },
+      {
+        "role": "customer",
+        "content": "Uy que pena, si, disculpe la molestia."
+      },
+      {
+        "role": "agent",
+        "content": "No hay problema, que tengas un buen día."
+      }
+    ],
+    "outcome": "dropout",
+    "notes": "Classic 'wrong number' scenario. Essential for the bot to recognize and handle gracefully."
+  },
+  {
+    "id": "conv_009",
+    "scenario": "An impatient user is upset about the KYC verification time.",
+    "category": "edge_case",
+    "messages": [
+      {
+        "role": "customer",
+        "content": "YA ENVIÉ MIS DOCUMENTOS HACE HORAS Y NADA QUE ME VERIFICAN!!!! NECESITO OPERAR YA"
+      },
+      {
+        "role": "agent",
+        "content": "Hola, entiendo tu urgencia. El proceso de verificación puede tomar algunas horas mientras nuestro equipo revisa que todo esté en orden. ¿Podrías darme tu correo electrónico para consultar el estado de tu solicitud?"
+      },
+      {
+        "role": "customer",
+        "content": "furioso_trader@email.com, pero apúrense que el mercado se está moviendo."
+      },
+      {
+        "role": "agent",
+        "content": "Gracias. Ya pasé tu correo al equipo de soporte para que le den prioridad. Te pido un poco de paciencia, estamos trabajando para que puedas operar lo antes posible. Recibirás un correo de confirmación en breve."
+      },
+      {
+        "role": "customer",
+        "content": "mas les vale."
+      }
+    ],
+    "outcome": "escalation",
+    "notes": "Excellent example of handling an aggressive and impatient customer by staying professional, de-escalating, and escalating the issue internally."
+  },
+  {
+    "id": "conv_010",
+    "scenario": "An impatient and slightly aggressive customer is upset about a login issue.",
+    "category": "edge_case",
+    "messages": [
+      {
+        "role": "customer",
+        "content": "NO ME DEJA ENTRAR A MI CUENTA!!!"
+      },
+      {
+        "role": "customer",
+        "content": "YA CAMBIÉ LA CLAVE 3 VECES Y NADA, QUE PASA CON SU PLATAFORMA?"
+      },
+      {
+        "role": "agent",
+        "content": "Hola, entiendo tu frustración y lamento los problemas que estás teniendo para acceder. Por favor, mantengamos la calma para poder ayudarte mejor. ¿Ya intentaste borrar la memoria caché y las cookies de tu navegador?"
+      },
+      {
+        "role": "customer",
+        "content": "YA HICE TODO ESO. NO SIRVE."
+      },
+      {
+        "role": "agent",
+        "content": "De acuerdo. Para poder revisar tu caso específico, necesito que levantes un ticket de soporte desde nuestro portal. El equipo técnico podrá ver qué sucede con tu cuenta directamente. Puedes hacerlo en la sección 'Apoyo' del portal. Ellos te responderán por correo lo antes posible."
+      },
+      {
+        "role": "customer",
+        "content": "ok lo hare pero espero que lo resuelvan rapido"
+      }
+    ],
+    "outcome": "escalation",
+    "notes": "Handling an angry user by acknowledging their frustration and directing them to the correct channel (support) for technical issues."
+  },
+  {
+    "id": "conv_011",
+    "scenario": "User needs multiple turns to understand the static drawdown rule.",
+    "category": "edge_case",
+    "messages": [
+      {
+        "role": "customer",
+        "content": "hola una pregunta sobre la regla del 10%"
+      },
+      {
+        "role": "agent",
+        "content": "Hola, claro, dime tu duda."
+      },
+      {
+        "role": "customer",
+        "content": "si empiezo con 100 para tener 1200, no puedo perder mas de 120. pero si gano 200 y mi cuenta sube a 1400, ahora mi limite de perdida es 140?"
+      },
+      {
+        "role": "agent",
+        "content": "Esa es una excelente pregunta y es un punto clave de nuestro modelo. La respuesta es no. El límite de pérdida siempre se calcula sobre el capital inicial apalancado."
+      },
+      {
+        "role": "agent",
+        "content": "El drawdown de la cuenta es estático, es decir: no crece conforme aumenta el balance de tu capital. En tu ejemplo, si tu cuenta de 1.200$ sube a 1.400$, tu límite de pérdida sigue siendo que la cuenta no baje de 1.080$ (1200 - 120). Podrías perder los 200$ que ganaste y tu cuenta seguiría activa."
+      },
+      {
+        "role": "customer",
+        "content": "osea que la ganancia es como un colchon?"
+      },
+      {
+        "role": "agent",
+        "content": "Exactamente, puedes verlo de esa manera. Las ganancias te dan más margen para operar sin arriesgarte a tocar el límite de pérdida."
+      },
+      {
+        "role": "customer",
+        "content": "ahh ya, ahora si quedó claro. gracias"
+      }
+    ],
+    "outcome": "success",
+    "notes": "A detailed, multi-turn explanation of a core product feature (static drawdown). The 'colchon' (cushion) analogy is a great teaching moment."
+  },
+  {
+    "id": "conv_012",
+    "scenario": "User asks for clarification on how the static drawdown rule works with profits.",
+    "category": "happy_path",
+    "messages": [
+      {
+        "role": "customer",
+        "content": "Hola, una duda con la regla del 10%. Si deposito 500 y tengo 6000 para operar, mi límite de pérdida es 600. Pero si gano y mi cuenta sube a 8000, mi límite de pérdida sube a 800?"
+      },
+      {
+        "role": "agent",
+        "content": "¡Hola! Muy buena pregunta. No, el límite de pérdida no sube. Nuestro drawdown es estático, lo que significa que siempre se calcula sobre el balance inicial apalancado.\n\nEn tu ejemplo: Tu cuenta es de 6,000 USD. Tu límite de pérdida siempre será 600 USD. Si la cuenta sube a 8,000 USD y luego pierdes 2,000 USD (quedando en 6,000 USD), no incumples la regla. Solo se incumple si el balance total cae por debajo de 5,400 USD (6,000 - 600)."
+      },
+      {
+        "role": "customer",
+        "content": "Ah, ya entendí. O sea que las ganancias son como un colchón. Perfecto, gracias."
+      }
+    ],
+    "outcome": "success",
+    "notes": "A more concise, happy-path version of the drawdown explanation. Good to have both detailed and quick versions."
+  },
+  {
+    "id": "conv_013",
+    "scenario": "User asks detailed questions about the IB/Referral program.",
+    "category": "complex",
+    "messages": [
+      {
+        "role": "customer",
+        "content": "Hola, tengo una comunidad de traders y me gustaría saber si tienen algún programa de referidos o IB."
+      },
+      {
+        "role": "agent",
+        "content": "¡Hola! Sí, claro. Tenemos un programa de IB (Introducing Broker) muy competitivo. ¿Ya eres cliente de TAG Markets?"
+      },
+      {
+        "role": "customer",
+        "content": "Todavía no, primero quiero entender cómo funciona el programa para mis referidos."
+      },
+      {
+        "role": "agent",
+        "content": "Entendido. Nuestro programa de IB te paga una comisión por el volumen operado por tus clientes referidos. Para las cuentas apalancadas, la comisión es de 3 USD por cada lote estándar operado por tu referido."
+      },
+      {
+        "role": "customer",
+        "content": "Ok, 3 dolares por lote. Y tienen diferentes niveles o algun bono por volumen o CPA?"
+      },
+      {
+        "role": "agent",
+        "content": "Actualmente nuestro esquema principal es de rebate por lotaje. Dependiendo del volumen que genere tu comunidad, podemos conversar con el equipo de alianzas para explorar beneficios adicionales, como cuentas bono para tus mejores traders. Para empezar, te registras, obtienes tu link de referido y empiezas a ganar por el volumen."
+      },
+      {
+        "role": "customer",
+        "content": "Interesante. Gracias, lo voy a evaluar."
+      }
+    ],
+    "outcome": "success",
+    "notes": "A complex inquiry about a specific program (IB). The bot provides clear details on the commission structure and potential for growth."
+  },
+  {
+    "id": "conv_014",
+    "scenario": "User wants to understand copy trading and if they can be a signal provider.",
+    "category": "complex",
+    "messages": [
+      {
+        "role": "customer",
+        "content": "Hola, se puede hacer copy trading con ustedes?"
+      },
+      {
+        "role": "agent",
+        "content": "Hola. Sí, en nuestro panel de cliente tenemos una sección de 'Trading Social' donde puedes seguir las estrategias de otros traders."
+      },
+      {
+        "role": "customer",
+        "content": "Y si yo quiero que me copien a mi? como funciona? soy rentable y quiero ofrecer mis señales"
+      },
+      {
+        "role": "agent",
+        "content": "Para ser un proveedor de estrategias hay un proceso de aplicación y se requiere un historial de trading verificado con nosotros. Te recomiendo que primero operes tu cuenta y una vez tengas un historial consistente, puedes solicitarlo a través de un ticket de soporte en la sección 'Apoyo' de tu panel. Ellos te guiarán con los requisitos específicos."
+      },
+      {
+        "role": "customer",
+        "content": "Ok, entonces primero tengo que operar y demostrar. Entiendo. Gracias"
+      }
+    ],
+    "outcome": "success",
+    "notes": "Distinguishes between being a copy trading follower and a provider, and correctly explains the process for the more complex request."
+  },
+  {
+    "id": "conv_015",
+    "scenario": "User tries to log in but can't, needs password reset.",
+    "category": "deviation",
+    "messages": [
+      {
+        "role": "customer",
+        "content": "hola no puedo entrar a mi cuenta. pongo el correo y la clave y me dice q es incorrecto"
+      },
+      {
+        "role": "agent",
+        "content": "Hola, lamento que tengas problemas para ingresar. Has intentado usar la opción de 'Olvidé mi contraseña' en la página de login?"
+      },
+      {
+        "role": "customer",
+        "content": "si ya lo hice y me llego el correo pa cambiarla, la cambie y aun asi no me deja entrar"
+      },
+      {
+        "role": "agent",
+        "content": "Entiendo. A veces el navegador guarda datos antiguos. Por favor, intenta borrar las cookies y el caché de tu navegador, o prueba desde una ventana de incógnito. Si aún así no funciona, dame tu correo y lo reviso con soporte técnico."
+      },
+      {
+        "role": "customer",
+        "content": "ok voy a probar lo de incognito. mi correo es elcapo99@email.com por si acaso"
+      },
+      {
+        "role": "agent",
+        "content": "Perfecto, quedo atento. Ya pasé tu correo a soporte para que revisen si hay algún bloqueo en la cuenta."
+      }
+    ],
+    "outcome": "escalation",
+    "notes": "A login issue that requires more than basic steps. The agent provides good troubleshooting advice before escalating to technical support."
+  },
+  {
+    "id": "conv_016",
+    "scenario": "User is skeptical after reading bad reviews online.",
+    "category": "edge_case",
+    "messages": [
+      {
+        "role": "customer",
+        "content": "Hola. Estuve buscando info de ustedes y vi varias quejas y malas reseñas. Son de fiar?"
+      },
+      {
+        "role": "agent",
+        "content": "Hola, gracias por tu honestidad. Entendemos tu preocupación. Como en cualquier broker, las experiencias pueden variar, especialmente en una actividad de alto riesgo como el trading donde las pérdidas son posibles."
+      },
+      {
+        "role": "agent",
+        "content": "Para tu tranquilidad, te comparto que estamos regulados por la FSC de Mauricio. Puedes verificar nuestra licencia aquí: [link a la licencia]. También puedes ver las reseñas de muchos de nuestros clientes satisfechos en Trustpilot: [link a Trustpilot]."
+      },
+      {
+        "role": "customer",
+        "content": "ok, voy a revisar esos links. gracias"
+      }
+    ],
+    "outcome": "success",
+    "notes": "Excellent example of addressing skepticism and negative social proof directly and transparently by providing verifiable links to regulation and positive reviews."
+  },
+  {
+    "id": "conv_017",
+    "scenario": "User asks about tradable assets, specifically if they can trade a particular stock.",
+    "category": "happy_path",
+    "messages": [
+      {
+        "role": "customer",
+        "content": "Buenas, que mercados puedo operar con ustedes? se pueden acciones como Tesla o Apple?"
+      },
+      {
+        "role": "agent",
+        "content": "Hola, buenas tardes. Con TAG Markets puedes operar una amplia variedad de mercados."
+      },
+      {
+        "role": "agent",
+        "content": "Con TAG Markets puedes operar:\n\nForex\nCrypto\nÍndices Bursátiles\nMetales\nAcciones\n\nTodas con excelentes condiciones. Y sí, puedes operar acciones populares como Tesla (TSLA.f) y Apple (AAPL.f) a través de CFDs."
+      },
+      {
+        "role": "customer",
+        "content": "perfecto, eso era lo que queria saber. gracias"
+      }
+    ],
+    "outcome": "success",
+    "notes": "User asks about specific tradable assets and gets a positive and informative response, including the correct symbol format."
+  },
+  {
+    "id": "conv_018",
+    "scenario": "User sends a generic greeting, agent needs to prompt for more information.",
+    "category": "edge_case",
+    "messages": [
+      {
+        "role": "customer",
+        "content": "Hola"
+      },
+      {
+        "role": "agent",
+        "content": "Hola, buenos días. Te saluda Iván de TAG Markets. ¿En qué te puedo ayudar?"
+      },
+      {
+        "role": "customer",
+        "content": "info"
+      },
+      {
+        "role": "agent",
+        "content": "Con gusto. ¿Te interesa saber sobre nuestras cuentas apalancadas x12?"
+      },
+      {
+        "role": "customer",
+        "content": "si eso"
+      }
+    ],
+    "outcome": "success",
+    "notes": "Important edge case for handling low-effort, generic initial messages and guiding the user towards a specific topic."
+  },
+  {
+    "id": "conv_019",
+    "scenario": "User who already deposited asks how to add more funds to the same account.",
+    "category": "happy_path",
+    "messages": [
+      {
+        "role": "customer",
+        "content": "buenas, una pregunta, si ya tengo una cuenta de 1200 (deposite 100), le puedo meter mas plata?"
+      },
+      {
+        "role": "agent",
+        "content": "¡Hola! Sí, por supuesto. Puedes agregar fondos a tu cuenta las veces que quieras."
+      },
+      {
+        "role": "customer",
+        "content": "y ese dinero nuevo tambien se multiplica x12 y se suma al que ya tengo?"
+      },
+      {
+        "role": "agent",
+        "content": "Correcto. Si depositas 200 USD adicionales, por ejemplo, se amplificarán a 2,400 USD y se sumarán a tu balance existente. Tu nueva cuenta para operar sería de 3,600 USD (los 1,200 que tenías + los 2,400 nuevos)."
+      },
+      {
+        "role": "customer",
+        "content": "genial! gracias"
+      }
+    ],
+    "outcome": "success",
+    "notes": "Clarifying a common and positive user question about scaling their investment. The agent provides a clear example."
+  },
+  {
+    "id": "conv_020",
+    "scenario": "User reports a technical issue on the MT5 platform, where trades won't open.",
+    "category": "deviation",
+    "messages": [
+      {
+        "role": "customer",
+        "content": "Ayuda, no me deja abrir operaciones en el oro. Me sale un error."
+      },
+      {
+        "role": "agent",
+        "content": "Hola, lamento el inconveniente. ¿Podrías confirmarme qué símbolo estás intentando operar en MT5?"
+      },
+      {
+        "role": "customer",
+        "content": "XAUUSD, el de siempre"
+      },
+      {
+        "role": "agent",
+        "content": "Entiendo. En nuestro servidor, los símbolos de los activos deben terminar en '.f' para poder operarlos. Por favor, busca en tu lista de activos 'XAUUSD.f' e intenta abrir la operación en ese."
+      },
+      {
+        "role": "customer",
+        "content": "ahhh con razon. ya lo encontre y si me dejo. gracias!"
+      }
+    ],
+    "outcome": "success",
+    "notes": "A very common technical support issue (wrong symbol format) that the sales bot can and should resolve directly."
+  },
+  {
+    "id": "conv_021",
+    "scenario": "User asks for a demo account to test the platform and rules.",
+    "category": "happy_path",
+    "messages": [
+      {
+        "role": "customer",
+        "content": "Hola, antes de meter dinero real, me gustaria probar con una cuenta demo. Se puede?"
+      },
+      {
+        "role": "agent",
+        "content": "¡Hola! Claro que sí, es una decisión muy inteligente. Puedes crear una cuenta demo directamente desde tu panel de cliente una vez que te hayas registrado."
+      },
+      {
+        "role": "customer",
+        "content": "y la cuenta demo tiene la misma regla del 10% de drawdown?"
+      },
+      {
+        "role": "agent",
+        "content": "Sí, nuestras cuentas demo están configuradas para simular las condiciones reales de la cuenta apalancada, incluyendo la regla del 10% de drawdown estático. Así puedes probar tu estrategia bajo las mismas condiciones."
+      },
+      {
+        "role": "customer",
+        "content": "perfecto, entonces me registro y la creo. gracias"
+      }
+    ],
+    "outcome": "success",
+    "notes": "Excellent interaction that encourages responsible trading practices and confirms that the demo account accurately simulates real conditions."
+  },
+  {
+    "id": "conv_022",
+    "scenario": "User is asking about sharing their account credentials with another trader.",
+    "category": "complex",
+    "messages": [
+      {
+        "role": "customer",
+        "content": "Oye una consulta, yo puedo comprar la cuenta y pasarle los datos a mi trader para que él la opere? yo solo manejaria los retiros"
+      },
+      {
+        "role": "agent",
+        "content": "Hola, sí es posible. La cuenta está a tu nombre y tú eres el responsable de ella, pero puedes compartir las credenciales de MT5 con tu trader para que él gestione las operaciones."
+      },
+      {
+        "role": "agent",
+        "content": "Él solo tendrá acceso a la plataforma de trading (MT5), no a tu panel de cliente de TAG Markets. Todos los depósitos y retiros solo los puedes gestionar tú desde el panel, así que tus fondos están seguros."
+      },
+      {
+        "role": "customer",
+        "content": "Excelente, justo lo que necesitaba saber. Muchas gracias."
+      }
+    ],
+    "outcome": "success",
+    "notes": "Addresses a complex use case (account sharing/management) with a clear and reassuring answer about security."
+  },
+  {
+    "id": "conv_023",
+    "scenario": "A withdrawal is taking longer than expected and the user is getting worried.",
+    "category": "deviation",
+    "messages": [
+      {
+        "role": "customer",
+        "content": "Hola Ivan, buenas noches. Hice un retiro hace como 5 horas y todavia no me llega a mi binance. Ayer fue casi instantaneo."
+      },
+      {
+        "role": "agent",
+        "content": "Hola, buenas noches. Entiendo. A veces las verificaciones de retiros pueden tomar un poco más de tiempo dependiendo del volumen de solicitudes o de la red blockchain."
+      },
+      {
+        "role": "customer",
+        "content": "Pero es normal que tarde tanto? ya me estoy preocupando."
+      },
+      {
+        "role": "agent",
+        "content": "No te preocupes, tu dinero está seguro. Para darte información exacta sobre tu retiro, lo mejor es que contactes directamente al equipo de finanzas. En tu panel principal, ve a la sección 'Apoyo' y crea un ticket. Ellos tienen acceso directo al sistema y te darán el estado exacto de tu transacción. Mi rol es más comercial y no tengo acceso a esa información."
+      },
+      {
+        "role": "customer",
+        "content": "Ok, voy a mandar el ticket entonces. Gracias."
+      }
+    ],
+    "outcome": "escalation",
+    "notes": "A withdrawal delay issue is escalated to the correct department. The agent clearly defines their role's limitations, which is key for a bot."
+  },
+  {
+    "id": "conv_024",
+    "scenario": "User has already registered and verified, now asking how to deposit and get the x12 account.",
+    "category": "happy_path",
+    "messages": [
+      {
+        "role": "customer",
+        "content": "Hola buenos dias, ya me registre y subi mis documentos. ahora que sigue?"
+      },
+      {
+        "role": "agent",
+        "content": "¡Excelente! Buenos días. El siguiente paso es hacer tu primer depósito. Una vez que el dinero esté en tu wallet del portal, lo amplificaremos x12 para que puedas operar en MT5."
+      },
+      {
+        "role": "customer",
+        "content": "perfecto, como hago el deposito?"
+      },
+      {
+        "role": "agent",
+        "content": "Puedes iniciar sesión en tu portal aquí: https://portal.tagmarkets.com/login?brd=1&wp=4. Luego, ve a la sección 'Depósito' y elige tu método preferido. Te recuerdo que los depósitos con tarjeta o cripto se reflejan casi de inmediato, mientras que por PSE puede tardar hasta 24 horas."
+      },
+      {
+        "role": "customer",
+        "content": "listo gracias, ya entro"
+      }
+    ],
+    "outcome": "success",
+    "notes": "Guides an already registered user through the next critical step of the happy path onboarding process."
+  },
+  {
+    "id": "conv_025",
+    "scenario": "A user complains that they burned their account very quickly after starting.",
+    "category": "deviation",
+    "messages": [
+      {
+        "role": "customer",
+        "content": "hola, abri mi cuenta ayer y ya la quemé... perdi mis 100 dolares en un dia"
+      },
+      {
+        "role": "agent",
+        "content": "Hola, lamento mucho escuchar eso. El trading de alto apalancamiento implica un riesgo significativo y las pérdidas pueden ocurrir rápidamente si no se gestiona el riesgo adecuadamente."
+      },
+      {
+        "role": "customer",
+        "content": "si pero es que fue muy rapido, no me dio chance de nada"
+      },
+      {
+        "role": "agent",
+        "content": "Entiendo tu sentir. Es crucial operar siempre con un plan de trading y usar stop loss para proteger tu capital. Nuestro modelo de negocio te da el capital para operar, pero la responsabilidad de la gestión recae en cada trader. Si deseas volver a intentarlo, puedes recargar tu cuenta cuando te sientas listo."
+      }
+    ],
+    "outcome": "dropout",
+    "notes": "Handles a negative user experience with empathy while reinforcing the principles of risk and user responsibility. Important for managing liability."
+  },
+  {
+    "id": "conv_026",
+    "scenario": "User asks to compare different account types offered by the broker.",
+    "category": "happy_path",
+    "messages": [
+      {
+        "role": "customer",
+        "content": "Hola, veo que ademas de la cuenta apalancada tienen cuentas Pro y Zero. Cual es la diferencia?"
+      },
+      {
+        "role": "agent",
+        "content": "¡Hola! Buena pregunta. Te explico las diferencias principales:\n\n- **Cuenta Amplificada x12:** Es nuestro producto estrella. Depositas una cantidad y te la multiplicamos por 12 para operar. Tiene una comisión fija de $1 por 0.1 lote y spreads desde 0.2 pips. Su regla principal es el drawdown del 10%.\n\n- **Cuenta Pro:** Es una cuenta de broker tradicional con spreads muy bajos (desde 0.0 pips) pero con una comisión más alta ($10 por lote). Es para traders que buscan costos de spread mínimos.\n\n- **Cuenta Zero:** Es otra cuenta tradicional sin comisiones por operación, pero los spreads son un poco más amplios (desde 0.5 pips). Ideal para quienes prefieren no pagar comisiones.\n\nLa elección depende de tu estilo de trading."
+      },
+      {
+        "role": "customer",
+        "content": "muy claro, gracias. me quedo con la amplificada que es la que me interesa."
+      }
+    ],
+    "outcome": "success",
+    "notes": "Provides a clear and concise comparison of different products, helping the user make an informed decision and reinforcing their choice."
+  },
+  {
+    "id": "conv_027",
+    "scenario": "User needs multi-turn clarification on how adding funds affects the drawdown calculation.",
+    "category": "edge_case",
+    "messages": [
+      {
+        "role": "customer",
+        "content": "Hola, tengo una cuenta de 6000 (deposité 500). Mi drawdown es de 600. Si ahora deposito 500 más, mi cuenta sube a 12000. Cómo queda mi drawdown?"
+      },
+      {
+        "role": "agent",
+        "content": "Hola. Al agregar fondos, tu nuevo balance apalancado será de 12,000 USD. El drawdown del 10% se recalcula sobre este nuevo balance total."
+      },
+      {
+        "role": "customer",
+        "content": "Osea que mi nueva perdida maxima es de 1200?"
+      },
+      {
+        "role": "agent",
+        "content": "Exactamente. Tu nuevo nivel de liquidación sería 10,800 USD (12,000 - 1,200)."
+      },
+      {
+        "role": "customer",
+        "content": "Pero es estatico sobre los 12,000, correcto? no sobre las ganancias que genere despues"
+      },
+      {
+        "role": "agent",
+        "content": "Correcto. El drawdown siempre será estático basado en el último balance apalancado total. Las ganancias que generes sobre los 12,000 no alteran ese nivel de liquidación de 10,800 USD."
+      },
+      {
+        "role": "customer",
+        "content": "perfecto, ahora si me quedo 100% claro. gracias."
+      }
+    ],
+    "outcome": "success",
+    "notes": "A complex, multi-turn clarification on a specific rule (drawdown after re-deposit), which is crucial for user retention and trust."
+  },
+  {
+    "id": "conv_028",
+    "scenario": "User asks for a discount or promotion before depositing.",
+    "category": "deviation",
+    "messages": [
+      {
+        "role": "customer",
+        "content": "hola, estoy listo para depositar 200 usd. hay algun descuento o promocion activa?"
+      },
+      {
+        "role": "agent",
+        "content": "¡Hola! Qué bueno que te animes a empezar. Justo ahora tenemos una excelente promoción. Por activar tu cuenta de 200 USD (para operar con 2,400 USD), te obsequiamos una cuenta bono adicional de 1,200 USD."
+      },
+      {
+        "role": "customer",
+        "content": "genial! y esa cuenta de 1200 es real? que reglas tiene?"
+      },
+      {
+        "role": "agent",
+        "content": "Sí, es una cuenta real para operar. Tiene dos condiciones: debes mover un total de 25 lotes y no perder más del 10% del capital (120 USD). Una vez cumplas los 25 lotes, puedes hacer un único retiro de todas las ganancias que hayas generado."
+      },
+      {
+        "role": "customer",
+        "content": "me gusta. entonces al depositar 200 me activan las dos cuentas?"
+      },
+      {
+        "role": "agent",
+        "content": "Así es. Primero activamos tu cuenta principal de 2,400 USD y, una vez esté lista, solicitamos la activación de tu cuenta bono de regalo. ¿Procedemos?"
+      }
+    ],
+    "outcome": "success",
+    "notes": "Successfully converts a user asking for a discount by informing them of a relevant, more valuable promotion."
+  },
+  {
+    "id": "conv_029",
+    "scenario": "User confirms that there is no evaluation or test needed.",
+    "category": "happy_path",
+    "messages": [
+      {
+        "role": "customer",
+        "content": "Hola, esto es como las cuentas de fondeo? tengo q pasar una prueba o algo asi?"
+      },
+      {
+        "role": "agent",
+        "content": "¡Hola! Muy buena pregunta. A diferencia de las cuentas de fondeo, con nosotros no necesitas pasar ninguna prueba o challenge."
+      },
+      {
+        "role": "agent",
+        "content": "Una vez haces tu depósito, tu cuenta se activa y amplifica de inmediato, lista para que empieces a operar y generar ganancias desde el primer día."
+      },
+      {
+        "role": "customer",
+        "content": "ahh que bien, mucho mejor asi. gracias"
+      }
+    ],
+    "outcome": "success",
+    "notes": "User clarifies a key differentiator of the product (no challenges), which is a major selling point."
+  },
+  {
+    "id": "conv_030",
+    "scenario": "User has already deposited and needs help linking to MT5.",
+    "category": "happy_path",
+    "messages": [
+      {
+        "role": "customer",
+        "content": "Hola, ya hice el deposito y ya le di en amplify. ahora que hago?"
+      },
+      {
+        "role": "agent",
+        "content": "¡Excelente! Ya casi estás listo para operar. Ahora debes vincular tu cuenta a MetaTrader 5."
+      },
+      {
+        "role": "agent",
+        "content": "Busca en tu correo un email con tus credenciales. Luego, en MT5, busca el servidor 'TMFinancials', ingresa el login y la contraseña 'Master Password' que recibiste. ¡Y listo!"
+      },
+      {
+        "role": "customer",
+        "content": "perfecto, ya lo hago. mil gracias"
+      },
+      {
+        "role": "customer",
+        "content": "listo, ya quedó vinculada!"
+      },
+      {
+        "role": "agent",
+        "content": "¡Genial! Mucho éxito en tu trading. Cualquier otra cosa, aquí estoy para ayudarte."
+      }
+    ],
+    "outcome": "success",
+    "notes": "User successfully completes the final step of onboarding with clear, actionable instructions."
+  },
+  {
+    "id": "conv_031",
+    "scenario": "User is having trouble making a deposit with their credit card.",
+    "category": "deviation",
+    "messages": [
+      {
+        "role": "customer",
+        "content": "hola, estoy tratando de depositar con mi tarjeta pero me la rechaza. que hago?"
+      },
+      {
+        "role": "agent",
+        "content": "Hola, lamento que estés teniendo inconvenientes. A veces los bancos rechazan las transacciones internacionales por seguridad."
+      },
+      {
+        "role": "agent",
+        "content": "Te sugiero dos cosas: primero, puedes llamar a tu banco para autorizar la compra. O segundo, puedes intentar depositar usando criptomonedas (USDT), que suele ser más rápido y sin rechazos."
+      },
+      {
+        "role": "customer",
+        "content": "no tengo criptos. voy a llamar al banco a ver. gracias"
+      },
+      {
+        "role": "agent",
+        "content": "Perfecto, quedo atento por si necesitas algo más. Ojalá lo puedas solucionar pronto."
+      }
+    ],
+    "outcome": "escalation",
+    "notes": "User has a technical deposit issue. Agent provides two solutions, and the user chooses to escalate to their bank."
+  },
+  {
+    "id": "conv_032",
+    "scenario": "User doesn't understand the 'Amplify' step after depositing.",
+    "category": "deviation",
+    "messages": [
+      {
+        "role": "customer",
+        "content": "Listo ya deposité 100 dolares. ya me aparecen en la wallet. porque en mt5 me sigue saliendo en cero?"
+      },
+      {
+        "role": "agent",
+        "content": "¡Hola! Qué bueno que ya se acreditó tu depósito. El siguiente paso es manual. Debes ir a la sección 'Amplify' en tu portal de cliente."
+      },
+      {
+        "role": "agent",
+        "content": "Ahí, ingresas el monto que depositaste ($100) y le das al botón 'Create'. Eso multiplicará tu saldo x12 y te generará las credenciales de MT5, que te llegarán al correo."
+      },
+      {
+        "role": "customer",
+        "content": "ahhh ok, no es automatico. ya entendi. voy a hacerlo"
+      },
+      {
+        "role": "agent",
+        "content": "Exacto. Avísame si tienes algún problema."
+      }
+    ],
+    "outcome": "success",
+    "notes": "User was stuck at a key friction point in the onboarding process, and the agent successfully guided them through it."
+  },
+  {
+    "id": "conv_033",
+    "scenario": "User asks about copy trading capabilities, focusing on external tools.",
+    "category": "complex",
+    "messages": [
+      {
+        "role": "customer",
+        "content": "buenas, se puede hacer copy trading en sus cuentas?"
+      },
+      {
+        "role": "agent",
+        "content": "¡Hola! Sí, nuestras cuentas son compatibles con estrategias de copy trading."
+      },
+      {
+        "role": "customer",
+        "content": "y ustedes ofrecen algun servicio de copy o tengo q usar uno externo?"
+      },
+      {
+        "role": "agent",
+        "content": "Ambas opciones son posibles. En tu portal de cliente de TAG Markets encontrarás una sección de 'Trading Social' donde puedes ver y copiar a otros traders de nuestra plataforma. Alternativamente, si usas un software de copy trading externo que se conecte a MT5, también puedes usarlo sin problema."
+      },
+      {
+        "role": "customer",
+        "content": "perfecto, queria saber si podia conectar mi cuenta a la de mi mentor. entonces si se puede. gracias!"
+      },
+      {
+        "role": "agent",
+        "content": "Exacto, sí se puede. ¡Un gusto ayudarte!"
+      }
+    ],
+    "outcome": "success",
+    "notes": "User gets clear information about both internal and external copy trading options, satisfying a specific use case."
+  },
+  {
+    "id": "conv_034",
+    "scenario": "Happy Path: User wants to clarify the drawdown rule before depositing.",
+    "category": "happy_path",
+    "messages": [
+      {
+        "role": "customer",
+        "content": "hola, una pregunta sobre la regla del 10%"
+      },
+      {
+        "role": "customer",
+        "content": "si deposito 200, tengo 2400. no puedo perder mas de 240. es correcto?"
+      },
+      {
+        "role": "agent",
+        "content": "¡Hola! Así es, has entendido perfectamente. La única regla es no permitir que el balance de tu cuenta baje más del 10% de su valor inicial apalancado."
+      },
+      {
+        "role": "customer",
+        "content": "y si gano y luego pierdo? por ejm, la subo a 3000 y luego baja a 2500, no pasa nada?"
+      },
+      {
+        "role": "agent",
+        "content": "Exacto, no pasa nada. El drawdown es estático sobre el balance inicial. Mientras tu cuenta no baje de $2,160 (que es $2,400 - $240), tu cuenta sigue activa sin problema."
+      },
+      {
+        "role": "customer",
+        "content": "ok perfecto, ya me quedo claro. gracias"
+      }
+    ],
+    "outcome": "success",
+    "notes": "A good, standard happy path conversation where the user proactively confirms their understanding of a key rule."
+  },
+  {
+    "id": "conv_035",
+    "scenario": "Happy Path: User is already registered and asks how to add more funds.",
+    "category": "happy_path",
+    "messages": [
+      {
+        "role": "customer",
+        "content": "Buenas, quiero agregar mas fondos a mi cuenta, como le hago?"
+      },
+      {
+        "role": "agent",
+        "content": "¡Hola! Claro que sí, puedes recargar tu cuenta cuando quieras. El proceso es el mismo que tu primer depósito."
+      },
+      {
+        "role": "agent",
+        "content": "Solo inicia sesión en tu portal, ve a la sección de 'Depósito', elige tu método de pago y sigue los pasos. Una vez se acredite el saldo, lo amplificas de nuevo en la sección 'Amplify'."
+      },
+      {
+        "role": "customer",
+        "content": "y se suma a lo que ya tengo y se vuelve a multiplicar x12?"
+      },
+      {
+        "role": "agent",
+        "content": "¡Correcto! El nuevo depósito se multiplica x12 y se suma al capital apalancado que ya tienes en tu cuenta."
+      },
+      {
+        "role": "customer",
+        "content": "vale, de una"
+      }
+    ],
+    "outcome": "success",
+    "notes": "A concise and positive interaction with an existing user about adding more funds."
+  },
+  {
+    "id": "conv_036",
+    "scenario": "Happy Path: User asks what assets are tradable.",
+    "category": "happy_path",
+    "messages": [
+      {
+        "role": "customer",
+        "content": "q mercados puedo operar con ustedes?"
+      },
+      {
+        "role": "agent",
+        "content": "¡Hola! Con TAG Markets tienes acceso a una amplia variedad de mercados."
+      },
+      {
+        "role": "agent",
+        "content": "Puedes operar:\n\n- Forex\n- Criptomonedas\n- Índices Bursátiles\n- Metales (Oro, Plata)\n- Acciones\n\nTodos con excelentes condiciones de spreads y comisiones."
+      },
+      {
+        "role": "customer",
+        "content": "super, gracias"
+      }
+    ],
+    "outcome": "success",
+    "notes": "A short and direct happy path conversation providing a clear list of tradable assets."
+  },
+  {
+    "id": "conv_037",
+    "scenario": "A potential user is concerned about the company's legitimacy and regulation.",
+    "category": "happy_path",
+    "messages": [
+      {
+        "role": "customer",
+        "content": "Hola, me interesa pero quiero saber si ustedes son un broker regulado y donde estan registrados. Hay mucha estafa hoy en dia"
+      },
+      {
+        "role": "agent",
+        "content": "Hola, comprendo totalmente tu precaución. Es muy importante asegurarse de con quién se invierte. Te comparto nuestra información de regulación."
+      },
+      {
+        "role": "agent",
+        "content": "Estamos constituidos en Mauritius, regulados por la FSC - Financials Service Commissions. Aquí puedes consultar nuestra licencia:\n\nhttps://opr.fscmauritius.org/ords/opr/r/fsc-opr/fsc-online-public-register-opr\n\nBusca T.M. Financials. La transparencia y seguridad de nuestros clientes es nuestra prioridad."
+      },
+      {
+        "role": "customer",
+        "content": "Ok, voy a revisar los links. Gracias por la transparencia."
+      }
+    ],
+    "outcome": "success",
+    "notes": "A standard happy path version of addressing legitimacy concerns by providing direct links to regulatory information."
+  },
+  {
+    "id": "conv_038",
+    "scenario": "User experiences a technical issue with their credit card deposit and finds an alternative.",
+    "category": "deviation",
+    "messages": [
+      {
+        "role": "customer",
+        "content": "Hola, ya me registré y todo pero cuando intento depositar con mi tarjeta me sale un error"
+      },
+      {
+        "role": "customer",
+        "content": "dice transaccion rechazada"
+      },
+      {
+        "role": "agent",
+        "content": "Hola, lamento que estés teniendo este inconveniente. A veces pasa por la configuración de seguridad del banco o del navegador. ¿Podrías intentar borrar las cookies y el caché de tu navegador y volver a intentarlo?"
+      },
+      {
+        "role": "customer",
+        "content": "ya lo hice y sigue igual"
+      },
+      {
+        "role": "agent",
+        "content": "Entiendo. Otra opción es que tu banco esté bloqueando la transacción por ser un pago internacional. Podrías llamarlos para autorizarla. Como alternativa más rápida, muchos de nuestros clientes usan criptomonedas (USDT) para depositar, ya que la transacción es casi instantánea y sin estos problemas."
+      },
+      {
+        "role": "customer",
+        "content": "ok, voy a intentar con cripto entonces. gracias."
+      }
+    ],
+    "outcome": "escalation",
+    "notes": "Agent provides standard troubleshooting and then offers a viable alternative (crypto), successfully preventing user dropout."
+  },
+  {
+    "id": "conv_039",
+    "scenario": "Complex: User asks about the IB/referral program.",
+    "category": "complex",
+    "messages": [
+      {
+        "role": "customer",
+        "content": "Hola, qué tal. Me gustaría saber si tienen programa para IBs o referidos. Tengo una comunidad de traders."
+      },
+      {
+        "role": "agent",
+        "content": "¡Hola! Qué bueno que nos contactas. Sí, claro, tenemos un excelente programa de IB para líderes de comunidad como tú."
+      },
+      {
+        "role": "customer",
+        "content": "Y como funciona? que comisiones manejan?"
+      },
+      {
+        "role": "agent",
+        "content": "Funciona con un rebate por lotaje. Ganas $3 USD por cada lote estándar que operen tus referidos en las cuentas apalancadas. El pago es mensual y puedes seguir el rendimiento de tus referidos desde un panel de IB."
+      },
+      {
+        "role": "customer",
+        "content": "Ok, $3 por lote. Suena interesante. Y hay algun requisito para entrar al programa?"
+      },
+      {
+        "role": "agent",
+        "content": "El requisito principal es que tengas tu propia cuenta activa con nosotros. Una vez la tengas, te podemos generar tu link de referido personalizado para que empieces a registrar a tu comunidad. ¿Te gustaría empezar el proceso?"
+      },
+      {
+        "role": "customer",
+        "content": "Si, primero voy a probar una cuenta yo y luego hablamos para el link de IB. gracias."
+      }
+    ],
+    "outcome": "success",
+    "notes": "A good variation of the IB program inquiry, where the user decides to test the product first, a common and logical step."
+  },
+  {
+    "id": "conv_040",
+    "scenario": "Happy Path: Existing user asks how to make a withdrawal.",
+    "category": "happy_path",
+    "messages": [
+      {
+        "role": "customer",
+        "content": "Hola, ya tengo mi cuenta y algunas ganancias. Como hago para retirar?"
+      },
+      {
+        "role": "agent",
+        "content": "¡Hola, felicitaciones por tus profits! El proceso de retiro es muy sencillo. Lo haces directamente desde tu portal de cliente en la sección 'Amplify'."
+      },
+      {
+        "role": "agent",
+        "content": "Aquí tienes una guía detallada con el paso a paso para que no tengas ninguna duda: https://intercom.help/tag-markets/es/articles/9705803-como-realizar-un-retiro"
+      },
+      {
+        "role": "customer",
+        "content": "perfecto, muchas gracias. la reviso."
+      }
+    ],
+    "outcome": "success",
+    "notes": "A concise and effective version of the withdrawal request, providing a direct answer and a link to a guide."
+  },
+  {
+    "id": "conv_041",
+    "scenario": "Product inquiry leads to registration intent after clarifying minimum deposit.",
+    "category": "happy_path",
+    "messages": [
+      {
+        "role": "customer",
+        "content": "Hola, vi un anuncio y quiero saber mas"
+      },
+      {
+        "role": "agent",
+        "content": "¡Hola! Con mucho gusto. Te habla Iván de TAG Markets. Para darte la mejor información, ¿cuánto tiempo llevas haciendo trading?"
+      },
+      {
+        "role": "customer",
+        "content": "como 1 año mas o menos"
+      },
+      {
+        "role": "agent",
+        "content": "Excelente. Te comparto la información de nuestras Cuentas Apalancadas X12, que te permiten operar con un capital mayor al que depositas.\n\nPor ejemplo, si depositas 500 USD, podrás operar con 6,000 USD. La única regla es no perder más del 10% del balance total de la cuenta apalancada para evitar el cierre de la misma (es decir, 600 USD en este ejemplo).\n\nPuntos clave:\n- **Multiplicación x12:** Incrementa tu saldo 12 veces.\n- **Comisión Fija:** $1 por 0.1 lote.\n- **Spreads:** Desde 0.2 pips.\n- **Retiros:** Puedes retirar ganancias desde el día #1. Tu depósito inicial se puede retirar después de 30 días.\n- **Sin pruebas:** No debes pasar ningún examen, la cuenta se entrega lista para operar.\n- **Ganancias 100% tuyas:** No hay reparto de profits."
+      },
+      {
+        "role": "customer",
+        "content": "ok suena bien. y con cuanto es lo minimo para empezar?"
+      },
+      {
+        "role": "agent",
+        "content": "Las cuentas más pequeñas que tenemos son:\n\n- 100 USD para operar con 1,200 USD\n- 200 USD para operar con 2,400 USD\n- 300 USD para operar con 3,600 USD"
+      },
+      {
+        "role": "customer",
+        "content": "Perfecto, me interesa la de 100 para probar. Que sigue?"
+      },
+      {
+        "role": "agent",
+        "content": "¡Genial! El primer paso es registrarte y verificar tus documentos en este enlace: https://portal.tagmarkets.com/live_signup?sidc=78E1EB08-A660-4825-A6AB-55B83FB3765F\n\nAvísame con tu correo electrónico apenas lo hagas para guiarte en el depósito."
+      }
+    ],
+    "outcome": "success",
+    "notes": "Standard happy path where user gets information and decides to register. Kept for its concise and effective flow."
+  },
+  {
+    "id": "conv_042",
+    "scenario": "Existing user asks how to process a withdrawal.",
+    "category": "happy_path",
+    "messages": [
+      {
+        "role": "customer",
+        "content": "Hola, ya tengo ganancias en mi cuenta, como hago para retirar?"
+      },
+      {
+        "role": "agent",
+        "content": "¡Hola! ¡Felicitaciones por tus profits! El proceso es sencillo. Los retiros se gestionan a través de billeteras virtuales como Binance."
+      },
+      {
+        "role": "agent",
+        "content": "Primero debes hacer un retiro interno desde tu cuenta de MT5 a tu wallet de TAG Markets a través de la sección 'Amplify' en tu portal. Luego, desde la wallet de TAG, solicitas el retiro a tu billetera virtual."
+      },
+      {
+        "role": "agent",
+        "content": "Aquí tienes una guía detallada con el paso a paso:\nhttps://intercom.help/tag-markets/es/articles/9705803-como-realizar-un-retiro"
+      },
+      {
+        "role": "customer",
+        "content": "Ah ok, gracias. Lo reviso."
+      }
+    ],
+    "outcome": "success",
+    "notes": "Best version of the 'how to withdraw' scenario, as it clearly explains the two-step internal transfer process."
+  },
+  {
+    "id": "conv_043",
+    "scenario": "A user who has no experience with trading asks for information and is redirected to the academy.",
+    "category": "deviation",
+    "messages": [
+      {
+        "role": "customer",
+        "content": "Hola, me explican como funciona esto de generar ingresos?"
+      },
+      {
+        "role": "agent",
+        "content": "Hola, bienvenido a TAG Markets. Te habla Iván. ¿Ya tienes experiencia haciendo trading?"
+      },
+      {
+        "role": "customer",
+        "content": "No, nada. Quiero aprender."
+      },
+      {
+        "role": "agent",
+        "content": "Entiendo. Te comento, nuestro modelo de Cuentas Apalancadas es para traders que ya tienen experiencia, ya que operas por tu propia cuenta y gestionas tu propio riesgo."
+      },
+      {
+        "role": "agent",
+        "content": "Si tu interés es aprender a operar desde cero de manera profesional, te podemos recomendar Premium Academy de David Guerrero. Es un programa excelente para formar traders rentables."
+      },
+      {
+        "role": "customer",
+        "content": "Ah ok. Y eso que costo tiene?"
+      },
+      {
+        "role": "agent",
+        "content": "El programa tiene planes desde 399 USD por 3 meses, con resultados garantizados por contrato. ¿Te gustaría que te comparta más información sobre la academia?"
+      }
+    ],
+    "outcome": "redirect",
+    "notes": "Inexperienced user correctly identified and redirected to an educational product. Shows a positive redirect flow."
+  },
+  {
+    "id": "conv_044",
+    "scenario": "A user sends an off-topic message, likely a wrong number.",
+    "category": "edge_case",
+    "messages": [
+      {
+        "role": "customer",
+        "content": "Buenas, para confirmar la cita con el doctor mañana a las 10 am"
+      },
+      {
+        "role": "agent",
+        "content": "Hola, buen día. Me parece que te has equivocado de número. Somos TAG Markets, una plataforma de trading. ¡Saludos!"
+      }
+    ],
+    "outcome": "dropout",
+    "notes": "Simple wrong number scenario (inbound). Essential for handling irrelevant traffic."
+  },
+  {
+    "id": "conv_045",
+    "scenario": "User faces a technical issue where they can't place trades on a specific asset.",
+    "category": "deviation",
+    "messages": [
+      {
+        "role": "customer",
+        "content": "ayuda no puedo operar"
+      },
+      {
+        "role": "customer",
+        "content": "intento meter una operacion en oro y me dice dinero insuficiente pero si tengo balance"
+      },
+      {
+        "role": "agent",
+        "content": "Hola, lamento el inconveniente. Vamos a solucionarlo. ¿Me puedes confirmar tu correo electrónico registrado y el número de tu cuenta de trading, por favor?"
+      },
+      {
+        "role": "agent",
+        "content": "Una pregunta, ¿qué símbolo de oro estás intentando operar? A veces, después de una actualización del servidor, el símbolo cambia. Asegúrate de que estás operando con 'XAUUSD.F' y no el antiguo."
+      },
+      {
+        "role": "customer",
+        "content": "mi correo es traderpro@email.com. ahhh creo que si estaba usando el normal XAUUSD"
+      },
+      {
+        "role": "customer",
+        "content": "listo ya pude con el XAUUSD.F gracias!"
+      },
+      {
+        "role": "agent",
+        "content": "¡Perfecto! Me alegra que se haya solucionado. Cualquier otra cosa, no dudes en escribir. ¡Mucho éxito en tus operativas!"
+      }
+    ],
+    "outcome": "success",
+    "notes": "Excellent example of technical issue resolution through guided troubleshooting without needing escalation."
+  },
+  {
+    "id": "conv_046",
+    "scenario": "An impatient and aggressive customer demands information immediately.",
+    "category": "edge_case",
+    "messages": [
+      {
+        "role": "customer",
+        "content": "INFO YA"
+      },
+      {
+        "role": "customer",
+        "content": "cuanto es el minimo y como empiezo, rapido q no tengo tiempo"
+      },
+      {
+        "role": "agent",
+        "content": "Hola, con gusto te doy la información. Nuestras cuentas se apalancan x12. El depósito mínimo es de 50 USD para operar con 600 USD, o 100 USD para operar con 1,200 USD."
+      },
+      {
+        "role": "agent",
+        "content": "La única regla principal es no perder más del 10% del capital total apalancado. Todas las ganancias son 100% tuyas y las puedes retirar desde el primer día."
+      },
+      {
+        "role": "customer",
+        "content": "ok. link de registro"
+      },
+      {
+        "role": "agent",
+        "content": "Claro, aquí lo tienes: https://portal.tagmarkets.com/live_signup?sidc=78E1EB08-A660-4825-A6AB-55B83FB3765F. Completa el registro y la verificación de documentos para poder depositar."
+      }
+    ],
+    "outcome": "success",
+    "notes": "Agent successfully handles an impatient user by adapting their communication style to be concise and direct."
+  },
+  {
+    "id": "conv_047",
+    "scenario": "Happy path where a user, after reviewing information, asks about the company's legitimacy.",
+    "category": "happy_path",
+    "messages": [
+      {
+        "role": "customer",
+        "content": "Hola, me interesa la cuenta de 200 para 2400. Ya leí la info que mandan."
+      },
+      {
+        "role": "customer",
+        "content": "Pero antes de depositar, quiero saber si ustedes son un broker regulado. Ya me han estafado antes."
+      },
+      {
+        "role": "agent",
+        "content": "Hola, entiendo perfectamente tu preocupación. Es muy importante verificar esa información."
+      },
+      {
+        "role": "agent",
+        "content": "TAG Markets (bajo el nombre T.M. Financials) está constituido en Mauricio y regulado por la FSC (Financial Services Commission). Puedes verificar nuestra licencia aquí: https://opr.fscmauritius.org/ords/opr/r/fsc-opr/fsc-online-public-register-opr"
+      },
+      {
+        "role": "agent",
+        "content": "También te invito a leer las reseñas de nuestros clientes en Trustpilot para que tengas más confianza: https://www.trustpilot.com/review/tagmarkets.com"
+      },
+      {
+        "role": "customer",
+        "content": "Ok, gracias por la transparencia. Voy a revisar y procedo con el registro."
+      }
+    ],
+    "outcome": "success",
+    "notes": "Crucial conversation for building trust. The agent addresses a major user concern with transparency and external proof."
+  },
+  {
+    "id": "conv_048",
+    "scenario": "Multi-turn clarification needed for the drawdown rule, user thinks it's on their deposit.",
+    "category": "complex",
+    "messages": [
+      {
+        "role": "customer",
+        "content": "Una duda con la regla de perdida."
+      },
+      {
+        "role": "customer",
+        "content": "Si deposito 500, la cuenta es de 6000. La perdida maxima es del 10%. Eso es 10% de mis 500, osea 50 dolares?"
+      },
+      {
+        "role": "agent",
+        "content": "Hola, buena pregunta. Es clave tenerlo claro. La regla del 10% de pérdida máxima se calcula sobre el balance TOTAL de la cuenta apalancada, no sobre tu depósito inicial."
+      },
+      {
+        "role": "customer",
+        "content": "Osea que sobre los 6000?"
+      },
+      {
+        "role": "agent",
+        "content": "¡Exacto! Para una cuenta de 6,000 USD, tu pérdida máxima permitida (drawdown) es de 600 USD. Esto significa que el balance de tu cuenta no debe bajar de 5,400 USD."
+      },
+      {
+        "role": "customer",
+        "content": "Ahhh ok, ya me queda mucho más claro. Gracias!"
+      }
+    ],
+    "outcome": "success",
+    "notes": "A critical and common point of confusion is clarified successfully over multiple turns. This is a key complex concept."
+  },
+  {
+    "id": "conv_049",
+    "scenario": "Quick question about withdrawal rules and fees.",
+    "category": "happy_path",
+    "messages": [
+      {
+        "role": "customer",
+        "content": "Buenas, hay algun costo por retirar ganancias?"
+      },
+      {
+        "role": "agent",
+        "content": "¡Hola! TAG Markets no te cobra ninguna comisión por el retiro de tus ganancias. Sin embargo, debes tener en cuenta las posibles comisiones de la red de la criptomoneda que uses (network fees), que suelen ser muy bajas."
+      },
+      {
+        "role": "customer",
+        "content": "ok y hay un monto minimo para retirar?"
+      },
+      {
+        "role": "agent",
+        "content": "Sí, el monto mínimo para solicitar un retiro es de 10 USD."
+      }
+    ],
+    "outcome": "success",
+    "notes": "A good, concise example of a user asking about specific financial conditions before committing."
+  },
+  {
+    "id": "conv_050",
+    "scenario": "User asks to compare different account types.",
+    "category": "happy_path",
+    "messages": [
+      {
+        "role": "customer",
+        "content": "Hola, veo que tienen cuentas Pro, Zero y la Apalancada. Cual es la diferencia?"
+      },
+      {
+        "role": "agent",
+        "content": "Hola, claro que sí. Te explico brevemente:\n\n- **Cuenta Apalancada (Amplify):** Es nuestro producto estrella. Depositas un monto y te lo multiplicamos x12 para operar. Tiene una comisión fija y spreads bajos. Ideal para maximizar tu capital.\n\n- **Cuenta Pro:** Es una cuenta ECN clásica. Tiene spreads ultra bajos, desde 0.0 pips, pero pagas una comisión fija por lote operado. Ideal para scalpers y traders de alto volumen.\n\n- **Cuenta Zero:** Como su nombre indica, no tiene comisiones. En su lugar, el costo de operación está incluido en el spread, que es un poco más amplio que en la cuenta Pro, pero sigue siendo competitivo.\n\n¿Qué tipo de trading haces tú para recomendarte la mejor?"
+      },
+      {
+        "role": "customer",
+        "content": "Hago mas que todo swing trading. Creo que la apalancada me sirve mas. Gracias por la aclaracion."
+      }
+    ],
+    "outcome": "success",
+    "notes": "Demonstrates the bot's ability to explain different product offerings and guide the user to the correct choice."
+  },
+  {
+    "id": "conv_051",
+    "scenario": "A beginner user has trouble setting up their MT5 demo account.",
+    "category": "deviation",
+    "messages": [
+      {
+        "role": "customer",
+        "content": "Hola, cree una cuenta demo pero no se como usarla. No me aparecen los graficos en mt5"
+      },
+      {
+        "role": "agent",
+        "content": "Hola, no te preocupes, es un paso común. Primero, ¿ya descargaste la app MetaTrader 5?"
+      },
+      {
+        "role": "customer",
+        "content": "Si ya la tengo"
+      },
+      {
+        "role": "agent",
+        "content": "Perfecto. Ahora, en MT5 ve a 'Cuentas' y dale al '+'. En el buscador de brokers, escribe 'TMFINANCIALS' y selecciónalo."
+      },
+      {
+        "role": "agent",
+        "content": "Luego, en la pantalla de login, ingresa el número de cuenta y la contraseña que te llegaron al correo cuando creaste la demo. Asegúrate de seleccionar el servidor correcto (TMFINANCIALS-Demo)."
+      },
+      {
+        "role": "customer",
+        "content": "Ahhh ok, estaba buscando Tag Markets. Ya lo encontré con TMFINANCIALS. Listo, ya pude entrar. Gracias!"
+      },
+      {
+        "role": "agent",
+        "content": "¡De nada! A veces el nombre del servidor confunde. ¡Ahora sí, a practicar!"
+      }
+    ],
+    "outcome": "success",
+    "notes": "A common setup issue (wrong server name) is resolved with clear, step-by-step guidance."
+  },
+  {
+    "id": "conv_052",
+    "scenario": "A user is interested and ready to start but asks for a discount or special offer.",
+    "category": "happy_path",
+    "messages": [
+      {
+        "role": "customer",
+        "content": "Hola, me interesa la cuenta de 500 para 6000. Tienen alguna promocion o descuento para empezar?"
+      },
+      {
+        "role": "agent",
+        "content": "¡Hola! Gracias por tu interés. Nuestro modelo de apalancamiento x12 ya es una oferta muy potente. Además, por activar tu primera cuenta, te regalamos una cuenta bono adicional del mismo tamaño para que operes."
+      },
+      {
+        "role": "customer",
+        "content": "Osea que si deposito 500, me dan la de 6000 y aparte otra cuenta?"
+      },
+      {
+        "role": "agent",
+        "content": "Correcto. Recibirías tu cuenta principal de 6,000 USD y una segunda cuenta de bono, también de 6,000 USD, con sus propias reglas para retirar ganancias."
+      },
+      {
+        "role": "customer",
+        "content": "Wow, eso está super bien. No necesito más descuento. Voy a registrarme."
+      }
+    ],
+    "outcome": "success",
+    "notes": "Excellent sales technique: the user's request for a discount is handled by reframing an existing offer as a high-value bonus."
+  },
+  {
+    "id": "conv_053",
+    "scenario": "A user who is a beginner feels discouraged after hearing the product is for experienced traders.",
+    "category": "deviation",
+    "messages": [
+      {
+        "role": "customer",
+        "content": "Hola, quiero invertir pero no se nada de esto"
+      },
+      {
+        "role": "agent",
+        "content": "Hola, gracias por escribir. Te comento que nuestras cuentas apalancadas son un producto diseñado para traders con experiencia previa."
+      },
+      {
+        "role": "customer",
+        "content": "Ah... entonces no es para mi. Que mal."
+      },
+      {
+        "role": "agent",
+        "content": "No te desanimes. El trading es una habilidad que se aprende. Si de verdad te interesa, lo correcto es empezar por la educación. Te podemos recomendar academias de confianza para que construyas una base sólida."
+      },
+      {
+        "role": "agent",
+        "content": "Cuando te sientas listo y hayas practicado en demo, nuestras puertas estarán abiertas. Es mejor empezar bien preparado que perder dinero por falta de conocimiento."
+      },
+      {
+        "role": "customer",
+        "content": "Tienes razón. Gracias por la honestidad. Podrías darme info de esas academias?"
+      }
+    ],
+    "outcome": "redirect",
+    "notes": "Agent successfully manages user's disappointment with empathy and redirects them towards education, maintaining a positive brand image."
+  },
+  {
+    "id": "conv_054",
+    "scenario": "Happy Path: A more verbose version of a new user asking for general information and deciding to register.",
+    "category": "happy_path",
+    "messages": [
+      {
+        "role": "customer",
+        "content": "Hola, vi un anuncio y quiero saber como funciona lo de la cuenta x12."
+      },
+      {
+        "role": "agent",
+        "content": "¡Hola! Con mucho gusto. Soy tu asistente de TAG Markets. Veo que tienes interés en una cuenta apalancada, ¿correcto?"
+      },
+      {
+        "role": "customer",
+        "content": "Si, correcto. Me explicas porfa?"
+      },
+      {
+        "role": "agent",
+        "content": "Claro que sí. Primero, para darte la mejor información, ¿cuánto tiempo llevas haciendo trading?"
+      },
+      {
+        "role": "customer",
+        "content": "como un año mas o menos"
+      },
+      {
+        "role": "agent",
+        "content": "Excelente. Te comparto la información de nuestro modelo de negocio.\n\nLas Cuentas Apalancadas X12, son cuentas que te permiten operar con un capital mayor al que depositas.\n\nPor ejemplo, si depositas 500 USD en una cuenta apalancada, podrás operar con 6,000 USD. Es importante no perder más del 10% del balance de la cuenta apalancada para evitar el cierre de la misma. (10% de 6.000USD)\n\nPuedes retirar las ganancias desde el día #1 y el depósito inicial que realices después de 30 días calendario. (Tu capital esta seguro y disponible)\n\n- Multiplicación del Saldo: Incrementa tu saldo 12 veces al adquirir una cuenta apalancada.\n- Comisión Fija: $1 por 0.1 lote.\n- Apalancamiento: 1:30\n- Spreads: Desde 0.2 pips, ofreciendo precios muy competitivos.\n- Ideal para: Traders que desean operar con un capital significativamente aumentado, disfrutando de alto apalancamiento y spreads ajustados.\n\nLa única regla en este tipo de cuentas es que no puedes perder más del 10% del monto inicial de tu Cuenta Apalancada.\n\nPuedes operar Swing, Intradía, Scalping, Noticias o Bots, sin limitaciones."
+      },
+      {
+        "role": "agent",
+        "content": "Además, es importante recalcar que:\n\n1. No debes pasar ningún examen o prueba, la cuenta se entrega de inmediato y lista para operar.\n2. No hay reparto de ganancias, te quedas con el 100% de tus profits."
+      },
+      {
+        "role": "customer",
+        "content": "Suena bien. Y cual es el minimo para empezar?"
+      },
+      {
+        "role": "agent",
+        "content": "Puedes empezar desde 100 USD para tener una cuenta de 1,200 USD para operar."
+      },
+      {
+        "role": "customer",
+        "content": "Ok, me interesa. Que tengo que hacer?"
+      },
+      {
+        "role": "agent",
+        "content": "¡Perfecto! El primer paso es registrarte y verificar tus documentos. ¿Quieres que te envíe el enlace para empezar?"
+      }
+    ],
+    "outcome": "success",
+    "notes": "Included for variety, this is a more detailed and verbose happy path compared to batch2_001. Good for training different response lengths."
+  },
+  {
+    "id": "conv_055",
+    "scenario": "Happy Path: User asks directly about the minimum deposit and rules.",
+    "category": "happy_path",
+    "messages": [
+      {
+        "role": "customer",
+        "content": "Buenas, cual es el deposito minimo?"
+      },
+      {
+        "role": "agent",
+        "content": "¡Hola! Te saluda tu asistente de TAG Markets. El depósito mínimo para una cuenta apalancada x12 es de 100 USD, con lo que obtienes una cuenta de 1,200 USD para operar."
+      },
+      {
+        "role": "customer",
+        "content": "ok. y que reglas tiene?"
+      },
+      {
+        "role": "agent",
+        "content": "La única regla principal es no tener una pérdida (drawdown) mayor al 10% del balance total de tu cuenta apalancada. Por ejemplo, en la cuenta de 1,200 USD, no puedes permitir que el balance baje de 1,080 USD."
+      },
+      {
+        "role": "customer",
+        "content": "listo, gracias por la info"
+      }
+    ],
+    "outcome": "success",
+    "notes": "A very common, short, and direct interaction that the bot must handle efficiently."
+  },
+  {
+    "id": "conv_056",
+    "scenario": "User's deposit via a slow method (PSE) hasn't appeared yet, causing concern.",
+    "category": "deviation",
+    "messages": [
+      {
+        "role": "customer",
+        "content": "Hola, hice un deposito hace unas horas y no me aparece el saldo"
+      },
+      {
+        "role": "agent",
+        "content": "Hola, buen día. Lamento el inconveniente. Para poder ayudarte, ¿me podrías indicar qué método de pago utilizaste?"
+      },
+      {
+        "role": "customer",
+        "content": "Use PSE, desde mi cuenta de Bancolombia"
+      },
+      {
+        "role": "agent",
+        "content": "Entiendo. Te comento que los depósitos realizados a través de PSE pueden tardar hasta 24 horas hábiles en verse reflejados en tu wallet de TAG Markets. Es un tiempo de procesamiento estándar de la pasarela de pago."
+      },
+      {
+        "role": "customer",
+        "content": "Ah en serio? Pense que era inmediato. Y ahora que hago?"
+      },
+      {
+        "role": "agent",
+        "content": "No te preocupes, tu dinero está seguro. Para agilizar la verificación con el equipo de soporte, ¿serías tan amable de enviarme el comprobante de la transacción? Así podemos monitorearlo."
+      },
+      {
+        "role": "customer",
+        "content": "Ok, ya te lo mando."
+      }
+    ],
+    "outcome": "escalation",
+    "notes": "Handles a common payment issue by setting correct expectations and proactively asking for information to escalate the case."
+  },
+  {
+    "id": "conv_057",
+    "scenario": "Edge Case: Agent initiates conversation with the wrong person.",
+    "category": "edge_case",
+    "messages": [
+      {
+        "role": "agent",
+        "content": "¡Hola, Andrés! Te habla tu asistente de TAG Markets. Estoy aquí para guiarte en tu proceso. ¿Veo que tienes interés en una cuenta apalancada?"
+      },
+      {
+        "role": "customer",
+        "content": "Disculpa, creo que te equivocaste de numero. Yo no soy Andres."
+      },
+      {
+        "role": "agent",
+        "content": "Oh, una disculpa por la molestia. Lo marcaremos en nuestro sistema. ¡Que tengas un excelente día!"
+      }
+    ],
+    "outcome": "dropout",
+    "notes": "Polite handling of an outbound wrong number scenario, which is different from an inbound mistake."
+  },
+  {
+    "id": "conv_058",
+    "scenario": "Edge Case: An impatient customer wants immediate answers and a call.",
+    "category": "edge_case",
+    "messages": [
+      {
+        "role": "customer",
+        "content": "Necesito hablar con alguien YA"
+      },
+      {
+        "role": "customer",
+        "content": "No me manden mensajes automaticos, llamenme"
+      },
+      {
+        "role": "agent",
+        "content": "Hola, entiendo tu urgencia. Mi nombre es Iván, tu asistente de TAG Markets. Por este medio puedo resolver la mayoría de tus dudas de forma rápida. Cuéntame, ¿en qué te puedo ayudar?"
+      },
+      {
+        "role": "customer",
+        "content": "Quiero que me expliquen como funciona todo pero por llamada, no me gusta chatear."
+      },
+      {
+        "role": "agent",
+        "content": "Comprendo. Permíteme enviarte primero la información clave por aquí. Es un resumen muy claro y visual. Si después de leerlo aún tienes dudas, podemos explorar otras opciones."
+      },
+      {
+        "role": "agent",
+        "content": "Las Cuentas Apalancadas X12, son cuentas que te permiten operar con un capital mayor al que depositas...\n\n[...full info block...]"
+      },
+      {
+        "role": "customer",
+        "content": "Ugh, ok. Lo leo y te digo."
+      }
+    ],
+    "outcome": "dropout",
+    "notes": "Agent attempts to de-escalate and maintain control of the communication channel, a key skill for a sales bot."
+  },
+  {
+    "id": "conv_059",
+    "scenario": "Happy Path: User confirms their understanding of the drawdown rule with a specific example.",
+    "category": "happy_path",
+    "messages": [
+      {
+        "role": "customer",
+        "content": "Hola, tengo una duda sobre la regla del 10%"
+      },
+      {
+        "role": "agent",
+        "content": "¡Hola! Claro, dime cuál es tu duda y con gusto la aclaramos."
+      },
+      {
+        "role": "customer",
+        "content": "Si deposito 200, tengo una cuenta de 2400. El 10% de perdida seria 240. Osea que mi cuenta no puede bajar de 2160. Es asi?"
+      },
+      {
+        "role": "agent",
+        "content": "¡Exactamente! Lo has entendido a la perfección. El drawdown es estático, basado en el balance inicial apalancado. Mientras tu balance no caiga por debajo de 2,160 USD, no hay ningún inconveniente."
+      },
+      {
+        "role": "customer",
+        "content": "perfecto gracias"
+      }
+    ],
+    "outcome": "success",
+    "notes": "Good example of positive reinforcement and confirming a user's understanding of a critical rule."
+  },
+  {
+    "id": "conv_060",
+    "scenario": "User is confused about a bonus account promotion mentioned in an email.",
+    "category": "deviation",
+    "messages": [
+      {
+        "role": "customer",
+        "content": "Hola, me llego un correo de una cuenta bono de 1200, que es eso?"
+      },
+      {
+        "role": "agent",
+        "content": "¡Hola! Felicitaciones. Esa es una cuenta bono que obsequiamos a nuestros clientes por completar su registro y primer depósito. Es una cuenta adicional para que operes."
+      },
+      {
+        "role": "customer",
+        "content": "O sea tengo mi cuenta normal y esta aparte? y como retiro de ahi?"
+      },
+      {
+        "role": "agent",
+        "content": "Correcto, tendrás dos cuentas. La cuenta bono tiene sus propias condiciones. La regla principal de no perder el 10% se mantiene, y para poder retirar las ganancias generadas en ella, generalmente se requiere cumplir con un volumen de operación (lotaje) específico, que suele ser de 50 lotes."
+      },
+      {
+        "role": "customer",
+        "content": "Ah ok, 50 lotes. Y una vez que retiro se cierra la cuenta bono?"
+      },
+      {
+        "role": "agent",
+        "content": "Sí, por lo general, una vez que cumples el lotaje y realizas el primer retiro de ganancias, la cuenta bono se desactiva. Es un incentivo para que operes y conozcas más a fondo la plataforma."
+      },
+      {
+        "role": "customer",
+        "content": "Entendido. Gracias por la aclaracion."
+      }
+    ],
+    "outcome": "success",
+    "notes": "Agent clearly explains the rules and conditions of a common promotion, resolving user confusion."
+  },
+  {
+    "id": "conv_061",
+    "scenario": "Happy Path: User asks about tradable assets before signing up.",
+    "category": "happy_path",
+    "messages": [
+      {
+        "role": "customer",
+        "content": "Hola, que mercados puedo operar con ustedes?"
+      },
+      {
+        "role": "agent",
+        "content": "¡Hola! Qué buena pregunta. Con TAG Markets puedes operar una amplia variedad de mercados."
+      },
+      {
+        "role": "agent",
+        "content": "Con TAG Markets puedes operar:\n\nForex\nCrypto\nÍndices Bursátiles\nMetales\nAcciones\n\nTodas con excelentes condiciones."
+      },
+      {
+        "role": "customer",
+        "content": "Super, operan el US30 y el oro?"
+      },
+      {
+        "role": "agent",
+        "content": "Sí, por supuesto. Puedes operar el US30 (Wall Street) y el Oro (XAUUSD) sin problemas."
+      },
+      {
+        "role": "customer",
+        "content": "Excelente, eso es lo que buscaba. Me mandas el link para registrarme."
+      }
+    ],
+    "outcome": "success",
+    "notes": "A great example of a user with a specific need that is met, leading directly to a conversion."
+  },
+  {
+    "id": "conv_062",
+    "scenario": "Multi-turn clarification on how leverage works vs a traditional bonus.",
+    "category": "complex",
+    "messages": [
+      {
+        "role": "customer",
+        "content": "No entiendo bien lo del x12. O sea, si pongo 500 me dan 5500 de bono?"
+      },
+      {
+        "role": "agent",
+        "content": "Hola, es una excelente pregunta. No es exactamente un bono, sino un apalancamiento de capital. Tú operas con un balance total de 6,000 USD desde el inicio."
+      },
+      {
+        "role": "customer",
+        "content": "Pero entonces si pierdo mis 500, puedo seguir operando con los 5500 que quedan?"
+      },
+      {
+        "role": "agent",
+        "content": "No, ahí está la diferencia clave. La regla es que no puedes perder más del 10% del total de 6,000 USD, es decir, 600 USD. Si tu cuenta baja a 5,400 USD, se cierra. En la práctica, estás arriesgando tus 500 USD más 100 USD de nuestro capital, para tener la oportunidad de ganar sobre una base de 6,000 USD."
+      },
+      {
+        "role": "customer",
+        "content": "Aaah, ya entiendo. O sea que el broker solo me da 100 dolares de margen de perdida real sobre mi capital."
+      },
+      {
+        "role": "agent",
+        "content": "Puedes verlo de esa forma en cuanto al riesgo. Pero la ventaja es que tus ganancias se calculan sobre el total de 6,000. Un movimiento del 1% a tu favor en una cuenta de 6,000 son 60 USD de ganancia, mientras que en tu cuenta de 500 serían solo 5 USD."
+      },
+      {
+        "role": "customer",
+        "content": "Ok, ahora sí me queda claro. Gracias."
+      }
+    ],
+    "outcome": "success",
+    "notes": "A complex concept is broken down over several turns to ensure user understanding. This is a more advanced version of the drawdown clarification."
+  },
+  {
+    "id": "conv_063",
+    "scenario": "Deviation: New user having trouble connecting to MT5 due to wrong password type.",
+    "category": "deviation",
+    "messages": [
+      {
+        "role": "customer",
+        "content": "ayuda no puedo operar en mt5"
+      },
+      {
+        "role": "customer",
+        "content": "me dice que la cuenta es de solo lectura"
+      },
+      {
+        "role": "agent",
+        "content": "Hola, no te preocupes, es un error común. Al correo te llegaron dos contraseñas, una 'Master Password' y una 'Investor Password'."
+      },
+      {
+        "role": "agent",
+        "content": "Para poder operar, debes asegurarte de iniciar sesión en MT5 usando la 'Master Password'. La de inversor solo permite ver las operaciones, pero no ejecutarlas. Por favor, intenta eliminar la cuenta de MT5 y volver a agregarla con la contraseña correcta."
+      },
+      {
+        "role": "customer",
+        "content": "Aaaah con razon. Disculpa, no lei bien. Ya lo hago"
+      },
+      {
+        "role": "agent",
+        "content": "¡No hay problema! Para eso estamos. Me avisas si funciona."
+      },
+      {
+        "role": "customer",
+        "content": "Listo, ya pude. Mil gracias!"
+      }
+    ],
+    "outcome": "success",
+    "notes": "Another common technical issue (using the investor password) resolved quickly by providing clear instructions."
+  },
+  {
+    "id": "conv_064",
+    "scenario": "Deviation: User complains about withdrawal delay.",
+    "category": "deviation",
+    "messages": [
+      {
+        "role": "customer",
+        "content": "Hace mas de 24 horas que pedi un retiro y aun no me llega a mi binance. Que pasa?"
+      },
+      {
+        "role": "agent",
+        "content": "Hola, lamento escuchar que tu retiro está tardando más de lo esperado. Permíteme revisar el estado por ti. ¿Me podrías proporcionar el correo electrónico asociado a tu cuenta de TAG Markets?"
+      },
+      {
+        "role": "customer",
+        "content": "mi correo es traderpro@email.com. Necesito el dinero hoy."
+      },
+      {
+        "role": "agent",
+        "content": "Entiendo perfectamente. Dame un momento mientras consulto con el equipo financiero. A veces puede haber demoras por verificaciones de seguridad o congestión en la red blockchain. En cuanto tenga una actualización, te la comunicaré por este medio."
+      },
+      {
+        "role": "customer",
+        "content": "Ok, pero por favor que sea rapido."
+      }
+    ],
+    "outcome": "escalation",
+    "notes": "Agent acknowledges the user's frustration, shows empathy, and escalates to the relevant department for resolution."
+  },
+  {
+    "id": "conv_065",
+    "scenario": "Happy Path: Full onboarding from registration to first deposit and MT5 setup.",
+    "category": "happy_path",
+    "messages": [
+      {
+        "role": "customer",
+        "content": "Hola, quiero abrir una cuenta de 100$"
+      },
+      {
+        "role": "agent",
+        "content": "¡Excelente decisión! Para empezar, lo primero es el registro. Por favor, completa tus datos en este enlace y sube tus documentos para la verificación (KYC).\n\nhttps://portal.tagmarkets.com/live_signup?sidc=78E1EB08-A660-4825-A6AB-55B83FB3765F"
+      },
+      {
+        "role": "customer",
+        "content": "listo, ya lo hice. dice que la verificacion esta pendiente"
+      },
+      {
+        "role": "agent",
+        "content": "Perfecto. Dame tu correo para confirmarlo con soporte. Usualmente la verificación es rápida."
+      },
+      {
+        "role": "customer",
+        "content": "es micorreo@ejemplo.com"
+      },
+      {
+        "role": "agent",
+        "content": "Confirmado, tu cuenta ya está verificada. Ahora puedes hacer el depósito. Inicia sesión aquí y ve a la sección 'Depósito':\n\nhttps://portal.tagmarkets.com/login?brd=1&wp=4\n\nRecuerda que con tarjeta de crédito o cripto es instantáneo."
+      },
+      {
+        "role": "customer",
+        "content": "ya hice el pago con tarjeta. ahora q sigue?"
+      },
+      {
+        "role": "agent",
+        "content": "¡Genial! Ahora ve al apartado 'Amplify' en tu portal, en 'deposit amount' pones 100 y le das a 'create'. Con eso tu saldo se multiplicará a 1,200 USD."
+      },
+      {
+        "role": "customer",
+        "content": "listo ya lo hice! me llego un correo con unas claves"
+      },
+      {
+        "role": "agent",
+        "content": "¡Perfecto! Esas son tus credenciales de MT5. Ahora abre la app, busca el servidor 'Tagmarkets-ltd', e inicia sesión con el login y la 'Master Password'. ¡Bienvenido a TAG Markets y mucho éxito en tu trading!"
+      }
+    ],
+    "outcome": "success",
+    "notes": "The most complete and successful onboarding flow, guiding the user step-by-step from initial interest to being ready to trade."
+  },
+  {
+    "id": "conv_066",
+    "scenario": "Deviation: User wants to try a demo account first.",
+    "category": "deviation",
+    "messages": [
+      {
+        "role": "customer",
+        "content": "Hola, me gustaria probar la plataforma antes de depositar. Tienen cuenta demo?"
+      },
+      {
+        "role": "agent",
+        "content": "¡Hola! Por supuesto. Es una excelente idea familiarizarte con la plataforma primero. Sí ofrecemos cuentas demo."
+      },
+      {
+        "role": "agent",
+        "content": "Para activar tu cuenta demo, primero necesitas registrarte en nuestro portal. Una vez registrado y dentro de tu panel de cliente, verás la opción para crear una cuenta demo con las condiciones que elijas (balance, apalancamiento, etc.)."
+      },
+      {
+        "role": "customer",
+        "content": "Ah ok. O sea que me registro normal y ahi dentro la creo?"
+      },
+      {
+        "role": "agent",
+        "content": "Exacto. Aquí tienes el enlace para el registro. Una vez lo completes, me avisas si necesitas ayuda para crear la demo.\n\nhttps://portal.tagmarkets.com/live_signup?sidc=78E1EB08-A660-4825-A6AB-55B83FB3765F"
+      },
+      {
+        "role": "customer",
+        "content": "Dale, gracias. Me registro y la pruebo."
+      }
+    ],
+    "outcome": "success",
+    "notes": "Agent successfully accommodates the user's request for a demo account, keeping them in the sales funnel."
+  },
+  {
+    "id": "conv_067",
+    "scenario": "Happy Path: User asks a quick question about minimums and rules before deciding.",
+    "category": "happy_path",
+    "messages": [
+      {
+        "role": "customer",
+        "content": "cuanto es lo minimo para empezar y cual es la regla mas importante?"
+      },
+      {
+        "role": "agent",
+        "content": "Hola, buenos días. Te habla Iván Correa de TAG Markets. El depósito mínimo es de 50 USD, que se amplifica a una cuenta de 600 USD para operar."
+      },
+      {
+        "role": "agent",
+        "content": "La única regla es que no puedes perder más del 10% del balance total de tu cuenta apalancada. Por ejemplo, en la cuenta de 600 USD, no puedes permitir que el balance baje de 540 USD."
+      },
+      {
+        "role": "customer",
+        "content": "ok de una. y no hay q pasar pruebas ni nada?"
+      },
+      {
+        "role": "agent",
+        "content": "No, señor. No debes pasar ningún examen o prueba, la cuenta se entrega de inmediato y lista para operar."
+      },
+      {
+        "role": "customer",
+        "content": "listo gracias. voy a registrarme"
+      }
+    ],
+    "outcome": "success",
+    "notes": "A concise, direct interaction where the user asks the most critical questions and converts immediately."
+  },
+  {
+    "id": "conv_068",
+    "scenario": "Experienced user asks about static drawdown, a key technical feature.",
+    "category": "complex",
+    "messages": [
+      {
+        "role": "customer",
+        "content": "Hablar con un Agente"
+      },
+      {
+        "role": "agent",
+        "content": "Hola, buenos días. Te habla Iván Correa, agente de TAG Markets. Estoy aquí para guiarte. ¿Veo que tienes interés en una cuenta apalancada?"
+      },
+      {
+        "role": "customer",
+        "content": "Si. una pregunta. si mi cuenta de 6000 sube a 8000, mi drawdown tambien sube o se queda en los 600 originales?"
+      },
+      {
+        "role": "agent",
+        "content": "Excelente pregunta. El drawdown de la cuenta es estático, es decir, no crece conforme aumenta el balance de tu capital."
+      },
+      {
+        "role": "agent",
+        "content": "Si tu cuenta de 6.000$ pasa a 8.000$, tu límite de pérdida sigue siendo 600$ sobre el capital inicial. No perderías la cuenta a menos que el balance total baje de 5.400$."
+      },
+      {
+        "role": "customer",
+        "content": "Entendido. Eso es lo que necesitaba saber. Gracias, muy amable."
+      },
+      {
+        "role": "agent",
+        "content": "Con gusto. ¿Deseas iniciar el proceso de registro?"
+      },
+      {
+        "role": "customer",
+        "content": "Si, pasame el link por favor."
+      }
+    ],
+    "outcome": "success",
+    "notes": "A key technical question for experienced traders is answered clearly, removing a potential blocker and demonstrating product knowledge."
+  },
+  {
+    "id": "conv_069",
+    "scenario": "A complete beginner inquires and is redirected, but declines due to cost.",
+    "category": "deviation",
+    "messages": [
+      {
+        "role": "customer",
+        "content": "Hola, quiero invertir pero no se nada de esto. Ustedes me enseñan?"
+      },
+      {
+        "role": "agent",
+        "content": "Hola, buenos días. Te habla Iván Correa de TAG Markets. Te cuento, nuestro modelo de negocio de cuentas apalancadas es para traders con experiencia."
+      },
+      {
+        "role": "customer",
+        "content": "Ah osea que no puedo empezar?"
+      },
+      {
+        "role": "agent",
+        "content": "Para operar directamente con nosotros, es recomendable que ya sepas cómo funcionan los mercados. Si tu interés es aprender, te puedo recomendar un sistema probado donde aprenderás a ser un trader rentable."
+      },
+      {
+        "role": "customer",
+        "content": "Y eso que costo tiene?"
+      },
+      {
+        "role": "agent",
+        "content": "Hay programas desde 399 dólares. Si te interesa, podemos agendar una llamada para explicarte más sobre la academia."
+      },
+      {
+        "role": "customer",
+        "content": "Ok, por ahora no tengo ese capital. Gracias de todas formas."
+      }
+    ],
+    "outcome": "redirect",
+    "notes": "Important variation of the redirect scenario where the user declines the alternative offer, providing a complete picture of this path."
+  },
+  {
+    "id": "conv_070",
+    "scenario": "Edge Case: User needs multi-turn clarification on how leverage and drawdown work.",
+    "category": "edge_case",
+    "messages": [
+      {
+        "role": "customer",
+        "content": "Hola, no entiendo bien. Si deposito 500 me dan 6000. O sea que si pierdo mis 500, todavía me quedan 5500 para operar?"
+      },
+      {
+        "role": "agent",
+        "content": "Hola, te explico. Operas con los 6,000 USD desde el inicio. Sin embargo, no es que te queden 5,500 si pierdes tus 500. La regla es que el balance total de la cuenta de 6,000 no puede bajar más de un 10%."
+      },
+      {
+        "role": "customer",
+        "content": "Osea que lo maximo q puedo perder son 600 dolares?"
+      },
+      {
+        "role": "agent",
+        "content": "Exactamente. Si el balance de tu cuenta, incluyendo operaciones abiertas, llega a 5,400 USD (una pérdida de 600), la cuenta se cierra."
+      },
+      {
+        "role": "customer",
+        "content": "Ahhhh entonces el apalancamiento es para poder abrir operaciones más grandes, no para tener un colchon de perdida."
+      },
+      {
+        "role": "agent",
+        "content": "Correcto, lo entendiste perfectamente. Te permite operar con mayor volumen."
+      },
+      {
+        "role": "customer",
+        "content": "ok ahora si me quedo claro gracias"
+      }
+    ],
+    "outcome": "success",
+    "notes": "A common but critical misunderstanding is resolved through patient, multi-turn explanation, showing the user's 'aha' moment."
+  },
+  {
+    "id": "conv_071",
+    "scenario": "User asks about copy trading functionalities and risk management.",
+    "category": "complex",
+    "messages": [
+      {
+        "role": "customer",
+        "content": "Hola, una pregunta, ¿puedo hacer copy trading con mi cuenta apalancada?"
+      },
+      {
+        "role": "agent",
+        "content": "Hola, buenos días. Te habla Iván de TAG Markets. Sí, claro que puedes."
+      },
+      {
+        "role": "customer",
+        "content": "Y cómo funciona? Ustedes tienen traders para copiar o puedo conectar un servicio externo?"
+      },
+      {
+        "role": "agent",
+        "content": "En tu panel principal de cliente, hay una sección de 'Comercio Social'. Allí puedes ver los traders disponibles en nuestra plataforma y conectar tu cuenta en pocos clics para empezar a copiar sus operaciones."
+      },
+      {
+        "role": "customer",
+        "content": "Excelente. Y el riesgo lo manejo yo o se copia automatico?"
+      },
+      {
+        "role": "agent",
+        "content": "Puedes configurar tus propios parámetros de riesgo, como el tamaño del lote o un stop-loss máximo, para tener control sobre tu cuenta."
+      },
+      {
+        "role": "customer",
+        "content": "Super! Gracias por la info."
+      }
+    ],
+    "outcome": "success",
+    "notes": "Handles a specific, complex product feature inquiry, including a key question about user control over risk."
+  },
+  {
+    "id": "conv_072",
+    "scenario": "User asks about the referral / IB program and how commissions are paid.",
+    "category": "complex",
+    "messages": [
+      {
+        "role": "customer",
+        "content": "Buenas, tengo un amigo que tambien quiere entrar. Hay algun bono por referidos o algo asi?"
+      },
+      {
+        "role": "agent",
+        "content": "Hola, buenas tardes. Te habla Iván Correa. ¡Sí, tenemos un programa de referidos!"
+      },
+      {
+        "role": "agent",
+        "content": "Puedes obtener tu enlace de referido personal en tu portal de cliente. Por cada persona que se registre y opere con tu enlace, ganas una comisión basada en el volumen de sus operaciones (lotaje)."
+      },
+      {
+        "role": "customer",
+        "content": "Y esa comision donde la veo y como la cobro?"
+      },
+      {
+        "role": "agent",
+        "content": "Todo el seguimiento de tus referidos y las comisiones generadas lo puedes ver en la sección 'Programa IB' de tu portal. Las comisiones se pagan a tu wallet de TAG y las puedes retirar como si fueran ganancias."
+      },
+      {
+        "role": "customer",
+        "content": "Genial, voy a buscar el link. Gracias."
+      }
+    ],
+    "outcome": "success",
+    "notes": "Provides clear information about a secondary program (IB/Referral), including the crucial detail of how to track and receive payment."
+  },
+  {
+    "id": "conv_073",
+    "scenario": "Happy Path: User asks about available markets and gets a quick confirmation.",
+    "category": "happy_path",
+    "messages": [
+      {
+        "role": "customer",
+        "content": "Hola, se puede operar el US30 y el oro con la cuenta x12?"
+      },
+      {
+        "role": "agent",
+        "content": "Hola, buenos días. Te habla Iván Correa de TAG Markets. Sí, señor. Con nosotros puedes operar Índices Bursátiles como el US30 y Metales como el Oro (XAUUSD)."
+      },
+      {
+        "role": "customer",
+        "content": "Perfecto, era lo que necesitaba saber. Gracias."
+      },
+      {
+        "role": "agent",
+        "content": "Con gusto. ¿Necesitas ayuda con algo más para empezar?"
+      }
+    ],
+    "outcome": "success",
+    "notes": "A simple check on product capabilities, resolved in a few messages. Good example of a 'low-effort' success."
+  },
+  {
+    "id": "conv_074",
+    "scenario": "Happy Path: User is ready to deposit and asks for guidance.",
+    "category": "happy_path",
+    "messages": [
+      {
+        "role": "customer",
+        "content": "Hola Ivan, ya me registré y verifiqué mi cuenta. Cual es el siguiente paso para depositar 200?"
+      },
+      {
+        "role": "agent",
+        "content": "¡Excelente! El siguiente paso es muy fácil. Ingresa a tu portal de cliente con este enlace: https://portal.tagmarkets.com/login?brd=1&wp=4"
+      },
+      {
+        "role": "agent",
+        "content": "Una vez dentro, busca la opción 'Depósito' en el menú. Ahí te aparecerán los métodos de pago disponibles: tarjeta, PSE o criptomonedas."
+      },
+      {
+        "role": "customer",
+        "content": "Listo, ya entré. Voy a pagar con tarjeta. Gracias!"
+      },
+      {
+        "role": "agent",
+        "content": "Perfecto. Avísame cuando el depósito esté hecho para guiarte en cómo amplificar la cuenta."
+      }
+    ],
+    "outcome": "success",
+    "notes": "A user proactively moves through the funnel and receives clear instructions for the next step. Shows the bot guiding an engaged user."
+  },
+  {
+    "id": "conv_075",
+    "scenario": "Deviation: User is having trouble logging in.",
+    "category": "deviation",
+    "messages": [
+      {
+        "role": "customer",
+        "content": "Buenas, no puedo entrar a mi cuenta. Pongo el correo y la clave y me dice que son incorrectos pero estoy seguro que son esos."
+      },
+      {
+        "role": "agent",
+        "content": "Hola, buenas tardes. Lamento que estés teniendo problemas. A veces pasa. ¿Probaste restableciendo tu contraseña con la opción 'Olvidé mi contraseña'?"
+      },
+      {
+        "role": "customer",
+        "content": "Si, pero no me llega el correo para restablecerla."
+      },
+      {
+        "role": "agent",
+        "content": "Ok, entiendo. Por favor, revisa tu carpeta de spam o correo no deseado. Si no está ahí, envíame tu correo electrónico para que el equipo de soporte lo revise directamente."
+      },
+      {
+        "role": "customer",
+        "content": "mi correo es juan.perez.trader@gmail.com. No, no esta en spam."
+      },
+      {
+        "role": "agent",
+        "content": "Recibido. Ya he pasado tu caso a soporte. Te contactarán por correo en breve para ayudarte a recuperar el acceso. Gracias por tu paciencia."
+      }
+    ],
+    "outcome": "escalation",
+    "notes": "Standard login issue that requires escalation after basic troubleshooting (checking spam) fails."
+  },
+  {
+    "id": "conv_076",
+    "scenario": "Deviation: User is a beginner but insists on trying the platform.",
+    "category": "deviation",
+    "messages": [
+      {
+        "role": "customer",
+        "content": "Hola, soy nuevo en trading pero aprendo rapido. Quiero la cuenta de 50 dolares."
+      },
+      {
+        "role": "agent",
+        "content": "Hola, te habla Iván. Te comento que nuestro producto está diseñado para traders que ya tienen experiencia, ya que debes gestionar tu propio riesgo."
+      },
+      {
+        "role": "customer",
+        "content": "Si entiendo, pero yo me arriesgo. He visto videos en youtube y creo que puedo hacerlo."
+      },
+      {
+        "role": "agent",
+        "content": "Entiendo tu entusiasmo. Solo quiero ser transparente contigo sobre el riesgo. Si aún así deseas continuar, te comparto la información completa."
+      },
+      {
+        "role": "agent",
+        "content": "Las Cuentas Apalancadas X12, son cuentas que te permiten operar con un capital mayor... (etc.)"
+      },
+      {
+        "role": "customer",
+        "content": "Si si, ya leí eso. Mándame el link para pagar."
+      }
+    ],
+    "outcome": "success",
+    "notes": "Important deviation where the agent provides a disclaimer but allows the user to proceed after they acknowledge the risk."
+  },
+  {
+    "id": "conv_077",
+    "scenario": "Happy Path: User asks about fees and commissions.",
+    "category": "happy_path",
+    "messages": [
+      {
+        "role": "customer",
+        "content": "Buenas, que comisiones cobran ustedes? que gana el broker?"
+      },
+      {
+        "role": "agent",
+        "content": "Hola, ¡excelente pregunta! Nosotros no cobramos por las ganancias, el 100% de los profits son tuyos."
+      },
+      {
+        "role": "agent",
+        "content": "Nuestro modelo de negocio se basa en la comisión por operación. Es una comisión fija de $1 por cada 0.1 lotes que operes. También ganamos una pequeña parte del spread, que es la diferencia entre el precio de compra y venta."
+      },
+      {
+        "role": "customer",
+        "content": "Ok, es un costo fijo por volumen. Entendido, gracias."
+      }
+    ],
+    "outcome": "success",
+    "notes": "A common and important question about the business model is answered with transparency, building trust."
+  },
+  {
+    "id": "conv_078",
+    "scenario": "Edge Case: User sends a spam message with a malicious link.",
+    "category": "edge_case",
+    "messages": [
+      {
+        "role": "customer",
+        "content": "🔥🔥 GANA $500 USD DIARIOS CON ESTE SECRETO QUE LOS BANCOS NO QUIEREN QUE SEPAS!! HAZ CLICK AQUI -> bit.ly/spamlink123"
+      },
+      {
+        "role": "agent",
+        "content": "Hola. Te has comunicado con el soporte oficial de TAG Markets. Por favor, no envíes enlaces no solicitados."
+      }
+    ],
+    "outcome": "dropout",
+    "notes": "Bot identifies a common spam format and provides a standard, non-engaging warning."
+  },
+  {
+    "id": "conv_079",
+    "scenario": "Happy Path: User is already registered and wants to add more funds.",
+    "category": "happy_path",
+    "messages": [
+      {
+        "role": "customer",
+        "content": "Hola Iván, cómo estás? Quiero agregar otros $200 a mi cuenta. El proceso es el mismo?"
+      },
+      {
+        "role": "agent",
+        "content": "Hola, ¡qué bueno saber de ti! Sí, el proceso es exactamente el mismo. Solo tienes que iniciar sesión en tu portal, ir a la sección de 'Depósito' y elegir tu método de pago."
+      },
+      {
+        "role": "customer",
+        "content": "Y después de depositar, tengo que volver a darle en 'Amplify'?"
+      },
+      {
+        "role": "agent",
+        "content": "Correcto. Una vez que el saldo se acredite en tu wallet, vas a 'Amplify' para crear una nueva cuenta apalancada con esos fondos."
+      },
+      {
+        "role": "customer",
+        "content": "Listo, gracias!"
+      }
+    ],
+    "outcome": "success",
+    "notes": "Simple process confirmation for an existing, returning customer, representing a retention/upsell scenario."
+  },
+  {
+    "id": "conv_080",
+    "scenario": "Deviation: User is struggling to complete the KYC (document verification) process.",
+    "category": "deviation",
+    "messages": [
+      {
+        "role": "customer",
+        "content": "Hola, estoy intentando subir mis documentos pero me sale un error que la camara no tiene permiso."
+      },
+      {
+        "role": "agent",
+        "content": "Hola, buenas tardes. A veces sucede eso con los permisos del navegador. Te sugiero intentar un par de cosas."
+      },
+      {
+        "role": "agent",
+        "content": "Primero, intenta borrar la caché y las cookies de tu navegador y reinicia el dispositivo. Si eso no funciona, intenta hacer el proceso desde un dispositivo diferente, como un PC si estás en el celular, o viceversa."
+      },
+      {
+        "role": "customer",
+        "content": "Voy a intentar borrando la cache. Si no funciona te aviso."
+      },
+      {
+        "role": "agent",
+        "content": "Perfecto, quedo atento para ayudarte."
+      }
+    ],
+    "outcome": "escalation",
+    "notes": "A common technical hurdle during onboarding. Agent provides standard troubleshooting steps before a potential escalation."
+  }
+]

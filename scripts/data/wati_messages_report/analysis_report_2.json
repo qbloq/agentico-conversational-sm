@@ -1,0 +1,299 @@
+{
+  "happy_paths": [
+    {
+      "name": "Inquiry to Successful Account Setup",
+      "steps": [
+        "Customer expresses interest in 'Cuentas Apalancadas'.",
+        "Agent explains the product, rules, and deposit minimums.",
+        "Customer completes registration and document verification.",
+        "Customer successfully deposits funds.",
+        "Agent guides customer to amplify the account (x12) and connect to MT5.",
+        "Customer confirms the account is active and ready for trading."
+      ],
+      "frequency": 7
+    },
+    {
+      "name": "Successful Information Request",
+      "steps": [
+        "Customer inquires about the leveraged accounts.",
+        "Agent provides detailed information about the product.",
+        "Customer asks clarifying questions about rules, withdrawals, and company details.",
+        "Customer is satisfied with the information and expresses intent to proceed at a later time."
+      ],
+      "frequency": 28
+    }
+  ],
+  "deviations": [
+    {
+      "name": "Registration & Login Issues",
+      "description": "Customer is unable to register, complete document verification (KYC), or log in to the client portal after creating an account.",
+      "trigger": "Customer states 'No me deja entrar', 'error al registrarme', 'La aplicación me saca', or 'no he podido iniciar seccion'.",
+      "frequency": 6
+    },
+    {
+      "name": "Deposit & Withdrawal Problems",
+      "description": "Customer reports that a deposit is not reflecting in their wallet or a withdrawal is delayed. This typically requires escalation to the support team.",
+      "trigger": "Customer states 'mi depósito no aparece', 'hice el retiro y no ha cargado', or 'aún no se ve reflejado el saldo'.",
+      "frequency": 4
+    },
+    {
+      "name": "Post-Setup Trading Issues",
+      "description": "After successfully setting up the account, the customer is unable to place trades on MT5 or has questions about platform specifics like server names or asset tickers.",
+      "trigger": "Customer states 'no me deja operar', 'no me aparece el servidor', or asks why asset tickers need a '.f' suffix.",
+      "frequency": 5
+    },
+    {
+      "name": "Wrong Number / Unrelated Inquiry",
+      "description": "The customer contacts the business number by mistake, believing it to be a personal contact, or sends spam/abusive messages.",
+      "trigger": "Messages are personal ('Q mas perro'), nonsensical, contain spam links, or the agent responds with 'Estas equivocado'.",
+      "frequency": 8
+    },
+    {
+      "name": "Inexperienced User",
+      "description": "Customer reveals they have little or no trading experience. The agent identifies that the product is for experienced users and pivots to offering educational resources or an academy.",
+      "trigger": "Customer states 'No tengo experiencia', 'voy empezando', or 'no se mucho del tema'.",
+      "frequency": 4
+    }
+  ],
+  "enquiries": [
+    {
+      "intent": "request_agent",
+      "example_phrases": [
+        "Hablar con un Agente"
+      ],
+      "frequency": 68,
+      "category": "General"
+    },
+    {
+      "intent": "greeting",
+      "example_phrases": [
+        "Hola",
+        "Buenas tardes",
+        "Hey"
+      ],
+      "frequency": 18,
+      "category": "General"
+    },
+    {
+      "intent": "ask_how_it_works",
+      "example_phrases": [
+        "quisiera saber cómo funciona",
+        "Quiero mas información gracias",
+        "me puedes explicar más al respecto"
+      ],
+      "frequency": 5,
+      "category": "Product Information"
+    },
+    {
+      "intent": "ask_promotions_bonus",
+      "example_phrases": [
+        "Y cómo sería la promoción De insta",
+        "cómo funciona la cuenta extra?",
+        "me regalan otra cuenta ??",
+        "Quiero mi cuenta grátis"
+      ],
+      "frequency": 11,
+      "category": "Promotions & Bonuses"
+    },
+    {
+      "intent": "ask_minimum_deposit",
+      "example_phrases": [
+        "Cuánto es lo mínimo que se puede depositar para probar?",
+        "Cuánto es lo mínimo que debo depositar",
+        "Cuánto es lo mínimo?"
+      ],
+      "frequency": 6,
+      "category": "Deposits & Withdrawals"
+    },
+    {
+      "intent": "ask_drawdown_rule",
+      "example_phrases": [
+        "perder el 10% de la cuenta : se cuenta cuando la operación ya allá cerrado o abierta?",
+        "La cuenta tiene un drawdown Statico o movible?",
+        "si llevo la cuenta a 650 dólares el 10% es sobre esos 650 ?",
+        "que pasa si se pierde el 10% inicial"
+      ],
+      "frequency": 6,
+      "category": "Trading Rules & Conditions"
+    },
+    {
+      "intent": "ask_withdrawal_process",
+      "example_phrases": [
+        "cómo son los retiros?",
+        "cuando puedo retirar",
+        "Métodos de retiro?",
+        "El retiro en usdt es al instante cierto?"
+      ],
+      "frequency": 6,
+      "category": "Deposits & Withdrawals"
+    },
+    {
+      "intent": "ask_allowed_assets_strategies",
+      "example_phrases": [
+        "se puede operar futuros aquí ?",
+        "que opera en general, todo? Forex, criptos?",
+        "se pueden operar Índices como US30 o NAS100",
+        "se pueden manejar Martin Gala"
+      ],
+      "frequency": 6,
+      "category": "Trading Rules & Conditions"
+    },
+    {
+      "intent": "ask_company_regulation",
+      "example_phrases": [
+        "quiero saber si ustedes están regulados",
+        "Este broker cuenta con regulación donde ?",
+        "estoy revisando qué regulaciones tiene el broker"
+      ],
+      "frequency": 5,
+      "category": "Company Information"
+    },
+    {
+      "intent": "ask_copy_trading_account_sharing",
+      "example_phrases": [
+        "Yo puedo compartir mis credenciales para que las opere mi Trader",
+        "Puedo crear una cuenta y conectarla a una persona que tiene un copy Trading?",
+        "ponerla que alguien se la opere quisiera saber más sobre eso"
+      ],
+      "frequency": 5,
+      "category": "Account Management"
+    },
+    {
+      "intent": "ask_deposit_process",
+      "example_phrases": [
+        "Puedo hacer la consignación desde nequi?",
+        "Por depositar 500 dólares con mi tarjeta me cobran 30 dólares de comisión?",
+        "Que red uso para la Crypto?"
+      ],
+      "frequency": 4,
+      "category": "Deposits & Withdrawals"
+    },
+    {
+      "intent": "ask_referral_program",
+      "example_phrases": [
+        "Quisiera saber el sistema de brokerage Por traer cliente",
+        "TAG maneja tema de referidos??"
+      ],
+      "frequency": 4,
+      "category": "Promotions & Bonuses"
+    },
+    {
+      "intent": "report_trading_platform_issue",
+      "example_phrases": [
+        "Sabes por qué no me deja operar",
+        "no me dejó abrir la posición",
+        "el servidor cambió",
+        "Nuevamente me pasa lo mismo No me deja operar"
+      ],
+      "frequency": 4,
+      "category": "Technical Support"
+    },
+    {
+      "intent": "report_financial_transaction_issue",
+      "example_phrases": [
+        "hice el retiro y no ha cargado",
+        "aún no se ve reflejado el saldo en al wallet",
+        "por lo que veo no se a reflejado espero que solo sea esperar",
+        "Intente crear los 50 usd Pero dice que es insuficiente"
+      ],
+      "frequency": 4,
+      "category": "Technical Support"
+    },
+    {
+      "intent": "ask_trading_rules_comparison",
+      "example_phrases": [
+        "Reglas y condiciones",
+        "que tiene de diferente TAG?",
+        "Tag market no tiene reglas como las de las cuentas de fondeo verdad"
+      ],
+      "frequency": 3,
+      "category": "Trading Rules & Conditions"
+    },
+    {
+      "intent": "ask_fees_commissions_spreads",
+      "example_phrases": [
+        "Las comisiones",
+        "Hablo de los fees Del broker",
+        "Que cuentas tienen menos spread?",
+        "Cobran 1 USD por cada 0.1 lote?"
+      ],
+      "frequency": 3,
+      "category": "Trading Rules & Conditions"
+    },
+    {
+      "intent": "ask_add_funds_to_account",
+      "example_phrases": [
+        "es mejor abrir otra cuenta o apalancar la misma cuenta?",
+        "Es posible adicionar capital a la cuenta existente?"
+      ],
+      "frequency": 3,
+      "category": "Account Management"
+    },
+    {
+      "intent": "report_login_registration_issue",
+      "example_phrases": [
+        "No me deja entrar con mi mail",
+        "Porq es tan errada la aplicación Le meto la cédula y me saca",
+        "No me deja entrar"
+      ],
+      "frequency": 3,
+      "category": "Technical Support"
+    },
+    {
+      "intent": "request_demo_account",
+      "example_phrases": [
+        "Quiero ensayar en demo la plataforma",
+        "hay alguna posibilidad de tener una cuenta demo",
+        "me gustaría poder abrir la plataforma de trading para irla conociendo, se puede?"
+      ],
+      "frequency": 3,
+      "category": "Account Management"
+    },
+    {
+      "intent": "ask_multiple_accounts",
+      "example_phrases": [
+        "Cuántas cuentas apalancadas se pueden tener?",
+        "Cuantas cuentas puedo tener con mis mismos datos??"
+      ],
+      "frequency": 2,
+      "category": "Account Management"
+    },
+    {
+      "intent": "ask_company_business_model",
+      "example_phrases": [
+        "Es que no entiendo que ganan ustedes para que tripliquen la inverison"
+      ],
+      "frequency": 1,
+      "category": "Company Information"
+    },
+    {
+      "intent": "ask_account_types",
+      "example_phrases": [
+        "me gustaría saber la diferencia en las clases de cuentas Cero,pro,islamica"
+      ],
+      "frequency": 1,
+      "category": "Product Information"
+    },
+    {
+      "intent": "unrelated_spam",
+      "example_phrases": [
+        "Fari",
+        "Como ta la cojida aya donde tu hermano",
+        "Q mas perro",
+        "https://irze.cn/...",
+        "Niño"
+      ],
+      "frequency": 8,
+      "category": "Other"
+    },
+    {
+      "intent": "express_no_interest",
+      "example_phrases": [
+        "Ya no estoy interesado gracias Vi muchas malas reseñas",
+        "No estoy interesada, gracias"
+      ],
+      "frequency": 2,
+      "category": "Other"
+    }
+  ]
+}
