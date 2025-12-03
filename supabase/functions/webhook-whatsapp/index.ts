@@ -146,7 +146,7 @@ async function handleIncomingMessage(req: Request): Promise<Response> {
         // Route to client
         const supabase = createSupabaseClient();
         const route = await routeByChannelId(supabase, 'whatsapp', phoneNumberId);
-        console.log('Route:', route);
+        // console.log('Route:', route);
         
         if (!route) {
           console.error(`No client found for phone_number_id: ${phoneNumberId}`);
@@ -271,14 +271,36 @@ async function processMessage(
     },
   });
   
+  // Apply session updates (CRITICAL for state persistence)
+  if (result.sessionUpdates && Object.keys(result.sessionUpdates).length > 0) {
+    await sessionStore.update(result.sessionId, result.sessionUpdates);
+  }
+  
   // Send responses
   for (const response of result.responses) {
+    // Safely check for delayMs using type guard
+    if ('delayMs' in response && typeof (response as any).delayMs === 'number') {
+      const delay = (response as any).delayMs;
+      if (delay > 0) {
+        await new Promise(resolve => setTimeout(resolve, delay));
+      }
+    }
+    
     await sendWhatsAppMessage(
       phoneNumberId,
       message.from,
       response.content,
-      clientConfig.channels.whatsapp?.accessToken || ''
+      clientConfig.channels.whatsapp?.accessToken || '',
+      // Safely check for metadata
+      'metadata' in response ? (response as any).metadata : undefined
     );
+    
+    // Save outbound message to history (critical for burst sequences)
+    await messageStore.save(result.sessionId, {
+      direction: 'outbound',
+      type: 'text',
+      content: response.content,
+    });
   }
 }
 
@@ -384,24 +406,34 @@ async function sendWhatsAppMessage(
   phoneNumberId: string,
   to: string,
   text: string,
-  accessToken: string
+  accessToken: string,
+  metadata?: any // Added metadata param
 ): Promise<void> {
   const baseUrl = Deno.env.get('WHATSAPP_API_BASE_URL') || 'https://graph.facebook.com';
   const url = `${baseUrl}/v24.0/${phoneNumberId}/messages`;
-  
+
+  const body: any = {
+    messaging_product: 'whatsapp',
+    recipient_type: 'individual',
+    to,
+    type: 'text',
+    text: { body: text },
+  };
+
+  // If we have metadata and we are in a dev/mock environment (implied by custom base URL),
+  // we can attach it to the payload. The real WhatsApp API might ignore or reject unknown fields,
+  // but our mock server will read them.
+  if (metadata && baseUrl.includes('localhost') || baseUrl.includes('host.docker.internal')) {
+    body._debug_metadata = metadata;
+  }
+
   const response = await fetch(url, {
     method: 'POST',
     headers: {
       'Authorization': `Bearer ${accessToken}`,
       'Content-Type': 'application/json',
     },
-    body: JSON.stringify({
-      messaging_product: 'whatsapp',
-      recipient_type: 'individual',
-      to,
-      type: 'text',
-      text: { body: text },
-    }),
+    body: JSON.stringify(body),
   });
   
   if (!response.ok) {

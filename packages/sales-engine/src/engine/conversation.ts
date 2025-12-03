@@ -18,10 +18,13 @@ import type {
   ConversationState,
   ConversationExample,
 } from './types.js';
+
+import { generatePitch12xResponses } from '../flows/pitch-12x.js';
 import { StateMachine } from '../state/machine.js';
 import type { StructuredLLMResponse } from '../llm/types.js';
 import { calculateCost } from '../llm/pricing.js';
-import { formatExamples } from '../examples/formatter.js';
+
+import { buildSystemPrompt } from '../prompts/templates.js';
 
 /**
  * Conversation Engine interface
@@ -115,8 +118,25 @@ export function createConversationEngine(): ConversationEngine {
           });
           
           return {
+            sessionId: session.id,
             responses: [],
             sessionUpdates: { lastMessageAt: new Date() },
+          };
+        }
+      }
+      
+      // 3b. Check for Flow A Locking (Time-based)
+      // If we are in pitching_12x and recently sent the burst, ignore input
+      if (session.currentState === 'pitching_12x' && session.context?.pitchComplete) {
+        const lastMessageTime = session.lastMessageAt ? new Date(session.lastMessageAt).getTime() : 0;
+        const timeSinceLast = new Date().getTime() - lastMessageTime;
+        // Lock for 12 seconds after burst starts (8s burst + 4s buffer)
+        if (timeSinceLast < 12000) {
+          console.log(`[Flow A] Input ignored during active burst sequence (${Math.round((12000 - timeSinceLast)/1000)}s remaining)`);
+          return {
+            sessionId: session.id,
+            responses: [],
+            // No updates, just ignore
           };
         }
       }
@@ -139,7 +159,22 @@ export function createConversationEngine(): ConversationEngine {
       const stateMachine = StateMachine.fromSession(session);
       const stateConfig = stateMachine.getConfig();
       
-      // 7. Check for escalation triggers
+      // 3. Check for System Commands (Hidden)
+      const messageText = message.content || message.transcription || '';
+      if (messageText.toLowerCase() === '/reset') {
+        console.log(`[System Command] Resetting data for contact: ${session.contactId}`);
+        await contactStore.delete(session.contactId);
+        return {
+          sessionId: session.id,
+          responses: [{
+            type: 'text',
+            content: '🔄 [SYSTEM] User data reset successfully. All history cleared.',
+          }],
+          // No session updates needed as session is deleted
+        };
+      }
+
+      // 3a. Check for Escalation Triggers
       const escalation = await checkEscalationTriggers(message, session, contact, clientConfig);
       if (escalation.shouldEscalate) {
         // Send notification if enabled
@@ -161,6 +196,7 @@ export function createConversationEngine(): ConversationEngine {
         }
 
         return {
+          sessionId: session.id,
           responses: [createEscalationResponse(escalation, clientConfig)],
           sessionUpdates: {
             isEscalated: true,
@@ -172,7 +208,7 @@ export function createConversationEngine(): ConversationEngine {
       }
       
       // 8. Retrieve relevant knowledge (RAG)
-      const messageText = message.content || message.transcription || '';
+      // messageText is already defined above
       
       // Generate embedding with logging
       const embeddingStartTime = Date.now();
@@ -192,7 +228,7 @@ export function createConversationEngine(): ConversationEngine {
           completionTokens: 0,
           totalTokens: embeddingTokens,
           costUsd: calculateCost('text-embedding-004', embeddingTokens, 0),
-          inputPreview: messageText.slice(0, 500),
+          inputPreview: messageText,
           latencyMs: embeddingLatency,
           finishReason: 'stop',
         }).catch(err => console.error('[LLM Logger] Embedding log failed:', err));
@@ -212,16 +248,33 @@ export function createConversationEngine(): ConversationEngine {
           stateConfig.state,
           embedding
         );
+        
+        // Filter out examples that use obsolete states (like 'qualifying')
+        // to prevent LLM from hallucinating invalid transitions
+        relevantExamples = relevantExamples.filter(ex => {
+          const hasObsoleteState = ex.stateFlow.includes('qualifying' as any) || 
+                                  ex.messages.some(m => m.state === 'qualifying' as any);
+          return !hasObsoleteState;
+        });
       }
 
-      console.log('state', stateConfig.state);
+      console.log(`[State] Current: ${stateConfig.state}`);
       if (relevantExamples.length > 0) {
-        console.log('examples', relevantExamples.map(e => e.exampleId).join(', '));
+        console.log(`[Examples Selected] ${relevantExamples.map(e => e.exampleId).join(', ')}`);
+      } else {
+        console.log('[Examples Selected] None');
       }
       
       // 9. Build LLM prompt with state transition context
       const transitionContext = stateMachine.buildTransitionContext();
-      const systemPrompt = buildSystemPrompt(clientConfig, relevantKnowledge, transitionContext, relevantExamples);
+      
+      // Flow A: Burst Sequence Logic
+      // if (stateConfig.state === 'pitching_12x' && !session.context?.pitchComplete) {
+      //   console.log('[Flow A] Triggering 12x Pitch Burst');
+      //   return generatePitch12xResponses(session);
+      // }
+
+      const systemPrompt = buildSystemPrompt({ config: clientConfig, knowledge: relevantKnowledge, transitionContext, examples: relevantExamples });
       const conversationHistory = formatConversationHistory(recentMessages);
       
       // 10. Generate response with structured output
@@ -253,8 +306,8 @@ export function createConversationEngine(): ConversationEngine {
           completionTokens: llmResponse.usage.completionTokens,
           totalTokens: llmResponse.usage.totalTokens,
           costUsd: calculateCost(clientConfig.llm.model, llmResponse.usage.promptTokens, llmResponse.usage.completionTokens),
-          inputPreview: fullInput.slice(0, 500),
-          outputPreview: llmResponse.content.slice(0, 500),
+          inputPreview: fullInput,
+          outputPreview: llmResponse.content,
           latencyMs: llmLatency,
           finishReason: llmResponse.finishReason,
         }).catch(err => console.error('[LLM Logger] Chat log failed:', err));
@@ -267,16 +320,36 @@ export function createConversationEngine(): ConversationEngine {
       };
       
       // Apply LLM-recommended transition if valid
-      if (structuredResponse.transition) {
+      if (structuredResponse.transition && structuredResponse.transition.to) {
         const targetState = structuredResponse.transition.to as ConversationState;
         if (stateMachine.canTransitionTo(targetState) && structuredResponse.transition.confidence >= 0.6) {
+          console.log(`[State Transition] ${session.currentState} -> ${targetState}`);
+          console.log(`[Transition Reason] ${structuredResponse.transition.reason}`);
+          
           stateMachine.transitionTo(targetState, structuredResponse.transition.reason);
           sessionUpdates = {
             ...sessionUpdates,
             previousState: session.currentState,
             currentState: targetState,
           };
-          console.log(`[State Transition] ${session.currentState} -> ${targetState}: ${structuredResponse.transition.reason}`);
+
+          // Check for special entry response for the new state
+          const entryResponse = getStateEntryResponse(targetState, {
+            ...session,
+            currentState: targetState,
+            context: { ...session.context, ...sessionUpdates.context }
+          });
+
+          if (entryResponse) {
+            console.log(`[State Entry] Triggering special response for ${targetState}`);
+            
+            // We must save the session state update first
+            await sessionStore.update(session.id, sessionUpdates);
+            
+            return entryResponse;
+          }
+        } else {
+            console.log(`[State Transition] Rejected: ${targetState} (Allowed: ${stateMachine.canTransitionTo(targetState)}, Confidence: ${structuredResponse.transition.confidence})`);
         }
       }
       
@@ -309,10 +382,11 @@ export function createConversationEngine(): ConversationEngine {
       await messageStore.save(session.id, {
         direction: 'outbound',
         type: 'text',
-        content: llmResponse.content,
+        content: structuredResponse.response,
       });
       
       return {
+        sessionId: session.id,
         responses: [botResponse],
         sessionUpdates: { ...sessionUpdates, ...resumeUpdates },
       };
@@ -526,76 +600,7 @@ function parseStructuredResponse(content: string): StructuredLLMResponse {
   };
 }
 
-function buildSystemPrompt(
-  config: EngineDependencies['clientConfig'],
-  knowledge: KnowledgeEntry[],
-  transitionContext: string,
-  examples: ConversationExample[] = []
-): string {
-  const knowledgeContext = knowledge
-    .map(k => `Q: ${k.title}\nA: ${k.summary || k.answer.slice(0, 300)}`)
-    .join('\n\n');
-  
-  // Format examples for injection (only if we have them)
-  const examplesContext = examples.length > 0 
-    ? formatExamples(examples, { maxMessages: 6, includeScenario: true })
-    : '';
-  
-  return `# Role
-You are a sales representative for ${config.business.name}. ${config.business.description}
 
-# Language
-Always respond in ${config.business.language}. Be friendly, professional, and helpful.
-
-${transitionContext}
-
-# Relevant Knowledge
-${knowledgeContext || 'No specific knowledge retrieved for this query.'}
-
-${examplesContext}
-
-# Response Format
-You MUST respond with a JSON object in a code block. The format is:
-\`\`\`json
-{
-  "response": "Your conversational response to the user in ${config.business.language}",
-  "transition": {
-    "to": "state_name",
-    "reason": "Brief explanation of why transitioning",
-    "confidence": 0.8
-  },
-  "extractedData": {
-    "userName": "if user mentioned their name",
-    "email": "if user provided email",
-    "hasExperience": true,
-    "interestLevel": "high",
-    "concerns": ["any concerns they raised"]
-  },
-  "isUncertain": false
-}
-\`\`\`
-
-Rules for the JSON response:
-- "response" is REQUIRED - this is what gets sent to the user
-- "transition" is OPTIONAL - only include if you detect completion signals and recommend moving to a new state
-- "extractedData" is OPTIONAL - only include fields where you extracted new information
-- "isUncertain" should be true if you're not confident in your response and a human might help better
-
-# Guidelines
-- Be concise but warm (2-4 sentences typically)
-- Use emojis sparingly (1-2 per message max)
-- Ask clarifying questions when needed
-- Never make up information - use the knowledge provided
-- If you don't know something, set isUncertain to true
-- Guide the conversation toward registration when appropriate
-${examples.length > 0 ? '- Study the reference examples above and match their conversational style and approach' : ''}
-
-# Prohibited
-- Never discuss competitors negatively
-- Never guarantee profits or returns
-- Never share internal processes or pricing structures not in the knowledge base
-- Never pretend to be human if directly asked`;
-}
 
 function formatConversationHistory(
   messages: EngineDependencies['messageStore'] extends { getRecent: (id: string, limit: number) => Promise<infer M> } ? M : never
@@ -608,4 +613,41 @@ function formatConversationHistory(
       role: m.direction === 'inbound' ? 'user' as const : 'assistant' as const,
       content: m.content!,
     }));
+}
+
+/**
+ * Get special entry response for a state (if any)
+ * This allows specific states to trigger hardcoded flows/bursts immediately upon entry
+ */
+function getStateEntryResponse(
+  state: ConversationState, 
+  session: Session
+): EngineOutput | null {
+  switch (state) {
+    case 'pitching_12x':
+      return generatePitch12xResponses(session);
+      
+    case 'closing':
+      return generateClosingResponse(session);
+      
+    // Add other state entry handlers here
+    // case 'closing': return generateClosingResponse(session);
+    
+    default:
+      return null;
+  }
+}
+
+function generateClosingResponse(session: Session): EngineOutput {
+  return {
+    sessionId: session.id,
+    responses: [{
+      type: 'text',
+      content: `¡Excelente decisión! 🚀\n\nPuedes registrarte ahora mismo en este enlace:\nhttps://app.parallelo.ai/register\n\nEstare aquí contigo durante todo el proceso. Si tienes alguna duda al llenar el formulario o realizar el depósito, solo pregúntame.`,
+      delayMs: 1000
+    }],
+    sessionUpdates: {
+      lastMessageAt: new Date()
+    }
+  };
 }
