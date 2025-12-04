@@ -78,7 +78,7 @@ async function loadClientConfig(
       },
       llm: {
         provider: 'gemini',
-        model: 'gemini-2.0-flash',
+        model: 'gemini-2.5-flash',
         fallbackProvider: 'anthropic',
         fallbackModel: 'claude-sonnet-4-20250514',
       },
@@ -88,9 +88,9 @@ async function loadClientConfig(
       },
       business: {
         name: 'TAG Markets',
-        description: 'Broker de trading con cuentas amplificadas 12x. Ofrece cuentas Pro, Zero e Islámicas con MetaTrader 5.',
+        description: 'Broker de trading con cuentas amplificadas 12x.',
         language: 'es',
-        timezone: 'America/Mexico_City',
+        timezone: 'America/Bogota',
       },
     },
   };

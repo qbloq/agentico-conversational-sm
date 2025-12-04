@@ -190,6 +190,19 @@ async function markFailed(supabase: any, schema: string, id: string, reason: str
 }
 
 function generateFollowupContent(item: FollowupItem, session: any): string {
+  // Registration check follow-up
+  if (item.followup_type === 'custom' && item.template_name === 'registration_check') {
+    const registrationStatus = session.registration_status;
+    
+    if (registrationStatus === 'registered') {
+      return "¡Felicidades! 🎉 Veo que completaste tu registro. ¿Ya realizaste tu primer depósito? Estoy aquí para ayudarte con cualquier duda.";
+    } else if (registrationStatus === 'link_clicked') {
+      return "Hola! 👋 Vi que abriste el enlace de registro. ¿Necesitas ayuda para completar el proceso? Estoy aquí para asistirte.";
+    } else {
+      return "Hola! 👋 ¿Pudiste revisar el enlace de registro que te envié? Si tienes alguna duda sobre el proceso, con gusto te ayudo.";
+    }
+  }
+  
   // Simple logic for now - can be expanded with templates
   if (item.followup_type === 'short_term') {
     return "Hola! 👋 Sigues ahí? Avísame si tienes alguna duda.";

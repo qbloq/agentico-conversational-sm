@@ -81,7 +81,7 @@ function createProviderByType(type: ProviderType, config: LLMProviderConfig): LL
 function getDefaultModel(type: ProviderType): string {
   switch (type) {
     case 'gemini':
-      return 'gemini-2.0-flash';
+      return 'gemini-2.5-flash';
     case 'anthropic':
       return 'claude-sonnet-4-20250514';
     case 'openai':

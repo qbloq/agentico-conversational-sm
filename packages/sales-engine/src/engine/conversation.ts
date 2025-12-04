@@ -127,7 +127,7 @@ export function createConversationEngine(): ConversationEngine {
       
       // 3b. Check for Flow A Locking (Time-based)
       // If we are in pitching_12x and recently sent the burst, ignore input
-      if (session.currentState === 'pitching_12x' && session.context?.pitchComplete) {
+      /*if (session.currentState === 'pitching_12x' && session.context?.pitchComplete) {
         const lastMessageTime = session.lastMessageAt ? new Date(session.lastMessageAt).getTime() : 0;
         const timeSinceLast = new Date().getTime() - lastMessageTime;
         // Lock for 12 seconds after burst starts (8s burst + 4s buffer)
@@ -139,7 +139,7 @@ export function createConversationEngine(): ConversationEngine {
             // No updates, just ignore
           };
         }
-      }
+      }*/
       
       // 4. Save inbound message
       await messageStore.save(session.id, {
@@ -418,6 +418,7 @@ async function checkEscalationTriggers(
     'soporte humano',
   ];
   
+  // Review patterns
   for (const pattern of explicitPatterns) {
     if (content.includes(pattern)) {
       return {
@@ -600,8 +601,6 @@ function parseStructuredResponse(content: string): StructuredLLMResponse {
   };
 }
 
-
-
 function formatConversationHistory(
   messages: EngineDependencies['messageStore'] extends { getRecent: (id: string, limit: number) => Promise<infer M> } ? M : never
 ): { role: 'user' | 'assistant'; content: string }[] {
@@ -639,15 +638,23 @@ function getStateEntryResponse(
 }
 
 function generateClosingResponse(session: Session): EngineOutput {
+  // Get Supabase URL from environment (works in both Node.js and Deno)
+  const supabaseUrl = ((globalThis as any).Deno?.env?.get('SUPABASE_URL') || process.env.SUPABASE_URL) || 'https://your-project.supabase.co';
+  const registrationLink = `${supabaseUrl}/functions/v1/registration-link?session_id=${session.id}`;
+  
   return {
     sessionId: session.id,
     responses: [{
       type: 'text',
-      content: `¡Excelente decisión! 🚀\n\nPuedes registrarte ahora mismo en este enlace:\nhttps://app.parallelo.ai/register\n\nEstare aquí contigo durante todo el proceso. Si tienes alguna duda al llenar el formulario o realizar el depósito, solo pregúntame.`,
+      content: `¡Excelente decisión! 🚀\n\nPuedes registrarte ahora mismo en este enlace:\n${registrationLink}\n\nEstaré aquí contigo durante todo el proceso. Si tienes alguna duda al llenar el formulario o realizar el depósito, solo pregúntame.\n\nUna vez que hayas completado el registro, pásame tu correo electrónico para verificar que todo esté en orden.`,
       delayMs: 1000
     }],
     sessionUpdates: {
-      lastMessageAt: new Date()
+      lastMessageAt: new Date(),
+      context: {
+        ...session.context,
+        registrationStatus: 'pending',
+      }
     }
   };
 }

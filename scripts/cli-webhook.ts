@@ -38,6 +38,21 @@ const server = http.createServer((req, res) => {
         
         if (data.text && data.text.body) {
           console.log(`\n🤖 Bot > ${data.text.body}`);
+          
+          // Display Debug Metadata if present
+          if (data._debug_metadata) {
+            const meta = data._debug_metadata;
+            if (meta.state) {
+              console.log(`\x1b[33m[State] ${meta.state}\x1b[0m`);
+            }
+            if (meta.transition) {
+               console.log(`\x1b[36m[Transition] ${meta.transition.from} -> ${meta.transition.to}\x1b[0m`);
+               console.log(`\x1b[90m[Reason] ${meta.transition.reason}\x1b[0m`);
+            }
+            if (meta.tokensUsed) {
+               console.log(`\x1b[90m[Tokens] ${JSON.stringify(meta.tokensUsed)}\x1b[0m`);
+            }
+          }
         } else {
           console.log('\n🤖 Bot sent non-text message:', data);
         }

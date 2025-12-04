@@ -170,5 +170,17 @@ export function createSupabaseContactStore(
       
       return rowToContact(data as ContactRow);
     },
+
+    async delete(id: string): Promise<void> {
+      const { error } = await supabase
+        .schema(schemaName)
+        .from(contactsTable)
+        .delete()
+        .eq('id', id);
+      
+      if (error) {
+        throw new Error(`Failed to delete contact: ${error.message}`);
+      }
+    },
   };
 }

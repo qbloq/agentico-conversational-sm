@@ -37,28 +37,21 @@ export interface SessionKey {
 export type ConversationState =
   // Entry States
   | 'initial'
-  | 'returning_customer'
-  | 'promotion_inquiry'
-  // Qualification States
-  | 'qualifying'
-  | 'diagnosing'
-  // Sales Flow
-  | 'pitching'
-  | 'handling_objection'
+  // Flow A (12x)
+  | 'pitching_12x'
+  // Flow B (Downsell)
+  | 'pitching_copy_trading'
+  | 'pitching_academy'
+  // Flow C (Closing)
   | 'closing'
   | 'post_registration'
-  // Education Flow
-  | 'education_redirect'
-  // Support Flow
-  | 'technical_support'
-  | 'deposit_support'
-  | 'platform_support'
-  | 'withdrawal_support'
+  // Flow D (Support)
+  | 'returning_customer'
+  | 'support_general'
   // Terminal States
   | 'follow_up'
   | 'escalated'
-  | 'completed'
-  | 'disqualified';
+  | 'completed';
 
 /**
  * Session status
@@ -199,6 +192,7 @@ export interface BotResponse {
   type: BotResponseType;
   content: string;
   metadata?: Record<string, unknown>;
+  delayMs?: number;
 }
 
 // =============================================================================
@@ -218,6 +212,7 @@ export interface EngineInput {
  * Output from the conversation engine
  */
 export interface EngineOutput {
+  sessionId: string;
   responses: BotResponse[];
   sessionUpdates?: Partial<Session>;
   contactUpdates?: Partial<Contact>;
@@ -324,6 +319,7 @@ export interface ContactStore {
   findOrCreateByChannelUser(channelType: ChannelType, channelUserId: string): Promise<Contact>;
   findById(id: string): Promise<Contact | null>;
   update(id: string, updates: Partial<Contact>): Promise<Contact>;
+  delete(id: string): Promise<void>;
 }
 
 export interface SessionStore {
