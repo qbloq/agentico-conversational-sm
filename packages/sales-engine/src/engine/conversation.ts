@@ -156,7 +156,21 @@ export function createConversationEngine(): ConversationEngine {
       const recentMessages = await messageStore.getRecent(session.id, 10);
       
       // 6. Initialize state machine
-      const stateMachine = StateMachine.fromSession(session);
+      let smConfig = undefined;
+      if (deps.stateMachineStore) {
+        try {
+          // Try to load active SM
+          // TODO: Make SM name configurable in clientConfig
+          const loadedConfig = await deps.stateMachineStore.findActive('default_sales_flow');
+          if (loadedConfig) {
+            smConfig = loadedConfig;
+          }
+        } catch (err) {
+          console.error('Failed to load state machine config:', err);
+        }
+      }
+
+      const stateMachine = StateMachine.fromSession(session, smConfig);
       const stateConfig = stateMachine.getConfig();
       
       // 3. Check for System Commands (Hidden)

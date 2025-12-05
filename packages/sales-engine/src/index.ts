@@ -44,6 +44,7 @@ export type {
   ContactStore,
   SessionStore,
   MessageStore,
+  StateMachineStore,
   KnowledgeStore,
   KnowledgeEntry,
   

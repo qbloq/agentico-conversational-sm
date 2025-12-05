@@ -260,6 +260,7 @@ export interface EngineDependencies {
   contactStore: ContactStore;
   sessionStore: SessionStore;
   messageStore: MessageStore;
+  stateMachineStore?: StateMachineStore;
   
   // AI services
   llmProvider: LLMProvider;
@@ -339,6 +340,11 @@ export interface KnowledgeStore {
   findSimilar(embedding: number[], limit: number): Promise<KnowledgeEntry[]>;
   findByCategory(category: string, limit: number): Promise<KnowledgeEntry[]>;
   findByTags(tags: string[], limit: number): Promise<KnowledgeEntry[]>;
+}
+
+export interface StateMachineStore {
+  findByName(name: string, version?: string): Promise<Record<ConversationState, any> | null>;
+  findActive(name: string): Promise<Record<ConversationState, any> | null>;
 }
 
 export interface KnowledgeEntry {
