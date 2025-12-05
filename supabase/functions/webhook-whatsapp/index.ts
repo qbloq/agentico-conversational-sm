@@ -200,7 +200,7 @@ async function processMessage(
   
   // Create conversation engine
   const engine = createConversationEngine();
-  
+
   // Create adapters
   const contactStore = createSupabaseContactStore(supabase, schemaName);
   const sessionStore = createSupabaseSessionStore(supabase, schemaName);
@@ -294,13 +294,6 @@ async function processMessage(
       // Safely check for metadata
       'metadata' in response ? (response as any).metadata : undefined
     );
-    
-    // Save outbound message to history (critical for burst sequences)
-    await messageStore.save(result.sessionId, {
-      direction: 'outbound',
-      type: 'text',
-      content: response.content,
-    });
   }
 }
 

@@ -334,11 +334,16 @@ export function createConversationEngine(): ConversationEngine {
           };
 
           // Check for special entry response for the new state
-          const entryResponse = getStateEntryResponse(targetState, {
-            ...session,
-            currentState: targetState,
-            context: { ...session.context, ...sessionUpdates.context }
-          });
+          const entryResponse = await getStateEntryResponse(
+            targetState, 
+            {
+              ...session,
+              currentState: targetState,
+              context: { ...session.context, ...sessionUpdates.context }
+            },
+            messageStore,
+            session.id
+          );
 
           if (entryResponse) {
             console.log(`[State Entry] Triggering special response for ${targetState}`);
@@ -354,11 +359,23 @@ export function createConversationEngine(): ConversationEngine {
       }
       
       // Update session context with extracted data
+      let contactUpdates: Partial<Contact> = {};
       if (structuredResponse.extractedData) {
         sessionUpdates.context = {
           ...session.context,
           ...structuredResponse.extractedData,
         };
+        
+        // Also persist email to Contact record if provided
+        if (structuredResponse.extractedData.email) {
+          contactUpdates.email = structuredResponse.extractedData.email;
+          console.log(`[Contact Update] Email captured: ${structuredResponse.extractedData.email}`);
+        }
+        
+        // Persist userName to Contact if provided
+        if (structuredResponse.extractedData.userName) {
+          contactUpdates.fullName = structuredResponse.extractedData.userName;
+        }
       }
       
       // Check for AI uncertainty escalation
@@ -389,6 +406,7 @@ export function createConversationEngine(): ConversationEngine {
         sessionId: session.id,
         responses: [botResponse],
         sessionUpdates: { ...sessionUpdates, ...resumeUpdates },
+        contactUpdates: Object.keys(contactUpdates).length > 0 ? contactUpdates : undefined,
       };
     },
   };
@@ -617,36 +635,59 @@ function formatConversationHistory(
 /**
  * Get special entry response for a state (if any)
  * This allows specific states to trigger hardcoded flows/bursts immediately upon entry
+ * 
+ * IMPORTANT: This function saves all outbound messages to the message store
+ * before returning, ensuring burst sequences are persisted.
  */
-function getStateEntryResponse(
+async function getStateEntryResponse(
   state: ConversationState, 
-  session: Session
-): EngineOutput | null {
+  session: Session,
+  messageStore: EngineDependencies['messageStore'],
+  sessionId: string
+): Promise<EngineOutput | null> {
+  let output: EngineOutput | null = null;
+  
   switch (state) {
     case 'pitching_12x':
-      return generatePitch12xResponses(session);
+      output = generatePitch12xResponses(session);
+      break;
       
     case 'closing':
-      return generateClosingResponse(session);
+      output = generateClosingResponse(session);
+      break;
       
     // Add other state entry handlers here
-    // case 'closing': return generateClosingResponse(session);
     
     default:
       return null;
   }
+  
+  // Save all outbound messages from the burst sequence
+  if (output) {
+    for (const response of output.responses) {
+      await messageStore.save(sessionId, {
+        direction: 'outbound',
+        type: 'text',
+        content: response.content,
+      });
+    }
+  }
+  
+  return output;
 }
 
 function generateClosingResponse(session: Session): EngineOutput {
-  // Get Supabase URL from environment (works in both Node.js and Deno)
-  const supabaseUrl = ((globalThis as any).Deno?.env?.get('SUPABASE_URL') || process.env.SUPABASE_URL) || 'https://your-project.supabase.co';
-  const registrationLink = `${supabaseUrl}/functions/v1/registration-link?session_id=${session.id}`;
+  const registrationLink = `https://h.parallelo.ai/register?sessionId=${session.id}`;
   
   return {
     sessionId: session.id,
     responses: [{
       type: 'text',
-      content: `¡Excelente decisión! 🚀\n\nPuedes registrarte ahora mismo en este enlace:\n${registrationLink}\n\nEstaré aquí contigo durante todo el proceso. Si tienes alguna duda al llenar el formulario o realizar el depósito, solo pregúntame.\n\nUna vez que hayas completado el registro, pásame tu correo electrónico para verificar que todo esté en orden.`,
+      content: `¡Excelente decisión! 🚀\n\nEstaré aquí contigo durante todo el proceso. Si tienes alguna duda al llenar el formulario o realizar el depósito, solo pregúntame.\n\nUna vez que hayas completado el registro, pásame tu correo electrónico para verificar que todo esté en orden.`,
+      delayMs: 1000
+    },{
+      type: 'text',
+      content: registrationLink,
       delayMs: 1000
     }],
     sessionUpdates: {

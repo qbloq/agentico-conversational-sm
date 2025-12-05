@@ -62,23 +62,24 @@ export const STATE_CONFIGS: Record<ConversationState, StateConfig> = {
   
   initial: {
     state: 'initial',
-    objective: 'Detect intent and route to appropriate flow',
-    description: 'First contact. Determine if user is interested in 12x accounts, is a returning customer, or has another intent. IMPORTANT: If user shows ANY interest in 12x accounts, leverage, or funding, transition IMMEDIATELY to "pitching_12x". Do NOT use "qualifying" state.',
+    objective: 'Detect intent and route to appropriate flow based on trading experience',
+    description: 'First contact. Ask about trading experience to route appropriately. If user has experience AND shows interest in 12x accounts, transition to "pitching_12x". If user has NO experience, offer Premium Academy first. IMPORTANT: Capture trading experience before routing.',
     completionSignals: [
-      'User asks about 12x/leverage',
+      'User asks about 12x/leverage and has experience',
+      'User has no experience (route to Academy)',
       'User identifies as existing customer',
-      'User greets or asks general questions',
     ],
     ragCategories: ['Preguntas Frecuentes'],
     allowedTransitions: [
-      'pitching_12x', 'returning_customer', 'pitching_copy_trading', 'pitching_academy', 'support_general', 'escalated'
+      'pitching_12x', 'pitching_academy', 'returning_customer', 'pitching_copy_trading', 'support_general', 'prospect', 'escalated'
     ],
     transitionGuidance: {
-      pitching_12x: 'User explicitly asks about 12x accounts, leverage, or funding. GO HERE IMMEDIATELY.',
+      pitching_12x: 'User has trading experience AND shows interest in 12x accounts, leverage, or funding.',
+      pitching_academy: 'User has NO trading experience. Offer Academy first.',
       returning_customer: 'User indicates they already have an account.',
       pitching_copy_trading: 'User specifically asks about Copy Trading.',
-      pitching_academy: 'User specifically asks about education/academy.',
       support_general: 'User has a specific support question not related to sales.',
+      prospect: 'User shows no clear interest in any product.',
       escalated: 'User requests human agent.',
     },
     maxMessages: 2,
@@ -114,17 +115,18 @@ export const STATE_CONFIGS: Record<ConversationState, StateConfig> = {
   pitching_copy_trading: {
     state: 'pitching_copy_trading',
     objective: 'Offer Copy Trading as alternative',
-    description: 'User declined 12x accounts. Offer Copy Trading. If user indicates interest in Education instead, skip to Academy.',
+    description: 'User declined previous offer. Offer Copy Trading. If user indicates interest in Education instead, skip to Academy. If user rejects all, move to prospect state.',
     completionSignals: [
       'User wants to register for Copy Trading',
       'User is not interested',
       'User asks about Academy/Education',
     ],
     ragCategories: ['Copy Trading', 'Tipos de Cuentas'],
-    allowedTransitions: ['closing', 'pitching_academy', 'escalated'],
+    allowedTransitions: ['closing', 'pitching_academy', 'prospect', 'escalated'],
     transitionGuidance: {
       closing: 'User wants to register for Copy Trading.',
-      pitching_academy: 'User is NOT interested in Copy Trading OR explicitly asks for Education.',
+      pitching_academy: 'User is NOT interested in Copy Trading BUT explicitly asks for Education.',
+      prospect: 'User is NOT interested in Copy Trading and has rejected other offers.',
       escalated: 'User requests human help.',
     },
     maxMessages: 4,
@@ -132,20 +134,43 @@ export const STATE_CONFIGS: Record<ConversationState, StateConfig> = {
   
   pitching_academy: {
     state: 'pitching_academy',
-    objective: 'Offer Academy/Education',
-    description: 'User declined Copy Trading. Offer Academy. If not interested, offer general support.',
+    objective: 'Offer Academy/Education to inexperienced traders',
+    description: 'User has no trading experience. Offer Premium Academy. If not interested, downsell to Copy Trading.',
     completionSignals: [
       'User wants to join Academy',
       'User is not interested',
     ],
     ragCategories: ['Academia', 'Conceptos generales de Trading'],
-    allowedTransitions: ['closing', 'support_general', 'escalated'],
+    allowedTransitions: ['closing', 'pitching_copy_trading', 'prospect', 'escalated'],
     transitionGuidance: {
       closing: 'User wants to join Academy.',
-      support_general: 'User is NOT interested in Academy.',
+      pitching_copy_trading: 'User is NOT interested in Academy (Downsell to Copy Trading).',
+      prospect: 'User explicitly rejects Academy without interest in alternatives.',
       escalated: 'User requests human help.',
     },
     maxMessages: 3,
+  },
+  
+  prospect: {
+    state: 'prospect',
+    objective: 'Re-engage user who rejected all offers',
+    description: 'User declined all product offers (Academy, Copy Trading, 12x). Try to understand their needs better and route back to appropriate product flow if they show renewed interest.',
+    completionSignals: [
+      'User shows renewed interest in a product',
+      'User asks questions about products',
+      'User wants to end conversation',
+    ],
+    ragCategories: ['Preguntas Frecuentes'],
+    allowedTransitions: ['pitching_12x', 'pitching_academy', 'pitching_copy_trading', 'support_general', 'completed', 'escalated'],
+    transitionGuidance: {
+      pitching_12x: 'User shows interest in 12x accounts or has trading experience.',
+      pitching_academy: 'User asks about education or training.',
+      pitching_copy_trading: 'User asks about Copy Trading.',
+      support_general: 'User has general questions.',
+      completed: 'User wants to end conversation.',
+      escalated: 'User requests human help.',
+    },
+    maxMessages: 5,
   },
   
   // ===========================================================================
@@ -170,20 +195,20 @@ export const STATE_CONFIGS: Record<ConversationState, StateConfig> = {
   
   post_registration: {
     state: 'post_registration',
-    objective: 'Confirm registration and schedule follow-ups',
-    description: 'User has registered. Confirm email. Schedule follow-ups.',
+    objective: 'Capture customer email and confirm registration',
+    description: 'User has registered. Ask for and capture their email to verify registration. Once email is provided, transition to returning_customer for ongoing support.',
     completionSignals: [
-      'Details captured',
-      'User is done',
+      'User provides email address',
+      'Email captured and verified',
     ],
     ragCategories: ['Depósitos y Retiros'],
     allowedTransitions: ['completed', 'returning_customer', 'escalated'],
     transitionGuidance: {
-      completed: 'Registration confirmed and details captured.',
-      returning_customer: 'User has immediate support questions after registering.',
+      completed: 'User declines to provide email or wants to end conversation.',
+      returning_customer: 'User provides their email address - transition to provide ongoing customer support.',
       escalated: 'User requests human help.',
     },
-    maxMessages: 4,
+    maxMessages: 3,
   },
   
   // ===========================================================================

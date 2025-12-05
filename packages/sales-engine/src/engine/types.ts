@@ -42,6 +42,7 @@ export type ConversationState =
   // Flow B (Downsell)
   | 'pitching_copy_trading'
   | 'pitching_academy'
+  | 'prospect'
   // Flow C (Closing)
   | 'closing'
   | 'post_registration'

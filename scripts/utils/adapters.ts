@@ -109,7 +109,7 @@ export function createSupabaseSessionStore(
         .eq('channel_id', key.channelId)
         .eq('channel_user_id', key.channelUserId)
         .single();
-      
+
       if (error || !data) {
         return null;
       }
