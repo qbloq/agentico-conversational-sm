@@ -117,6 +117,8 @@ export function createConversationEngine(): ConversationEngine {
             platformMessageId: message.id,
           });
           
+          await sessionStore.update(session.id, { lastMessageAt: new Date() });
+          
           return {
             sessionId: session.id,
             responses: [],
@@ -209,14 +211,18 @@ export function createConversationEngine(): ConversationEngine {
           }
         }
 
+        const escalationUpdates = {
+          isEscalated: true,
+          escalationReason: escalation.reason,
+          lastMessageAt: new Date(),
+        };
+
+        await sessionStore.update(session.id, escalationUpdates);
+
         return {
           sessionId: session.id,
           responses: [createEscalationResponse(escalation, clientConfig)],
-          sessionUpdates: {
-            isEscalated: true,
-            escalationReason: escalation.reason,
-            lastMessageAt: new Date(),
-          },
+          sessionUpdates: escalationUpdates,
           escalation,
         };
       }
@@ -365,7 +371,14 @@ export function createConversationEngine(): ConversationEngine {
             // We must save the session state update first
             await sessionStore.update(session.id, sessionUpdates);
             
-            return entryResponse;
+            return {
+              ...entryResponse,
+              transitionReason: structuredResponse.transition.reason,
+              sessionUpdates: {
+                ...entryResponse.sessionUpdates,
+                ...sessionUpdates, // Ensure state change is included in return
+              }
+            };
           }
         } else {
             console.log(`[State Transition] Rejected: ${targetState} (Allowed: ${stateMachine.canTransitionTo(targetState)}, Confidence: ${structuredResponse.transition.confidence})`);
@@ -416,11 +429,20 @@ export function createConversationEngine(): ConversationEngine {
         content: structuredResponse.response,
       });
       
+      // 15. Consolidate and Save Session Updates
+      // We must save the updates before returning so that the simulation/CLI/webhook
+      // all have consistent state without needing to handle persistence themselves.
+      const finalUpdates = { ...sessionUpdates, ...resumeUpdates };
+      if (Object.keys(finalUpdates).length > 0) {
+        await sessionStore.update(session.id, finalUpdates);
+      }
+      
       return {
         sessionId: session.id,
         responses: [botResponse],
-        sessionUpdates: { ...sessionUpdates, ...resumeUpdates },
+        sessionUpdates: finalUpdates,
         contactUpdates: Object.keys(contactUpdates).length > 0 ? contactUpdates : undefined,
+        transitionReason: structuredResponse.transition?.reason,
       };
     },
   };

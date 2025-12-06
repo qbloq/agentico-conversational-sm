@@ -275,9 +275,11 @@ async function processMessage(
   });
   
   // Apply session updates (CRITICAL for state persistence)
-  if (result.sessionUpdates && Object.keys(result.sessionUpdates).length > 0) {
-    await sessionStore.update(result.sessionId, result.sessionUpdates);
-  }
+  // DEPRECATED: Engine now handles persistence internally. 
+  // Kept commented out for reference or emergency rollback.
+  // if (result.sessionUpdates && Object.keys(result.sessionUpdates).length > 0) {
+  //   await sessionStore.update(result.sessionId, result.sessionUpdates);
+  // }
   
   // Send responses
   for (const response of result.responses) {

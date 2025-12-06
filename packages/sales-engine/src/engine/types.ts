@@ -219,6 +219,7 @@ export interface EngineOutput {
   contactUpdates?: Partial<Contact>;
   escalation?: EscalationResult;
   followupSchedule?: FollowupSchedule;
+  transitionReason?: string;
 }
 
 /**
