@@ -172,6 +172,7 @@ export function createConversationEngine(): ConversationEngine {
         }
       }
 
+      console.log('State machine config:\n\n', smConfig);
       const stateMachine = StateMachine.fromSession(session, smConfig);
       const stateConfig = stateMachine.getConfig();
       
@@ -233,6 +234,8 @@ export function createConversationEngine(): ConversationEngine {
       // Generate embedding with logging
       const embeddingStartTime = Date.now();
       const embedding = await embeddingProvider.generateEmbedding(messageText);
+      
+      console.log('Embedding:', embedding);
       const embeddingLatency = Date.now() - embeddingStartTime;
       
       // Log embedding call (fire and forget)
@@ -254,6 +257,7 @@ export function createConversationEngine(): ConversationEngine {
         }).catch(err => console.error('[LLM Logger] Embedding log failed:', err));
       }
       
+      console.log('stateConfig:\n', stateConfig);
       const relevantKnowledge = await retrieveKnowledge(
         knowledgeStore,
         embedding,

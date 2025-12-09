@@ -54,7 +54,7 @@ export function createSupabaseKnowledgeStore(
       // Use pgvector's cosine similarity search
       // Note: This requires a raw SQL query via RPC or direct query
       const { data, error } = await supabase.rpc('match_knowledge', {
-        schema_name: schemaName,
+        schema_name: 'public',
         query_embedding: embedding,
         match_count: limit,
       });
@@ -70,7 +70,7 @@ export function createSupabaseKnowledgeStore(
     
     async findByCategory(category: string, limit: number): Promise<KnowledgeEntry[]> {
       const { data, error } = await supabase
-        .schema(schemaName)
+        .schema('public')
         .from(tableName)
         .select('*')
         .eq('category', category)
@@ -88,7 +88,7 @@ export function createSupabaseKnowledgeStore(
     async findByTags(tags: string[], limit: number): Promise<KnowledgeEntry[]> {
       // Use PostgreSQL's array overlap operator
       const { data, error } = await supabase
-        .schema(schemaName)
+        .schema('public')
         .from(tableName)
         .select('*')
         .overlaps('semantic_tags', tags)

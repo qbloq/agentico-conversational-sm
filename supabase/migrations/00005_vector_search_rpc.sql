@@ -5,7 +5,7 @@
 -- Generic vector search function that works across client schemas
 CREATE OR REPLACE FUNCTION public.match_knowledge(
   schema_name TEXT,
-  query_embedding VECTOR(768),
+  query_embedding VECTOR(1536),
   match_count INT DEFAULT 5
 )
 RETURNS TABLE (

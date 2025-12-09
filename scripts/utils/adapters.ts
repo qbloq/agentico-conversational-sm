@@ -435,7 +435,7 @@ export function createSupabaseKnowledgeStore(
 
     async findByCategory(category: string, limit: number): Promise<KnowledgeEntry[]> {
       const { data, error } = await supabase
-        .schema(schemaName)
+        .schema('public')
         .from('knowledge_base')
         .select('*')
         .eq('category', category)
@@ -460,7 +460,7 @@ export function createSupabaseKnowledgeStore(
 
     async findByTags(tags: string[], limit: number): Promise<KnowledgeEntry[]> {
       const { data, error } = await supabase
-        .schema(schemaName)
+        .schema('public')
         .from('knowledge_base')
         .select('*')
         .contains('semantic_tags', tags)

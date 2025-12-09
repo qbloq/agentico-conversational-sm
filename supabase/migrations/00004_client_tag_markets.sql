@@ -201,7 +201,7 @@ CREATE TABLE IF NOT EXISTS client_tag_markets.knowledge_base (
   related_articles JSONB,                -- Array of {title, url}
   
   -- Vector embedding for semantic search
-  embedding VECTOR(768),                 -- Gemini text-embedding-004 dimension
+  embedding VECTOR(1536),                 -- Gemini text-embedding-004 dimension
   
   -- Metadata
   priority INT DEFAULT 0,                -- Higher = preferred match

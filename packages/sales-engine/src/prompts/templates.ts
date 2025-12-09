@@ -19,7 +19,7 @@ export function buildSystemPrompt({
   examples
 }: SystemPromptParams): string {
   const knowledgeContext = knowledge
-    .map(k => `Q: ${k.title}\nA: ${k.summary || k.answer.slice(0, 300)}`)
+    .map(k => `Q: ${k.title}\nA: ${k.answer}`)
     .join('\n\n');
   
   const examplesContext = examples.length > 0 
@@ -36,7 +36,7 @@ ${transitionContext}
 # Relevant Knowledge
 ${knowledgeContext || 'No specific knowledge retrieved for this query.'}
 
-${examplesContext}
+${/*examplesContext*/''}
 
 # Response Format
 You MUST respond with a JSON object in a code block. The format is:
@@ -75,7 +75,7 @@ Rules for the JSON response:
 - Never make up information - use the knowledge provided
 - If you don't know something, set isUncertain to true
 - Guide the conversation toward registration when appropriate
-${examples.length > 0 ? '- Study the reference examples above and match their conversational style and approach' : ''}
+${examples.length < 0 ? '- Study the reference examples above and match their conversational style and approach' : ''}
 
 # Prohibited
 

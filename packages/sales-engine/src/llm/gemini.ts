@@ -5,6 +5,7 @@
  * Uses @google/generative-ai SDK.
  */
 
+import { GoogleGenAI } from "@google/genai";
 import type { LLMProvider, LLMProviderConfig, LLMRequest, LLMResponse } from './types.js';
 
 /**
@@ -19,16 +20,25 @@ export function createGeminiProvider(config: LLMProviderConfig): LLMProvider {
     
     async generateResponse(request: LLMRequest): Promise<LLMResponse> {
       // Dynamic import for optional dependency
+      let HarmCategory, HarmBlockThreshold;
+      
       if (!GoogleGenerativeAI) {
         try {
           const module = await import('@google/generative-ai');
           GoogleGenerativeAI = module.GoogleGenerativeAI;
+          HarmCategory = module.HarmCategory;
+          HarmBlockThreshold = module.HarmBlockThreshold;
         } catch {
           throw new Error(
             'Gemini provider requires @google/generative-ai package. ' +
             'Install it with: pnpm add @google/generative-ai'
           );
         }
+      } else {
+         // Re-import to get enums if already loaded (or store them on module scope previously, but this is safer for now)
+          const module = await import('@google/generative-ai');
+          HarmCategory = module.HarmCategory;
+          HarmBlockThreshold = module.HarmBlockThreshold;
       }
       
       const genAI = new GoogleGenerativeAI(config.apiKey);
@@ -69,6 +79,12 @@ export function createGeminiProvider(config: LLMProviderConfig): LLMProvider {
           temperature: request.temperature ?? 0.7,
           maxOutputTokens: request.maxTokens ?? 1024,
         },
+        safetySettings: [
+            { category: HarmCategory.HARM_CATEGORY_HARASSMENT, threshold: HarmBlockThreshold.BLOCK_NONE },
+            { category: HarmCategory.HARM_CATEGORY_HATE_SPEECH, threshold: HarmBlockThreshold.BLOCK_NONE },
+            { category: HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT, threshold: HarmBlockThreshold.BLOCK_NONE },
+            { category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT, threshold: HarmBlockThreshold.BLOCK_NONE },
+        ],
         systemInstruction: {
           role: 'system',
           parts: [{ text: request.systemPrompt }]
@@ -123,7 +139,7 @@ export function createGeminiEmbeddingProvider(config: { apiKey: string }): {
   let GoogleGenerativeAI: typeof import('@google/generative-ai').GoogleGenerativeAI;
   
   return {
-    dimensions: 768, // Gemini embedding dimension
+    dimensions: 1536, // Gemini embedding dimension
     
     async generateEmbedding(text: string): Promise<number[]> {
       if (!GoogleGenerativeAI) {
@@ -138,11 +154,14 @@ export function createGeminiEmbeddingProvider(config: { apiKey: string }): {
         }
       }
       
-      const genAI = new GoogleGenerativeAI(config.apiKey);
-      const model = genAI.getGenerativeModel({ model: 'text-embedding-004' });
+      const genAI = new GoogleGenAI({ apiKey: config.apiKey });
+      const result = await genAI.models.embedContent({ 
+        model: 'text-embedding-004',
+        contents: text,
+        config: { outputDimensionality: 1536 },
+      });
       
-      const result = await model.embedContent(text);
-      return result.embedding.values;
+      return result.embeddings?.[0].values || [];
     },
   };
 }

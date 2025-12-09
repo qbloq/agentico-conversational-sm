@@ -14,22 +14,22 @@
  */
 
 import { createClient } from '@supabase/supabase-js';
-import { GoogleGenerativeAI } from '@google/generative-ai';
+import { GoogleGenAI } from '@google/genai';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as dotenv from 'dotenv';
 import { fileURLToPath } from 'url';
 
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
 // Load environment variables
-dotenv.config();
+dotenv.config({ path: path.resolve(__dirname, '.env') });
 
 // Configuration
 const SCHEMA_NAME = 'client_tag_markets';
 const FAQ_FILE_PATH = './data/faq-enriched.json';
 const BATCH_SIZE = 10;
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
 
 interface FAQArticle {
   title: string;
@@ -68,8 +68,7 @@ async function main() {
   
   // Initialize clients
   const supabase = createClient(supabaseUrl, supabaseKey);
-  const genAI = new GoogleGenerativeAI(googleKey);
-  const embeddingModel = genAI.getGenerativeModel({ model: 'text-embedding-004' });
+  const genAI = new GoogleGenAI({ apiKey: googleKey });
   
   // Load FAQ data
   const faqPath = path.resolve(__dirname, FAQ_FILE_PATH);
@@ -88,7 +87,7 @@ async function main() {
   
   // Clear existing data (optional - comment out to append)
   console.log('Clearing existing knowledge base...');
-  await supabase.schema(SCHEMA_NAME).from('knowledge_base').delete().neq('id', '00000000-0000-0000-0000-000000000000');
+  // await supabase.schema(SCHEMA_NAME).from('knowledge_base').delete().neq('id', '00000000-0000-0000-0000-000000000000');
   
   // Process each category
   let processed = 0;
@@ -106,8 +105,13 @@ async function main() {
         batch.map(async (article) => {
           const textToEmbed = `${article.title} ${article.enrichment.summary}`;
           try {
-            const result = await embeddingModel.embedContent(textToEmbed);
-            return result.embedding.values;
+            const result = await genAI.models.embedContent({
+              model: 'gemini-embedding-001',
+              contents: textToEmbed,
+              config: { outputDimensionality: 768, taskType: 'RETRIEVAL_DOCUMENT' }
+            });
+            console.log('---->', result.embeddings?.[0]?.values?.length);
+            return result.embeddings?.[0]?.values;
           } catch (err) {
             console.error(`Failed to generate embedding for: ${article.title}`, err);
             return null;
@@ -133,7 +137,7 @@ async function main() {
       
       if (rows.length > 0) {
         const { error } = await supabase
-          .schema(SCHEMA_NAME)
+          // .schema(SCHEMA_NAME)
           .from('knowledge_base')
           .insert(rows);
         
