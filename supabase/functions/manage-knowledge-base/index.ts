@@ -37,7 +37,7 @@ serve(async (req) => {
   try {
     const supabase = createSupabaseClient();
     const url = new URL(req.url);
-    const schemaName = url.searchParams.get('schema') || 'client_tag_markets';
+    const schemaName = url.searchParams.get('schema') || 'public';
     const table = 'knowledge_base';
 
     // GET: List entries or fetch single entry
