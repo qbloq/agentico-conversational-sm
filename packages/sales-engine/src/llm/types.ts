@@ -72,8 +72,12 @@ export interface LLMProvider {
   generateResponse(request: LLMRequest): Promise<LLMResponse>;
 }
 
+export interface EmbeddingOptions {
+  taskType?: string;
+}
+
 export interface EmbeddingProvider {
-  generateEmbedding(text: string): Promise<number[]>;
+  generateEmbedding(text: string, options?: EmbeddingOptions): Promise<number[]>;
   readonly dimensions: number;
 }
 

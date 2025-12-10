@@ -18,10 +18,9 @@ export const MODEL_PRICING: Record<string, ModelPricing> = {
   // Google Gemini
   'gemini-2.0-flash': { promptPer1M: 0.10, completionPer1M: 0.40 },
   'gemini-2.0-flash-lite': { promptPer1M: 0.075, completionPer1M: 0.30 },
-  'gemini-1.5-flash': { promptPer1M: 0.075, completionPer1M: 0.30 },
-  'gemini-1.5-pro': { promptPer1M: 1.25, completionPer1M: 5.00 },
-  'gemini-2.5-flash': { promptPer1M: 0.15, completionPer1M: 0.60 },
-  'gemini-2.5-flash-lite': { promptPer1M: 0.075, completionPer1M: 0.30 },
+  'gemini-2.5-flash': { promptPer1M: 0.30, completionPer1M: 2.50 },
+  'gemini-2.5-flash-lite': { promptPer1M: 0.10, completionPer1M: 0.40 },
+  'gemini-3-pro-preview': { promptPer1M: 2, completionPer1M: 12 },
   
   // Anthropic Claude
   'claude-sonnet-4-20250514': { promptPer1M: 3.00, completionPer1M: 15.00 },
@@ -37,6 +36,7 @@ export const MODEL_PRICING: Record<string, ModelPricing> = {
   'text-embedding-3-small': { promptPer1M: 0.02, completionPer1M: 0 },
   'text-embedding-3-large': { promptPer1M: 0.13, completionPer1M: 0 },
   'text-embedding-004': { promptPer1M: 0.00, completionPer1M: 0 }, // Gemini embeddings are free
+  'gemini-embedding-001': { promptPer1M: 0.15, completionPer1M: 0 }, // Gemini embeddings are free
 };
 
 /**

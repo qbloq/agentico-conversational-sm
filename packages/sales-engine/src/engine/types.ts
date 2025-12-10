@@ -390,7 +390,7 @@ export interface LLMResponse {
 }
 
 export interface EmbeddingProvider {
-  generateEmbedding(text: string): Promise<number[]>;
+  generateEmbedding(text: string, options?: { taskType?: string }): Promise<number[]>;
   readonly dimensions: number;
 }
 

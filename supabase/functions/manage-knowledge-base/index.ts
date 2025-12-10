@@ -313,7 +313,7 @@ async function generateEmbedding(title: string, summary: string): Promise<number
     });
 
     const textToEmbed = `${title} ${summary}`.slice(0, 2000); // Limit length
-    const embedding = await embeddingProvider.generateEmbedding(textToEmbed);
+    const embedding = await embeddingProvider.generateEmbedding(textToEmbed, { taskType: 'RETRIEVAL_QUERY' });
     
     return embedding;
   } catch (error) {

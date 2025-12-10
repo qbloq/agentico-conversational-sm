@@ -25,6 +25,7 @@ import type { StructuredLLMResponse } from '../llm/types.js';
 import { calculateCost } from '../llm/pricing.js';
 
 import { buildSystemPrompt } from '../prompts/templates.js';
+import { TaskType } from '@google/generative-ai';
 
 /**
  * Conversation Engine interface
@@ -233,7 +234,7 @@ export function createConversationEngine(): ConversationEngine {
       
       // Generate embedding with logging
       const embeddingStartTime = Date.now();
-      const embedding = await embeddingProvider.generateEmbedding(messageText);
+      const embedding = await embeddingProvider.generateEmbedding(messageText, { taskType: 'RETRIEVAL_QUERY' });
       
       console.log('Embedding:', embedding);
       const embeddingLatency = Date.now() - embeddingStartTime;
@@ -246,11 +247,11 @@ export function createConversationEngine(): ConversationEngine {
           sessionId: session.id,
           requestType: 'embedding',
           provider: 'gemini', // TODO: get from embeddingProvider.name if available
-          model: 'text-embedding-004',
+          model: 'gemini-embedding-001',
           promptTokens: embeddingTokens,
           completionTokens: 0,
           totalTokens: embeddingTokens,
-          costUsd: calculateCost('text-embedding-004', embeddingTokens, 0),
+          costUsd: calculateCost('gemini-embedding-001', embeddingTokens, 0),
           inputPreview: messageText,
           latencyMs: embeddingLatency,
           finishReason: 'stop',

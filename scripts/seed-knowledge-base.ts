@@ -103,7 +103,8 @@ async function main() {
       // Generate embeddings for batch
       const embeddings = await Promise.all(
         batch.map(async (article) => {
-          const textToEmbed = `${article.title} ${article.enrichment.summary}`;
+          // const textToEmbed = `${article.title} ${article.enrichment.summary}`;
+          const textToEmbed = `${article.title} ${article.answer}`;
           try {
             const result = await genAI.models.embedContent({
               model: 'gemini-embedding-001',

@@ -133,19 +133,19 @@ function mapFinishReason(reason?: string): LLMResponse['finishReason'] {
  * Gemini embedding provider
  */
 export function createGeminiEmbeddingProvider(config: { apiKey: string }): {
-  generateEmbedding: (text: string) => Promise<number[]>;
+  generateEmbedding: (text: string, options?: { taskType?: string }) => Promise<number[]>;
   dimensions: number;
 } {
   
   return {
     dimensions: 1536, // Gemini embedding dimension
     
-    async generateEmbedding(text: string): Promise<number[]> {
+    async generateEmbedding(text: string, options?: { taskType?: string }): Promise<number[]> {
       const genAI = new GoogleGenAI({ apiKey: config.apiKey });
       const result = await genAI.models.embedContent({ 
         model: 'gemini-embedding-001',
         contents: text,
-        config: { outputDimensionality: 768 },
+        config: { outputDimensionality: 768, taskType: options?.taskType },
       });
       
       return result.embeddings?.[0].values || [];
