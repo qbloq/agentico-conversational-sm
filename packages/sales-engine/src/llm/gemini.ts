@@ -136,29 +136,16 @@ export function createGeminiEmbeddingProvider(config: { apiKey: string }): {
   generateEmbedding: (text: string) => Promise<number[]>;
   dimensions: number;
 } {
-  let GoogleGenerativeAI: typeof import('@google/generative-ai').GoogleGenerativeAI;
   
   return {
     dimensions: 1536, // Gemini embedding dimension
     
     async generateEmbedding(text: string): Promise<number[]> {
-      if (!GoogleGenerativeAI) {
-        try {
-          const module = await import('@google/generative-ai');
-          GoogleGenerativeAI = module.GoogleGenerativeAI;
-        } catch {
-          throw new Error(
-            'Gemini embedding provider requires @google/generative-ai package. ' +
-            'Install it with: pnpm add @google/generative-ai'
-          );
-        }
-      }
-      
       const genAI = new GoogleGenAI({ apiKey: config.apiKey });
       const result = await genAI.models.embedContent({ 
-        model: 'text-embedding-004',
+        model: 'gemini-embedding-001',
         contents: text,
-        config: { outputDimensionality: 1536 },
+        config: { outputDimensionality: 768 },
       });
       
       return result.embeddings?.[0].values || [];
