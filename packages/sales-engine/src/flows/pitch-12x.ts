@@ -32,15 +32,26 @@ Puedes operar Swing, Intradía, Scalping, Noticias o Bots, sin limitaciones.`,
     {
       type: 'text',
       content: 
-`1. No debes pasar ningún examen o prueba, la cuenta se entrega de inmediato.
-2. Puedes retirar ganancias desde 1$ dólar en adelante, todos los días.`,
+`*Recalcar que:*
+1. No debes pasar ningún examen o prueba, la cuenta se entrega de inmediato y lista para operar
+2. Puedes retirar ganancias todos los días, desde el primer día
+3. No hay reparto de ganancias, te quedas con el 100% de tus profits`,
       delayMs: 4000
     },
     {
       type: 'text',
-      content: `**Drawdown**
-El drawdown de la cuenta es estático (no crece con el balance).
-La única regla es no perder más del 10% del monto inicial.`,
+      content: `*Drawdown*
+El drawdown de la cuenta es estático, es decir:
+
+No crece conforme aumenta el balance de tu capital.
+
+Si tu cuenta de ejemplo 6.000$ pasa a 9.000$ y pierdes 3.000$ no traspasarías la regla.
+
+Si el balance de la cuenta apalancada no va por debajo de los 5.400$ no hay ningún inconveniente.
+
+También recalcar que con las mismas ganancias generadas puedes apalancarlas y unificarlas en una misma cuenta.
+
+Siguiendo el ejemplo de los 3.000$ en profit, podrás aumentar tu cuenta por 36.000$ y quedar con un total de 42.000$ como balance inicial de tu cuenta apalancada.`,
       delayMs: 4000
     },
     {

@@ -87,7 +87,7 @@ async function main() {
   
   // Clear existing data (optional - comment out to append)
   console.log('Clearing existing knowledge base...');
-  // await supabase.schema(SCHEMA_NAME).from('knowledge_base').delete().neq('id', '00000000-0000-0000-0000-000000000000');
+  await supabase.schema(SCHEMA_NAME).from('knowledge_base').delete().neq('id', '00000000-0000-0000-0000-000000000000');
   
   // Process each category
   let processed = 0;
