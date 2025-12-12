@@ -27,7 +27,7 @@ const __dirname = path.dirname(__filename);
 dotenv.config({ path: path.resolve(__dirname, '.env') });
 
 // Configuration
-const SCHEMA_NAME = 'client_tag_markets';
+const SCHEMA_NAME = 'public';
 const FAQ_FILE_PATH = './data/faq-enriched.json';
 const BATCH_SIZE = 10;
 

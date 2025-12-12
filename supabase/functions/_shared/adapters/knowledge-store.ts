@@ -53,9 +53,12 @@ export function createSupabaseKnowledgeStore(
 
       // Use pgvector's cosine similarity search
       // Note: This requires a raw SQL query via RPC or direct query
+      // Format as string for TEXT parameter
+      const embeddingString = `[${embedding.join(',')}]`;
+      
       const { data, error } = await supabase.rpc('match_knowledge', {
         schema_name: 'public',
-        query_embedding: embedding,
+        query_embedding: embeddingString,
         match_count: limit,
       });
       

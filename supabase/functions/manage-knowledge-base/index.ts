@@ -69,36 +69,84 @@ serve(async (req) => {
         const query = url.searchParams.get('query');
         const limit = parseInt(url.searchParams.get('limit') || '5');
 
+        console.log('[DEBUG] Search query:', query);
+        console.log('[DEBUG] Limit:', limit);
+
         if (!query) {
           throw new Error('Missing required parameter: query');
         }
 
         // Generate embedding for the search query
         const queryEmbedding = await generateEmbedding(query, '');
+        console.log(JSON.stringify(queryEmbedding));
+
 
         if (!queryEmbedding) {
           throw new Error('Failed to generate embedding for search query');
         }
 
         // Use the match_knowledge RPC for vector similarity search
-        const { data, error } = await supabase.rpc('match_knowledge', {
-          schema_name: schemaName,
-          query_embedding: queryEmbedding,
-          match_count: limit,
-        });
-
-        if (error) {
-          console.error('Vector search failed:', error);
-          throw new Error(`Vector search failed: ${error.message}`);
+        console.log('[DEBUG] Query embedding length:', queryEmbedding.length);
+        console.log('[DEBUG] First 5 values:', queryEmbedding.slice(0, 5));
+        
+        // Format as string for TEXT parameter
+        const embeddingString = `[${queryEmbedding.join(',')}]`;
+        console.log('[DEBUG] Embedding string length:', embeddingString.length);
+        
+        // Try direct query using sql template (bypass RPC issues)
+        const { data: rawData, error: rawError } = await supabase
+          .from('knowledge_base')
+          .select('id, title, answer, url, category, semantic_tags, key_concepts, related_entities, summary, related_articles, priority, embedding')
+          .eq('is_active', true)
+          .not('embedding', 'is', null)
+          .limit(200);  // Get more to do local similarity calculation
+        
+        if (rawError) {
+          console.error('[DEBUG] Raw query error:', JSON.stringify(rawError));
+          throw new Error(`Query failed: ${rawError.message}`);
         }
+        
+        console.log('[DEBUG] Raw query returned:', rawData?.length, 'entries');
+        
+        // Calculate cosine similarity manually
+        const queryVector = queryEmbedding;
+        const resultsWithSim = (rawData || [])
+          .map((row: any) => {
+            // Parse the embedding if it's a string
+            let docVector: number[];
+            if (typeof row.embedding === 'string') {
+              // Parse pgvector format: "[0.1,0.2,...]"
+              docVector = JSON.parse(row.embedding);
+            } else if (Array.isArray(row.embedding)) {
+              docVector = row.embedding;
+            } else {
+              return null;
+            }
+            
+            // Calculate cosine similarity
+            let dotProduct = 0;
+            let normA = 0;
+            let normB = 0;
+            for (let i = 0; i < queryVector.length; i++) {
+              dotProduct += queryVector[i] * docVector[i];
+              normA += queryVector[i] * queryVector[i];
+              normB += docVector[i] * docVector[i];
+            }
+            const similarity = dotProduct / (Math.sqrt(normA) * Math.sqrt(normB));
+            
+            return {
+              ...transformRow(row),
+              similarity,
+            };
+          })
+          .filter((r: any) => r !== null)
+          .sort((a: any, b: any) => b.similarity - a.similarity)
+          .slice(0, limit);
+        
+        console.log('[DEBUG] Results with similarity:', resultsWithSim.length);
+        console.log('[DEBUG] Top result:', resultsWithSim[0]?.title, 'similarity:', resultsWithSim[0]?.similarity);
 
-        // Transform results to include similarity score
-        const results = (data || []).map((row: any) => ({
-          ...transformRow(row),
-          similarity: row.similarity,
-        }));
-
-        return new Response(JSON.stringify({ results, query }), {
+        return new Response(JSON.stringify({ results: resultsWithSim, query }), {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' }
         });
       }

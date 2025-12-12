@@ -12,7 +12,7 @@ export function generatePitch12xResponses(session: Session): EngineOutput {
   const responses: BotResponse[] = [
     {
       type: 'text',
-      content: `Las Cuentas Apalancadas X12, son cuentas que te permiten operar con un capital mayor al que depositas.
+      content: `Te explico cómo funcionan:\n\nLas Cuentas Apalancadas X12, son cuentas que te permiten operar con un capital mayor al que depositas.
 
 Por ejemplo, si depositas $500 en una cuenta apalancada, podrás operar con $6,000. Es importante no perder más del 10% del balance de la cuenta apalancada para evitar el cierre de la misma.
 
@@ -40,23 +40,7 @@ Puedes operar Swing, Intradía, Scalping, Noticias o Bots, sin limitaciones.`,
     },
     {
       type: 'text',
-      content: `*Drawdown*
-El drawdown de la cuenta es estático, es decir:
-
-No crece conforme aumenta el balance de tu capital.
-
-Si tu cuenta de ejemplo 6.000$ pasa a 9.000$ y pierdes 3.000$ no traspasarías la regla.
-
-Si el balance de la cuenta apalancada no va por debajo de los 5.400$ no hay ningún inconveniente.
-
-También recalcar que con las mismas ganancias generadas puedes apalancarlas y unificarlas en una misma cuenta.
-
-Siguiendo el ejemplo de los 3.000$ en profit, podrás aumentar tu cuenta por 36.000$ y quedar con un total de 42.000$ como balance inicial de tu cuenta apalancada.`,
-      delayMs: 4000
-    },
-    {
-      type: 'text',
-      content: `¿Quieres registrarte y hacer tu primer depósito? Si tienes alguna inquietud, no dudes en preguntarme.`,
+      content: `Si tienes alguna inquietud, no dudes en preguntarme.`,
       delayMs: 4000
     }
   ];
