@@ -17,6 +17,7 @@ import type {
   KnowledgeEntry,
   ConversationState,
   ConversationExample,
+  SessionKey,
 } from './types.js';
 
 import { generatePitch12xResponses } from '../flows/pitch-12x.js';
@@ -25,12 +26,42 @@ import type { StructuredLLMResponse } from '../llm/types.js';
 import { calculateCost } from '../llm/pricing.js';
 
 import { buildSystemPrompt } from '../prompts/templates.js';
-import { TaskType } from '@google/generative-ai';
+
+/**
+ * Result of ingesting a message (debounce)
+ */
+export interface IngestResult {
+  /** Whether the message was buffered (true) or processed immediately (false) */
+  buffered: boolean;
+  /** Hash of the session key (for tracking) */
+  sessionKeyHash: string;
+  /** When the message is scheduled to be processed */
+  scheduledProcessAt: Date;
+}
 
 /**
  * Conversation Engine interface
  */
 export interface ConversationEngine {
+  /**
+   * Ingest a message (buffered if debounce enabled)
+   * Returns immediately - no LLM call unless debounce is disabled
+   */
+  ingestMessage(input: EngineInput): Promise<IngestResult>;
+  
+  /**
+   * Process buffered messages for a session (called by worker)
+   * This is where the LLM call happens
+   */
+  processPendingMessages(
+    sessionKeyHash: string,
+    deps: EngineDependencies
+  ): Promise<EngineOutput>;
+  
+  /**
+   * Direct message processing (skips debounce)
+   * Kept for backwards compatibility, simulation, and testing
+   */
   processMessage(input: EngineInput): Promise<EngineOutput>;
 }
 
@@ -104,7 +135,9 @@ export function createConversationEngine(): ConversationEngine {
         if (hoursSinceLastMessage >= 1) {
           session.isEscalated = false;
           session.status = 'active';
-          resumeUpdates = { isEscalated: false, status: 'active' };
+          session.escalationReason = undefined;
+          session.escalatedTo = undefined;
+          resumeUpdates = { isEscalated: false, status: 'active', escalationReason: undefined, escalatedTo: undefined };
         } else {
           // Still escalated - don't process
           // But we SHOULD save the message so history is complete
@@ -173,7 +206,7 @@ export function createConversationEngine(): ConversationEngine {
         }
       }
 
-      console.log('State machine config:\n\n', smConfig);
+      // console.log('State machine config:\n\n', smConfig);
       const stateMachine = StateMachine.fromSession(session, smConfig);
       const stateConfig = stateMachine.getConfig();
       
@@ -235,8 +268,7 @@ export function createConversationEngine(): ConversationEngine {
       // Generate embedding with logging
       const embeddingStartTime = Date.now();
       const embedding = await embeddingProvider.generateEmbedding(messageText, { taskType: 'RETRIEVAL_QUERY' });
-      
-      console.log('Embedding:', embedding);
+
       const embeddingLatency = Date.now() - embeddingStartTime;
       
       // Log embedding call (fire and forget)
@@ -257,8 +289,7 @@ export function createConversationEngine(): ConversationEngine {
           finishReason: 'stop',
         }).catch(err => console.error('[LLM Logger] Embedding log failed:', err));
       }
-      
-      console.log('stateConfig:\n', stateConfig);
+
       const relevantKnowledge = await retrieveKnowledge(
         knowledgeStore,
         embedding,
@@ -273,14 +304,6 @@ export function createConversationEngine(): ConversationEngine {
           stateConfig.state,
           embedding
         );
-        
-        // Filter out examples that use obsolete states (like 'qualifying')
-        // to prevent LLM from hallucinating invalid transitions
-        relevantExamples = relevantExamples.filter(ex => {
-          const hasObsoleteState = ex.stateFlow.includes('qualifying' as any) || 
-                                  ex.messages.some(m => m.state === 'qualifying' as any);
-          return !hasObsoleteState;
-        });
       }
 
       console.log(`[State] Current: ${stateConfig.state}`);
@@ -450,7 +473,143 @@ export function createConversationEngine(): ConversationEngine {
         transitionReason: structuredResponse.transition?.reason,
       };
     },
+    
+    /**
+     * Ingest a message with optional debounce buffering
+     * If debounce is enabled, buffers the message and returns immediately
+     * If debounce is disabled or fails, falls back to immediate processing
+     */
+    async ingestMessage(input: EngineInput): Promise<IngestResult> {
+      const { sessionKey, message, deps } = input;
+      const { messageBufferStore, clientConfig } = deps;
+      
+      // If debounce not enabled or no buffer store, process immediately
+      if (!clientConfig.debounce?.enabled || !messageBufferStore) {
+        console.log(`[Debounce] Defer disabled or no buffer store, processing immediately`);
+        await this.processMessage(input);
+        return { 
+          buffered: false, 
+          sessionKeyHash: '', 
+          scheduledProcessAt: new Date() 
+        };
+      }
+      
+      // Try to buffer the message (with graceful degradation)
+      try {
+        const debounceMs = clientConfig.debounce.delayMs || 3000;
+        const sessionKeyHash = hashSessionKey(sessionKey);
+        
+        await messageBufferStore.add(sessionKey, message, debounceMs);
+        
+        console.log(`[Debounce] Message buffered for ${sessionKey.channelUserId}, scheduled in ${debounceMs}ms`);
+        
+        return {
+          buffered: true,
+          sessionKeyHash,
+          scheduledProcessAt: new Date(Date.now() + debounceMs),
+        };
+      } catch (error) {
+        // Graceful degradation: if buffering fails, process immediately
+        console.error('[Debounce] Buffer failed, processing immediately:', error);
+        await this.processMessage(input);
+        return { 
+          buffered: false, 
+          sessionKeyHash: '', 
+          scheduledProcessAt: new Date() 
+        };
+      }
+    },
+    
+    /**
+     * Process all pending messages for a session (called by worker)
+     * Merges buffered messages and makes a single LLM call
+     */
+    async processPendingMessages(
+      sessionKeyHash: string,
+      deps: EngineDependencies
+    ): Promise<EngineOutput> {
+      const { messageBufferStore } = deps;
+      
+      if (!messageBufferStore) {
+        console.warn('[Debounce] processPendingMessages called without messageBufferStore');
+        return { sessionId: '', responses: [] };
+      }
+      
+      // 1. Try to claim the session (prevent double processing)
+      const claimed = await messageBufferStore.claimSession(sessionKeyHash);
+      if (!claimed) {
+        console.log(`[Debounce] Session ${sessionKeyHash.slice(0, 8)}... already being processed`);
+        return { sessionId: '', responses: [] };
+      }
+      
+      // 2. Get all pending messages for this session
+      const pending = await messageBufferStore.getBySession(sessionKeyHash);
+      if (pending.length === 0) {
+        console.log(`[Debounce] No pending messages for ${sessionKeyHash.slice(0, 8)}...`);
+        return { sessionId: '', responses: [] };
+      }
+      
+      console.log(`[Debounce] Processing ${pending.length} buffered messages for ${sessionKeyHash.slice(0, 8)}...`);
+      
+      // 3. Sort by receivedAt and merge content
+      const sorted = pending.sort((a, b) => 
+        a.receivedAt.getTime() - b.receivedAt.getTime()
+      );
+      
+      const mergedContent = sorted
+        .map(p => p.message.content || p.message.transcription || '')
+        .filter(Boolean)
+        .join('\n');
+      
+      // 4. Use the latest message for metadata, but merged content
+      const latestMessage = sorted[sorted.length - 1];
+      const mergedMessage: NormalizedMessage = {
+        ...latestMessage.message,
+        content: mergedContent,
+      };
+      
+      try {
+        // 5. Process the merged message through existing engine logic
+        const result = await this.processMessage({
+          sessionKey: sorted[0].sessionKey,
+          message: mergedMessage,
+          deps,
+        });
+        
+        // 6. Success! Delete processed messages from buffer
+        await messageBufferStore.deleteByIds(pending.map(p => p.id));
+        
+        console.log(`[Debounce] Successfully processed and cleaned up ${pending.length} messages`);
+        
+        return result;
+        
+      } catch (error) {
+        // Processing failed - mark for retry, don't delete
+        const errorMsg = error instanceof Error ? error.message : String(error);
+        console.error(`[Debounce] Processing failed for ${sessionKeyHash.slice(0, 8)}...:`, errorMsg);
+        
+        await messageBufferStore.markForRetry(sessionKeyHash, errorMsg);
+        
+        // Re-throw so caller knows it failed
+        throw error;
+      }
+    },
   };
+}
+
+/**
+ * Hash a session key for use as a unique identifier
+ */
+function hashSessionKey(key: SessionKey): string {
+  // Simple hash for Deno/browser compatibility (no crypto.createHash)
+  const str = `${key.channelType}:${key.channelId}:${key.channelUserId}`;
+  let hash = 0;
+  for (let i = 0; i < str.length; i++) {
+    const char = str.charCodeAt(i);
+    hash = ((hash << 5) - hash) + char;
+    hash = hash & hash; // Convert to 32-bit integer
+  }
+  return Math.abs(hash).toString(16).padStart(8, '0');
 }
 
 // =============================================================================
@@ -724,7 +883,7 @@ function generateClosingResponse(session: Session): EngineOutput {
     sessionId: session.id,
     responses: [{
       type: 'text',
-      content: `¡Excelente decisión! 🚀\n\nEstaré aquí contigo durante todo el proceso. Si tienes alguna duda al llenar el formulario o realizar el depósito, solo pregúntame.\n\nUna vez que hayas completado el registro, pásame tu correo electrónico para verificar que todo esté en orden.`,
+      content: `Excelente, lo primero es hacer el registro. 🚀\n\nEstaré aquí contigo durante todo el proceso. Si tienes alguna duda al llenar el formulario o realizar el depósito, solo pregúntame.\n\nUna vez que hayas completado el registro, pásame tu correo electrónico para verificar que todo esté en orden.`,
       delayMs: 1000
     },{
       type: 'text',

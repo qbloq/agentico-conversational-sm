@@ -76,6 +76,10 @@ async function loadClientConfig(
           appSecret: Deno.env.get('TAG_WHATSAPP_APP_SECRET') || '',
         },
       },
+      debounce: {
+        enabled: true,
+        delayMs: 3000,
+      },
       llm: {
         provider: 'gemini',
         model: 'gemini-2.5-flash',
@@ -96,6 +100,55 @@ async function loadClientConfig(
   };
   
   return configs[clientId] || null;
+}
+
+/**
+ * Get all client configurations
+ * Used by process-pending worker to iterate over all clients
+ */
+export function getAllClientConfigs(): Array<{ clientId: string; schemaName: string; config: ClientConfig }> {
+  // Same hardcoded configs as loadClientConfig
+  // In production, this would query from database
+  const configs: ClientConfig[] = [
+    {
+      clientId: 'tag_markets',
+      schemaName: 'client_tag_markets',
+      storageBucket: 'media-tag-markets',
+      channels: {
+        whatsapp: {
+          phoneNumberId: Deno.env.get('TAG_WHATSAPP_PHONE_NUMBER_ID') || '',
+          accessToken: Deno.env.get('TAG_WHATSAPP_ACCESS_TOKEN') || '',
+          appSecret: Deno.env.get('TAG_WHATSAPP_APP_SECRET') || '',
+        },
+      },
+      debounce: {
+        enabled: true,
+        delayMs: 3000,
+      },
+      llm: {
+        provider: 'gemini',
+        model: 'gemini-2.5-flash',
+        fallbackProvider: 'anthropic',
+        fallbackModel: 'claude-sonnet-4-20250514',
+      },
+      escalation: {
+        enabled: true,
+        notifyWhatsApp: Deno.env.get('TAG_ESCALATION_WHATSAPP'),
+      },
+      business: {
+        name: 'TAG Markets',
+        description: 'Broker de trading con cuentas amplificadas 12x.',
+        language: 'es',
+        timezone: 'America/Bogota',
+      },
+    },
+  ];
+  
+  return configs.map(c => ({
+    clientId: c.clientId,
+    schemaName: c.schemaName,
+    config: c,
+  }));
 }
 
 /**

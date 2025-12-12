@@ -16,6 +16,7 @@ import {
   createSupabaseExampleStore,
   createSupabaseLLMLogger,
   createSupabaseStateMachineStore,
+  createSupabaseMessageBufferStore,
 } from '../_shared/adapters/index.ts';
 import { createConversationEngine } from '../_shared/sales-engine.bundle.ts';
 import { createGeminiProvider, createGeminiEmbeddingProvider } from '../_shared/sales-engine-llm.bundle.ts';
@@ -198,7 +199,7 @@ async function processMessage(
   contact?: WhatsAppContact
 ): Promise<void> {
   console.log(`Processing message from ${message.from}: ${message.type}`);
-  
+  console.log(clientConfig);
   // Create conversation engine
   const engine = createConversationEngine();
 
@@ -250,7 +251,50 @@ async function processMessage(
     clientConfig.channels.whatsapp?.accessToken || ''
   );
   
-  // Process through engine
+  // Check if debounce is enabled for this client
+  const debounceEnabled = clientConfig.debounce?.enabled && clientConfig.debounce?.delayMs > 0;
+  
+  // Command messages (starting with /) bypass debounce and are processed immediately
+  const messageContent = normalizedMessage.content || '';
+  const isCommandMessage = messageContent.startsWith('/');
+  
+  if (debounceEnabled && !isCommandMessage) {
+    // Debounce flow: buffer the message, worker will process later
+    const messageBufferStore = createSupabaseMessageBufferStore(supabase, schemaName);
+    
+    const ingestResult = await engine.ingestMessage({
+      sessionKey: {
+        channelType: 'whatsapp' as ChannelType,
+        channelId: phoneNumberId,
+        channelUserId: message.from,
+      },
+      message: normalizedMessage,
+      deps: {
+        contactStore,
+        sessionStore,
+        messageStore,
+        knowledgeStore,
+        exampleStore,
+        stateMachineStore,
+        messageBufferStore,
+        llmProvider,
+        embeddingProvider,
+        mediaService,
+        notificationService,
+        llmLogger,
+        clientConfig,
+      },
+    });
+    
+    if (ingestResult.buffered) {
+      console.log(`[Debounce] Message buffered for ${message.from}, will process at ${ingestResult.scheduledProcessAt.toISOString()}`);
+      return;
+    }
+    // If buffering failed (graceful degradation), fall through to immediate processing
+    console.log(`[Debounce] Buffering failed, processing immediately for ${message.from}`);
+  }
+  
+  // Non-debounce flow (or fallback): process immediately and send response
   const result = await engine.processMessage({
     sessionKey: {
       channelType: 'whatsapp' as ChannelType,
@@ -274,16 +318,9 @@ async function processMessage(
     },
   });
   
-  // Apply session updates (CRITICAL for state persistence)
-  // DEPRECATED: Engine now handles persistence internally. 
-  // Kept commented out for reference or emergency rollback.
-  // if (result.sessionUpdates && Object.keys(result.sessionUpdates).length > 0) {
-  //   await sessionStore.update(result.sessionId, result.sessionUpdates);
-  // }
-  
   // Send responses
   for (const response of result.responses) {
-    // Safely check for delayMs using type guard
+    // Handle delay if specified
     if ('delayMs' in response && typeof (response as any).delayMs === 'number') {
       const delay = (response as any).delayMs;
       if (delay > 0) {
@@ -296,7 +333,6 @@ async function processMessage(
       message.from,
       response.content,
       clientConfig.channels.whatsapp?.accessToken || '',
-      // Safely check for metadata
       'metadata' in response ? (response as any).metadata : undefined
     );
   }

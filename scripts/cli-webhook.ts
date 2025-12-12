@@ -91,7 +91,10 @@ function startChat() {
   console.log('\n💬 WhatsApp Simulator Started');
   console.log('---------------------------');
   console.log(`Sending to: ${WEBHOOK_URL}`);
-  console.log('Type a message and press Enter. Type "exit" to quit.\n');
+  console.log('Commands:');
+  console.log('  /reset  - Reset user data');
+  console.log('  /flush  - Trigger process-pending worker (for debounce testing)');
+  console.log('  exit    - Quit\n');
   
   rl.prompt();
   
@@ -107,11 +110,50 @@ function startChat() {
       return;
     }
     
+    // Handle /flush command - trigger the process-pending worker
+    if (input === '/flush') {
+      await triggerProcessPending();
+      rl.prompt();
+      return;
+    }
+    
     await sendWebhook(input);
     // prompt is called after we receive the bot response ideally, but async flow makes it tricky.
     // We'll prompt immediately for now.
     // rl.prompt(); // Moved inside sendWebhook to simulate delay/flow
   });
+}
+
+/**
+ * Trigger the process-pending Edge Function to flush buffered messages
+ */
+async function triggerProcessPending() {
+  const PROCESS_PENDING_URL = 'http://127.0.0.1:54321/functions/v1/process-pending';
+  const authKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY;
+  
+  console.log('⏳ Triggering process-pending worker...');
+  
+  try {
+    const response = await fetch(PROCESS_PENDING_URL, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${authKey}`
+      },
+      body: JSON.stringify({ source: 'cli-flush' }),
+    });
+    
+    if (response.ok) {
+      const result = await response.json();
+      console.log(`✅ Worker completed: ${result.sessionsProcessed || 0} sessions, ${result.messagesProcessed || 0} messages`);
+    } else {
+      console.error(`❌ Worker Error: ${response.status} ${response.statusText}`);
+      const errText = await response.text();
+      console.error(errText);
+    }
+  } catch (error) {
+    console.error('❌ Network Error:', error);
+  }
 }
 
 async function sendWebhook(text: string) {

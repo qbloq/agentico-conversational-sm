@@ -262,6 +262,7 @@ export interface EngineDependencies {
   sessionStore: SessionStore;
   messageStore: MessageStore;
   stateMachineStore?: StateMachineStore;
+  messageBufferStore?: MessageBufferStore;
   
   // AI services
   llmProvider: LLMProvider;
@@ -346,6 +347,65 @@ export interface KnowledgeStore {
 export interface StateMachineStore {
   findByName(name: string, version?: string): Promise<Record<ConversationState, any> | null>;
   findActive(name: string): Promise<Record<ConversationState, any> | null>;
+}
+
+/**
+ * Pending message in the buffer (waiting for debounce)
+ */
+export interface PendingMessage {
+  id: string;
+  sessionKeyHash: string;
+  sessionKey: SessionKey;
+  message: NormalizedMessage;
+  receivedAt: Date;
+  scheduledProcessAt: Date;
+  retryCount?: number;
+  lastError?: string;
+  processingStartedAt?: Date;
+}
+
+/**
+ * Message buffer store for debouncing
+ * Implementations: Supabase (Edge Functions), In-Memory (tests/Node.js)
+ */
+export interface MessageBufferStore {
+  /**
+   * Add a message to the buffer
+   * Should update scheduledProcessAt for all pending messages in this session
+   */
+  add(sessionKey: SessionKey, message: NormalizedMessage, debounceMs: number): Promise<void>;
+  
+  /**
+   * Get all sessions that have matured (scheduledProcessAt <= now)
+   * Returns sessionKeyHashes, excludes already-processing and max-retry messages
+   */
+  getMatureSessions(): Promise<string[]>;
+  
+  /**
+   * Claim messages for processing (sets processingStartedAt lock)
+   * Returns false if already claimed by another worker
+   */
+  claimSession(sessionKeyHash: string): Promise<boolean>;
+  
+  /**
+   * Get all pending messages for a session, ordered by receivedAt
+   */
+  getBySession(sessionKeyHash: string): Promise<PendingMessage[]>;
+  
+  /**
+   * Delete processed messages
+   */
+  deleteByIds(ids: string[]): Promise<void>;
+  
+  /**
+   * Mark messages for retry (clears lock, increments retry count)
+   */
+  markForRetry(sessionKeyHash: string, error: string): Promise<void>;
+  
+  /**
+   * Check if there are any pending messages (for self-invoke decision)
+   */
+  hasPendingMessages(): Promise<boolean>;
 }
 
 export interface KnowledgeEntry {
@@ -465,6 +525,12 @@ export interface ClientConfig {
     description: string;
     language: string;
     timezone: string;
+  };
+  
+  // Debounce settings (optional)
+  debounce?: {
+    enabled: boolean;
+    delayMs: number;  // Default: 3000
   };
 }
 

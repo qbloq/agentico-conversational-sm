@@ -45,8 +45,10 @@ export type {
   SessionStore,
   MessageStore,
   StateMachineStore,
+  MessageBufferStore,
   KnowledgeStore,
   KnowledgeEntry,
+  PendingMessage,
   
   // LLM Interfaces
   LLMProvider,
@@ -71,7 +73,7 @@ export type {
 // =============================================================================
 
 export { createConversationEngine } from './engine/conversation.js';
-export type { ConversationEngine } from './engine/conversation.js';
+export type { ConversationEngine, IngestResult } from './engine/conversation.js';
 
 // =============================================================================
 // State Machine
