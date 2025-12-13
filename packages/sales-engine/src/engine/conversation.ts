@@ -189,7 +189,7 @@ export function createConversationEngine(): ConversationEngine {
       });
       
       // 5. Get conversation history
-      const recentMessages = await messageStore.getRecent(session.id, 10);
+      const recentMessages = await messageStore.getRecent(session.id, 20);
       
       // 6. Initialize state machine
       let smConfig = undefined;
@@ -322,7 +322,13 @@ export function createConversationEngine(): ConversationEngine {
       //   return generatePitch12xResponses(session);
       // }
 
-      const systemPrompt = buildSystemPrompt({ config: clientConfig, knowledge: relevantKnowledge, transitionContext, examples: relevantExamples });
+      const systemPrompt = buildSystemPrompt({ 
+        config: clientConfig, 
+        knowledge: relevantKnowledge, 
+        transitionContext, 
+        examples: relevantExamples,
+        sessionContext: session.context, // Pass collected user data to prompt
+      });
       const conversationHistory = formatConversationHistory(recentMessages);
       
       // 10. Generate response with structured output
@@ -338,6 +344,8 @@ export function createConversationEngine(): ConversationEngine {
       });
       const llmLatency = Date.now() - llmStartTime;
       
+      // console.log(`[LLM] Response: ${llmResponse.content}`);
+
       // 11. Parse structured response
       const structuredResponse = parseStructuredResponse(llmResponse.content);
       
@@ -439,23 +447,27 @@ export function createConversationEngine(): ConversationEngine {
         // Could trigger soft escalation here in future
       }
       
-      // 13. Create bot response
-      const botResponse: BotResponse = {
-        type: 'text',
-        content: structuredResponse.response,
-        metadata: {
+      // 13. Create bot responses (multi-message support)
+      const responseTexts = structuredResponse.responses || [structuredResponse.response];
+      const botResponses: BotResponse[] = responseTexts.map((text, index) => ({
+        type: 'text' as const,
+        content: text,
+        delayMs: index > 0 ? 800 : 0, // Small delay between messages for natural feel
+        metadata: index === 0 ? {
           tokensUsed: llmResponse.usage.totalTokens,
           state: stateMachine.getState(),
           transition: structuredResponse.transition,
-        },
-      };
+        } : undefined,
+      }));
       
-      // 14. Save outbound message
-      await messageStore.save(session.id, {
-        direction: 'outbound',
-        type: 'text',
-        content: structuredResponse.response,
-      });
+      // 14. Save outbound messages
+      for (const response of botResponses) {
+        await messageStore.save(session.id, {
+          direction: 'outbound',
+          type: 'text',
+          content: response.content,
+        });
+      }
       
       // 15. Consolidate and Save Session Updates
       // We must save the updates before returning so that the simulation/CLI/webhook
@@ -467,7 +479,7 @@ export function createConversationEngine(): ConversationEngine {
       
       return {
         sessionId: session.id,
-        responses: [botResponse],
+        responses: botResponses,
         sessionUpdates: finalUpdates,
         contactUpdates: Object.keys(contactUpdates).length > 0 ? contactUpdates : undefined,
         transitionReason: structuredResponse.transition?.reason,
@@ -755,19 +767,38 @@ async function retrieveExamples(
 function parseStructuredResponse(content: string): StructuredLLMResponse {
   // Try to extract JSON from the response
   const jsonMatch = content.match(/```json\s*([\s\S]*?)\s*```/) || 
-                    content.match(/\{[\s\S]*"response"[\s\S]*\}/);
+                    content.match(/\{[\s\S]*"response[\s\S]*\}/);
   
   if (jsonMatch) {
     try {
       const jsonStr = jsonMatch[1] || jsonMatch[0];
       const parsed = JSON.parse(jsonStr);
       
-      // Validate that response exists and is not empty
+      // Handle new format: responses array (2-4 short messages)
+      if (Array.isArray(parsed.responses) && parsed.responses.length > 0) {
+        // Filter out empty strings and validate
+        const validResponses = parsed.responses.filter((r: any) => typeof r === 'string' && r.trim().length > 0);
+        if (validResponses.length > 0) {
+          return {
+            content: content,
+            response: validResponses.join('\n'), // Backwards compat: join for single response consumers
+            responses: validResponses,           // New format: keep as array
+            transition: parsed.transition,
+            extractedData: parsed.extractedData,
+            isUncertain: parsed.isUncertain,
+            usage: { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
+            finishReason: 'stop',
+          };
+        }
+      }
+      
+      // Fallback: Handle old format with single response string
       const response = parsed.response;
       if (typeof response === 'string' && response.trim().length > 0) {
         return {
           content: content,
           response: response,
+          responses: [response], // Convert to array for new consumers
           transition: parsed.transition,
           extractedData: parsed.extractedData,
           isUncertain: parsed.isUncertain,
@@ -814,6 +845,7 @@ function parseStructuredResponse(content: string): StructuredLLMResponse {
   return {
     content: content,
     response: fallbackResponse,
+    responses: [fallbackResponse], // Wrap in array for new consumers
     usage: { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
     finishReason: 'stop',
   };

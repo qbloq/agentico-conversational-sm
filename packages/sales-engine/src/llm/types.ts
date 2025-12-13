@@ -36,8 +36,11 @@ export interface LLMResponse {
  * Used for conversation engine to get both response and transition decision
  */
 export interface StructuredLLMResponse extends LLMResponse {
-  /** The conversational response to send to the user */
+  /** The conversational response to send to the user (backwards compat) */
   response: string;
+  
+  /** Array of 2-4 short messages to send sequentially */
+  responses?: string[];
   
   /** State transition evaluation */
   transition?: {
