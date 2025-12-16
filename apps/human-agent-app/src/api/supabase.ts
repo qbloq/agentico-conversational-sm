@@ -1,0 +1,15 @@
+/**
+ * Supabase Client for Human Agent WebApp
+ * 
+ * Configured for Realtime subscriptions to receive live message updates.
+ */
+
+import { createClient } from '@supabase/supabase-js';
+
+const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || 'http://127.0.0.1:54321';
+const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
+
+export const supabase = createClient(supabaseUrl, supabaseAnonKey);
+
+// Schema name for client-specific tables
+export const CLIENT_SCHEMA = 'client_tag_markets';

@@ -172,6 +172,49 @@ export function createSupabaseContactStore(
     },
 
     async delete(id: string): Promise<void> {
+      // Get all sessions for this contact (needed for cascade)
+      const { data: sessions } = await supabase
+        .schema(schemaName)
+        .from('sessions')
+        .select('id')
+        .eq('contact_id', id);
+      
+      const sessionIds = sessions?.map(s => s.id) || [];
+      
+      if (sessionIds.length > 0) {
+        // 1. Delete escalations (FK to sessions)
+        await supabase
+          .schema(schemaName)
+          .from('escalations')
+          .delete()
+          .in('session_id', sessionIds);
+        
+        // 2. Delete messages (FK to sessions)
+        await supabase
+          .schema(schemaName)
+          .from('messages')
+          .delete()
+          .in('session_id', sessionIds);
+        
+        // 3. Delete pending_messages (FK to sessions via hash)
+        // This is based on session_key_hash, skip if doesn't exist
+        
+        // 4. Delete sessions
+        await supabase
+          .schema(schemaName)
+          .from('sessions')
+          .delete()
+          .eq('contact_id', id);
+      }
+      
+      // 5. Delete contact identities
+      await supabase
+        .schema(schemaName)
+        .from('contact_identities')
+        .delete()
+        .eq('contact_id', id);
+      
+      // 6. Finally delete the contact
       const { error } = await supabase
         .schema(schemaName)
         .from(contactsTable)

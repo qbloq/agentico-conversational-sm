@@ -13,7 +13,6 @@ import type {
   Contact,
   NormalizedMessage,
   EngineDependencies,
-  EscalationResult,
   KnowledgeEntry,
   ConversationState,
   ConversationExample,
@@ -122,7 +121,22 @@ export function createConversationEngine(): ConversationEngine {
       if (!session) {
         session = await sessionStore.create(sessionKey, contact.id);
       }
-      
+
+            // 3. Check for System Commands (Hidden)
+      const messageText = message.content || message.transcription || '';
+      if (messageText.toLowerCase() === '/reset') {
+        console.log(`[System Command] Resetting data for contact: ${session.contactId}`);
+        await contactStore.delete(session.contactId);
+        return {
+          sessionId: session.id,
+          responses: [{
+            type: 'text',
+            content: '🔄 [SYSTEM] User data reset successfully. All history cleared.',
+          }],
+          // No session updates needed as session is deleted
+        };
+      }
+
       let resumeUpdates: Partial<Session> = {};
 
       // 3. Check escalation status & Resume Logic
@@ -210,57 +224,8 @@ export function createConversationEngine(): ConversationEngine {
       const stateMachine = StateMachine.fromSession(session, smConfig);
       const stateConfig = stateMachine.getConfig();
       
-      // 3. Check for System Commands (Hidden)
-      const messageText = message.content || message.transcription || '';
-      if (messageText.toLowerCase() === '/reset') {
-        console.log(`[System Command] Resetting data for contact: ${session.contactId}`);
-        await contactStore.delete(session.contactId);
-        return {
-          sessionId: session.id,
-          responses: [{
-            type: 'text',
-            content: '🔄 [SYSTEM] User data reset successfully. All history cleared.',
-          }],
-          // No session updates needed as session is deleted
-        };
-      }
-
-      // 3a. Check for Escalation Triggers
-      const escalation = await checkEscalationTriggers(message, session, contact, clientConfig);
-      if (escalation.shouldEscalate) {
-        // Send notification if enabled
-        if (clientConfig.escalation.enabled && clientConfig.escalation.notifyWhatsApp) {
-          try {
-            await notificationService.sendEscalationAlert(
-              clientConfig.escalation.notifyWhatsApp,
-              {
-                reason: escalation.reason,
-                userName: contact.fullName || contact.phone || 'Unknown User',
-                userPhone: contact.phone || sessionKey.channelUserId,
-                summary: (message.content || '').slice(0, 100), // Limit length
-              }
-            );
-          } catch (error) {
-            console.error('Failed to send escalation notification:', error);
-            // Continue returning response to user even if notification fails
-          }
-        }
-
-        const escalationUpdates = {
-          isEscalated: true,
-          escalationReason: escalation.reason,
-          lastMessageAt: new Date(),
-        };
-
-        await sessionStore.update(session.id, escalationUpdates);
-
-        return {
-          sessionId: session.id,
-          responses: [createEscalationResponse(escalation, clientConfig)],
-          sessionUpdates: escalationUpdates,
-          escalation,
-        };
-      }
+      // NOTE: Escalation detection is now handled post-LLM via structuredResponse.escalation
+      // This allows the LLM to make nuanced decisions about when to escalate
       
       // 8. Retrieve relevant knowledge (RAG)
       // messageText is already defined above
@@ -369,7 +334,77 @@ export function createConversationEngine(): ConversationEngine {
         }).catch(err => console.error('[LLM Logger] Chat log failed:', err));
       }
       
-      // 12. Evaluate state transition from LLM recommendation
+      // 12. Check for LLM-recommended escalation
+      if (structuredResponse.escalation?.shouldEscalate) {
+        console.log(`[Escalation] LLM detected escalation: ${structuredResponse.escalation.reason}`);
+        console.log(`[Escalation] Summary: ${structuredResponse.escalation.summary || 'No summary'}`);
+        
+        // Send notification if enabled
+        if (clientConfig.escalation.enabled && clientConfig.escalation.notifyWhatsApp) {
+          try {
+            await notificationService.sendEscalationAlert(
+              clientConfig.escalation.notifyWhatsApp,
+              {
+                reason: structuredResponse.escalation.reason,
+                userName: contact.fullName || contact.phone || 'Unknown User',
+                userPhone: contact.phone || sessionKey.channelUserId,
+                summary: structuredResponse.escalation.summary || messageText.slice(0, 100),
+              }
+            );
+          } catch (error) {
+            console.error('Failed to send escalation notification:', error);
+          }
+        }
+        
+        const escalationUpdates = {
+          isEscalated: true,
+          currentState: 'escalated' as ConversationState,
+          escalationReason: structuredResponse.escalation.reason,
+          lastMessageAt: new Date(),
+        };
+        
+        // Save the escalation response before updating session
+        const escalationResponse = createEscalationResponse(structuredResponse.escalation, clientConfig);
+        await messageStore.save(session.id, {
+          direction: 'outbound',
+          type: 'text',
+          content: escalationResponse.content,
+        });
+        
+        // Create escalation record if store is available
+        const { escalationStore } = deps;
+        if (escalationStore) {
+          try {
+            const { id: escalationId } = await escalationStore.create({
+              sessionId: session.id,
+              reason: structuredResponse.escalation.reason,
+              aiSummary: structuredResponse.escalation.summary,
+              aiConfidence: structuredResponse.escalation.confidence,
+              priority: 'high', // LLM-detected escalations are high priority
+            });
+            console.log(`[Escalation] Created escalation record: ${escalationId}`);
+          } catch (error) {
+            console.error('[Escalation] Failed to create escalation record:', error);
+            // Continue even if record creation fails - session is still escalated
+          }
+        }
+        
+        await sessionStore.update(session.id, escalationUpdates);
+        
+        return {
+          sessionId: session.id,
+          responses: [escalationResponse],
+          sessionUpdates: escalationUpdates,
+          escalation: {
+            shouldEscalate: true,
+            reason: structuredResponse.escalation.reason,
+            priority: 'immediate',
+            confidence: structuredResponse.escalation.confidence,
+          },
+        };
+      }
+      
+      // 13. Evaluate state transition from LLM recommendation
       let sessionUpdates: Partial<Session> = {
         lastMessageAt: new Date(),
         updatedAt: new Date(),
@@ -628,64 +663,15 @@ function hashSessionKey(key: SessionKey): string {
 // Helper Functions
 // =============================================================================
 
-async function checkEscalationTriggers(
-  message: NormalizedMessage,
-  _session: Session,
-  _contact: Contact,
-  _config: EngineDependencies['clientConfig']
-): Promise<EscalationResult> {
-  const content = (message.content || message.transcription || '').toLowerCase();
-  
-  // Explicit request patterns (Spanish)
-  const explicitPatterns = [
-    'hablar con humano',
-    'hablar con un humano',
-    'persona real',
-    'agente',
-    'representante',
-    'quiero hablar con alguien',
-    'necesito ayuda humana',
-    'soporte humano',
-  ];
-  
-  // Review patterns
-  for (const pattern of explicitPatterns) {
-    if (content.includes(pattern)) {
-      return {
-        shouldEscalate: true,
-        reason: 'explicit_request',
-        priority: 'immediate',
-        confidence: 1.0,
-      };
-    }
-  }
-  
-  // Frustration patterns
-  const frustrationPatterns = ['estafa', 'scam', 'fraude', 'robo', 'mierda', 'basura'];
-  for (const pattern of frustrationPatterns) {
-    if (content.includes(pattern)) {
-      return {
-        shouldEscalate: true,
-        reason: 'frustration',
-        priority: 'immediate',
-        confidence: 0.9,
-      };
-    }
-  }
-  
-  // High value check (TODO: implement when we have deposit amount in context)
-  // if (_config.escalation.highValueThreshold) { ... }
-  
-  return {
-    shouldEscalate: false,
-    reason: 'explicit_request',
-    priority: 'medium',
-    confidence: 0,
-  };
-}
+// NOTE: checkEscalationTriggers was removed - escalation is now LLM-driven
+// See structuredResponse.escalation handling in processMessage
 
+/**
+ * Create escalation response message for user
+ * Used by both LLM-driven and (legacy) keyword-driven escalation
+ */
 function createEscalationResponse(
-  escalation: EscalationResult,
+  escalation: { reason: string; summary?: string },
   _config: EngineDependencies['clientConfig']
 ): BotResponse {
   const messages: Record<string, string> = {
@@ -693,8 +679,9 @@ function createEscalationResponse(
     frustration: 'Entiendo tu frustración y quiero ayudarte. Te conecto con un asesor que podrá asistirte mejor. Un momento.',
     high_value: 'Para brindarte la mejor atención personalizada, te conecto con uno de nuestros asesores senior.',
     technical_issue: 'Veo que tienes un problema técnico. Te conecto con soporte especializado.',
-    repeated_confusion: 'Parece que no estoy siendo claro. Déjame conectarte con un asesor que pueda ayudarte mejor.',
+    complex_issue: 'Tu caso requiere atención especializada. Te conecto con uno de nuestros expertos.',
     ai_uncertainty: 'Para darte la mejor respuesta, te conecto con uno de nuestros expertos.',
+    legal_regulatory: 'Este tema requiere atención de nuestro equipo especializado. Te conecto ahora mismo.',
   };
   
   return {
@@ -786,6 +773,7 @@ function parseStructuredResponse(content: string): StructuredLLMResponse {
             transition: parsed.transition,
             extractedData: parsed.extractedData,
             isUncertain: parsed.isUncertain,
+            escalation: parsed.escalation,       // LLM-driven escalation signal
             usage: { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
             finishReason: 'stop',
           };
@@ -802,6 +790,7 @@ function parseStructuredResponse(content: string): StructuredLLMResponse {
           transition: parsed.transition,
           extractedData: parsed.extractedData,
           isUncertain: parsed.isUncertain,
+          escalation: parsed.escalation,       // LLM-driven escalation signal
           usage: { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
           finishReason: 'stop',
         };

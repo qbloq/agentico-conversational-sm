@@ -19,6 +19,7 @@ import {
   createSupabaseLLMLogger,
   createSupabaseStateMachineStore,
   createSupabaseMessageBufferStore,
+  createSupabaseEscalationStore,
 } from '../_shared/adapters/index.ts';
 import { createConversationEngine } from '../_shared/sales-engine.bundle.ts';
 import { createGeminiProvider, createGeminiEmbeddingProvider } from '../_shared/sales-engine-llm.bundle.ts';
@@ -154,6 +155,7 @@ function buildDependencies(
   const knowledgeStore = createSupabaseKnowledgeStore(supabase, schemaName);
   const exampleStore = createSupabaseExampleStore(supabase);
   const stateMachineStore = createSupabaseStateMachineStore(supabase, schemaName);
+  const escalationStore = createSupabaseEscalationStore(supabase, schemaName);
   const llmLogger = createSupabaseLLMLogger(supabase);
   
   const llmProvider = createGeminiProvider({
@@ -191,6 +193,7 @@ function buildDependencies(
     exampleStore,
     stateMachineStore,
     messageBufferStore,
+    escalationStore,
     llmProvider,
     embeddingProvider,
     mediaService,

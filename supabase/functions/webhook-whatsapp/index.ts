@@ -17,6 +17,7 @@ import {
   createSupabaseLLMLogger,
   createSupabaseStateMachineStore,
   createSupabaseMessageBufferStore,
+  createSupabaseEscalationStore,
 } from '../_shared/adapters/index.ts';
 import { createConversationEngine } from '../_shared/sales-engine.bundle.ts';
 import { createGeminiProvider, createGeminiEmbeddingProvider } from '../_shared/sales-engine-llm.bundle.ts';
@@ -210,6 +211,7 @@ async function processMessage(
   const knowledgeStore = createSupabaseKnowledgeStore(supabase, schemaName);
   const exampleStore = createSupabaseExampleStore(supabase);
   const stateMachineStore = createSupabaseStateMachineStore(supabase, schemaName);
+  const escalationStore = createSupabaseEscalationStore(supabase, schemaName);
   
   // Create LLM provider
   const llmProvider = createGeminiProvider({
@@ -277,6 +279,7 @@ async function processMessage(
         exampleStore,
         stateMachineStore,
         messageBufferStore,
+        escalationStore,
         llmProvider,
         embeddingProvider,
         mediaService,
@@ -293,8 +296,11 @@ async function processMessage(
     // If buffering failed (graceful degradation), fall through to immediate processing
     console.log(`[Debounce] Buffering failed, processing immediately for ${message.from}`);
   }
+
   
-  // Non-debounce flow (or fallback): process immediately and send response
+  /********************
+   * Non-debounce flow (or fallback): process immediately and send response
+   ********************/
   const result = await engine.processMessage({
     sessionKey: {
       channelType: 'whatsapp' as ChannelType,
@@ -309,6 +315,7 @@ async function processMessage(
       knowledgeStore,
       exampleStore,
       stateMachineStore,
+      escalationStore,
       llmProvider,
       embeddingProvider,
       mediaService,

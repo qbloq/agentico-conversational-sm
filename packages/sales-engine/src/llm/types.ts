@@ -52,6 +52,18 @@ export interface StructuredLLMResponse extends LLMResponse {
     confidence: number;
   };
   
+  /** Escalation decision - when user should be handed to human agent */
+  escalation?: {
+    /** Whether to escalate to human agent */
+    shouldEscalate: boolean;
+    /** Reason for escalation */
+    reason: 'explicit_request' | 'frustration' | 'ai_uncertainty' | 'complex_issue' | 'legal_regulatory';
+    /** Confidence in escalation decision 0-1 */
+    confidence: number;
+    /** Brief summary for the human agent */
+    summary?: string;
+  };
+  
   /** Extracted user data from the conversation */
   extractedData?: {
     /** User's name if mentioned */

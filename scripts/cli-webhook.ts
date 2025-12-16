@@ -4,6 +4,7 @@
  * Simulates the WhatsApp Webhook flow:
  * 1. Acts as a client sending messages to the Supabase Edge Function.
  * 2. Acts as the WhatsApp Cloud API server receiving messages from the bot.
+ * 3. Subscribes to Supabase Realtime for human agent messages.
  * 
  * Usage:
  *   npx tsx scripts/cli-webhook.ts
@@ -13,6 +14,7 @@ import * as http from 'http';
 import * as readline from 'readline';
 import * as crypto from 'crypto';
 import * as dotenv from 'dotenv';
+import { createClient } from '@supabase/supabase-js';
 
 dotenv.config();
 
@@ -22,6 +24,19 @@ const MOCK_SERVER_PORT = 3000;
 const MOCK_PHONE_ID = '123456789';
 const MOCK_APP_SECRET = 'mock_app_secret'; // Must match clients/tag_markets.json or config used
 const USER_PHONE = '5215555555555';
+const CLIENT_SCHEMA = 'client_tag_markets';
+
+// Supabase Client for database queries
+const supabaseUrl = process.env.SUPABASE_URL || 'http://127.0.0.1:54321';
+const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
+
+console.log(`[Supabase] URL: ${supabaseUrl}`);
+console.log(`[Supabase] Key: ${supabaseKey ? supabaseKey.slice(0, 25) + '...' : 'NOT SET'}`);
+
+const supabase = createClient(supabaseUrl, supabaseKey);
+
+// Track current session for Realtime filtering
+let currentSessionId: string | null = null;
 
 // Start Mock WhatsApp Server
 const server = http.createServer((req, res) => {
@@ -52,6 +67,11 @@ const server = http.createServer((req, res) => {
             if (meta.tokensUsed) {
                console.log(`\x1b[90m[Tokens] ${JSON.stringify(meta.tokensUsed)}\x1b[0m`);
             }
+            // Track session ID for Realtime
+            if (meta.sessionId && meta.sessionId !== currentSessionId) {
+              currentSessionId = meta.sessionId;
+              console.log(`\x1b[90m[Session] Tracking: ${currentSessionId}\x1b[0m`);
+            }
           }
         } else {
           console.log('\n🤖 Bot sent non-text message:', data);
@@ -77,8 +97,66 @@ server.listen(MOCK_SERVER_PORT, () => {
   console.log(`✅ Mock WhatsApp API Server listening on port ${MOCK_SERVER_PORT}`);
   console.log(`   Configure Supabase Function with: WHATSAPP_API_BASE_URL=http://host.docker.internal:${MOCK_SERVER_PORT}`);
   console.log(`   (Or use your local IP if host.docker.internal doesn't work)`);
+  startPollingForAgentMessages();
   startChat();
 });
+
+// Poll for human agent messages (fallback since Realtime isn't connecting locally)
+let lastMessageCheck = new Date().toISOString();
+let pollingActive = false;
+
+async function startPollingForAgentMessages() {
+  if (pollingActive) return;
+  pollingActive = true;
+  
+  console.log('🔄 Starting polling for human agent messages (every 2s)...');
+  console.log(`   Checking messages newer than: ${lastMessageCheck}`);
+  
+  // First poll immediately to test connection
+  const testResult = await supabase
+    .schema(CLIENT_SCHEMA)
+    .from('messages')
+    .select('count')
+    .limit(1);
+  
+  if (testResult.error) {
+    console.error('❌ Polling test failed:', testResult.error.message);
+    console.error('   Make sure you have the service role key for schema access');
+  } else {
+    console.log('✅ Polling connection test passed');
+  }
+  
+  setInterval(async () => {
+    try {
+      // Query for new outbound messages with sent_by_agent_id since last check
+      const { data: messages, error } = await supabase
+        .schema(CLIENT_SCHEMA) // Query the client schema
+        .from('messages')
+        .select('id, content, sent_by_agent_id, created_at')
+        .eq('direction', 'outbound')
+        .not('sent_by_agent_id', 'is', null)
+        .gt('created_at', lastMessageCheck)
+        .order('created_at', { ascending: true });
+      
+      if (error) {
+        console.error(`[Polling] Error: ${error.message}`);
+        return;
+      }
+      
+      if (messages && messages.length > 0) {
+        for (const msg of messages) {
+          console.log(`\n👤 Agent > ${msg.content}`);
+          console.log(`\x1b[35m[Human Agent Message]\x1b[0m`);
+          rl.prompt();
+        }
+        // Update last check to latest message
+        lastMessageCheck = messages[messages.length - 1].created_at;
+      }
+    } catch (e) {
+      console.error('[Polling] Exception:', e);
+    }
+  }, 2000);
+}
 
 // Chat Interface
 const rl = readline.createInterface({
@@ -219,3 +297,4 @@ async function sendWebhook(text: string) {
     console.error('❌ Network Error:', error);
   }
 }
+

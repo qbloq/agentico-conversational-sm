@@ -237,7 +237,8 @@ export type EscalationReason =
   | 'frustration'
   | 'high_value'
   | 'technical_issue'
-  | 'repeated_confusion'
+  | 'complex_issue'
+  | 'legal_regulatory'
   | 'ai_uncertainty';
 
 /**
@@ -263,6 +264,7 @@ export interface EngineDependencies {
   messageStore: MessageStore;
   stateMachineStore?: StateMachineStore;
   messageBufferStore?: MessageBufferStore;
+  escalationStore?: EscalationStore;
   
   // AI services
   llmProvider: LLMProvider;
@@ -347,6 +349,16 @@ export interface KnowledgeStore {
 export interface StateMachineStore {
   findByName(name: string, version?: string): Promise<Record<ConversationState, any> | null>;
   findActive(name: string): Promise<Record<ConversationState, any> | null>;
+}
+
+export interface EscalationStore {
+  create(data: {
+    sessionId: string;
+    reason: EscalationReason;
+    aiSummary?: string;
+    aiConfidence?: number;
+    priority?: 'low' | 'medium' | 'high' | 'urgent';
+  }): Promise<{ id: string }>;
 }
 
 /**

@@ -46,6 +46,7 @@ export type {
   MessageStore,
   StateMachineStore,
   MessageBufferStore,
+  EscalationStore,
   KnowledgeStore,
   KnowledgeEntry,
   PendingMessage,
