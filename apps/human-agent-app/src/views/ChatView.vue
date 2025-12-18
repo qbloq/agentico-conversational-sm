@@ -111,7 +111,7 @@ const isHumanMessage = (msg: { sent_by_agent_id?: string | null }) => {
       class="flex-1 overflow-y-auto p-4 space-y-3"
     >
       <div v-if="escalations.loading" class="flex items-center justify-center h-full">
-        <div class="animate-spin w-8 h-8 border-2 border-primary-500 border-t-transparent rounded-full"></div>
+        <div class="animate-spin w-8 h-8 border-2 border-accent-500 border-t-transparent rounded-full"></div>
       </div>
 
       <template v-else>
@@ -123,7 +123,7 @@ const isHumanMessage = (msg: { sent_by_agent_id?: string | null }) => {
             msg.direction === 'inbound' 
               ? 'bg-surface-700 mr-auto rounded-bl-md' 
               : isHumanMessage(msg)
-                ? 'bg-green-700 ml-auto rounded-br-md'
+                ? 'bg-accent-600 ml-auto rounded-br-md'
                 : 'bg-primary-600 ml-auto rounded-br-md'
           ]"
         >
@@ -144,7 +144,7 @@ const isHumanMessage = (msg: { sent_by_agent_id?: string | null }) => {
           @keyup.enter="handleSend"
           type="text"
           placeholder="Type a message..."
-          class="flex-1 px-4 py-3 bg-surface-700 border border-surface-600 rounded-xl text-white placeholder-surface-400 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+          class="flex-1 px-4 py-3 bg-surface-700 border border-surface-600 rounded-xl text-white placeholder-surface-400 focus:outline-none focus:ring-2 focus:ring-accent-500 focus:border-transparent"
         />
         <button
           @click="handleSend"

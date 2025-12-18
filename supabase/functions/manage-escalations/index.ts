@@ -1,7 +1,7 @@
 /**
  * Manage Escalations Edge Function
  * 
- * CRUD API for the Human Agent WebApp to manage escalations.
+ * CRUD API for the Human Agent WebApp to manage escalations and sessions.
  * Supports multi-tenant access.
  * 
  * Endpoints:
@@ -9,6 +9,8 @@
  * - GET /escalations/:id - Get escalation with full conversation
  * - PATCH /escalations/:id/assign - Assign to agent
  * - PATCH /escalations/:id/resolve - Mark resolved + trigger enrichment
+ * - GET /sessions - List all sessions with last message
+ * - GET /sessions/:id - Get session with full conversation
  */
 
 import { serve } from 'https://deno.land/std@0.177.0/http/server.ts';
@@ -71,6 +73,17 @@ serve(async (req: Request) => {
     if (req.method === 'PATCH' && pathParts.length === 4 && pathParts[3] === 'resolve') {
       // PATCH /manage-escalations/escalations/:id/resolve
       return await resolveEscalation(req, agent, pathParts[2]);
+    }
+
+    // Sessions routes
+    if (req.method === 'GET' && pathParts.length === 2 && pathParts[1] === 'sessions') {
+      // GET /manage-escalations/sessions
+      return await listSessions(agent);
+    }
+    
+    if (req.method === 'GET' && pathParts.length === 3 && pathParts[1] === 'sessions') {
+      // GET /manage-escalations/sessions/:id
+      return await getSession(agent, pathParts[2]);
     }
 
     return new Response(
@@ -339,6 +352,134 @@ async function resolveEscalation(
 
   return new Response(
     JSON.stringify({ success: true, message: 'Escalation resolved' }),
+    { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+  );
+}
+
+/**
+ * List all sessions with contact info and last message preview
+ */
+async function listSessions(agent: AgentPayload): Promise<Response> {
+  const supabase = createClient(
+    Deno.env.get('SUPABASE_URL') || '',
+    Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || ''
+  );
+
+  // Fetch sessions with contact info
+  const { data: sessions, error } = await supabase
+    .schema(agent.clientSchema)
+    .from('sessions')
+    .select(`
+      id,
+      channel_type,
+      channel_id,
+      channel_user_id,
+      current_state,
+      is_escalated,
+      last_message_at,
+      created_at,
+      contact:contact_id (
+        id,
+        full_name,
+        phone
+      )
+    `)
+    .order('last_message_at', { ascending: false, nullsFirst: false })
+    .limit(50);
+
+  if (error) {
+    console.error('Failed to list sessions:', error);
+    return new Response(
+      JSON.stringify({ error: 'Failed to list sessions' }),
+      { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+    );
+  }
+
+  // Fetch last message for each session (batched for efficiency)
+  const sessionsWithMessages = await Promise.all(
+    (sessions || []).map(async (session) => {
+      const { data: lastMsg } = await supabase
+        .schema(agent.clientSchema)
+        .from('messages')
+        .select('content, direction')
+        .eq('session_id', session.id)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .single();
+
+      return {
+        ...session,
+        last_message: lastMsg || null,
+      };
+    })
+  );
+
+  return new Response(
+    JSON.stringify({ sessions: sessionsWithMessages }),
+    { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+  );
+}
+
+/**
+ * Get single session with full conversation history
+ */
+async function getSession(agent: AgentPayload, sessionId: string): Promise<Response> {
+  const supabase = createClient(
+    Deno.env.get('SUPABASE_URL') || '',
+    Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || ''
+  );
+
+  // Get session details
+  const { data: session, error: sessionError } = await supabase
+    .schema(agent.clientSchema)
+    .from('sessions')
+    .select(`
+      id,
+      channel_type,
+      channel_id,
+      channel_user_id,
+      current_state,
+      previous_state,
+      context,
+      is_escalated,
+      last_message_at,
+      created_at,
+      contact:contact_id (
+        id,
+        full_name,
+        phone,
+        email,
+        country,
+        language
+      )
+    `)
+    .eq('id', sessionId)
+    .single();
+
+  if (sessionError || !session) {
+    return new Response(
+      JSON.stringify({ error: 'Session not found' }),
+      { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+    );
+  }
+
+  // Get conversation messages
+  const { data: messages, error: msgError } = await supabase
+    .schema(agent.clientSchema)
+    .from('messages')
+    .select('id, session_id, direction, type, content, created_at, sent_by_agent_id')
+    .eq('session_id', sessionId)
+    .order('created_at', { ascending: true });
+
+  if (msgError) {
+    console.error('Failed to get messages:', msgError);
+  }
+
+  return new Response(
+    JSON.stringify({
+      session,
+      messages: messages || [],
+    }),
     { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
   );
 }

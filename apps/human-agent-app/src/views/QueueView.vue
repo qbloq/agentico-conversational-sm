@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, computed } from 'vue';
+import { onMounted } from 'vue';
 import { useRouter } from 'vue-router';
 import { useEscalationsStore } from '@/stores/escalations';
 import { useAuthStore } from '@/stores/auth';
@@ -80,7 +80,7 @@ function logout() {
     <div class="flex-1 overflow-y-auto">
       <!-- Loading -->
       <div v-if="escalations.loading && !escalations.escalations.length" class="flex items-center justify-center h-full">
-        <div class="animate-spin w-8 h-8 border-2 border-primary-500 border-t-transparent rounded-full"></div>
+        <div class="animate-spin w-8 h-8 border-2 border-accent-500 border-t-transparent rounded-full"></div>
       </div>
 
       <!-- Empty -->
@@ -122,7 +122,7 @@ function logout() {
                 </span>
                 <span 
                   v-if="esc.status !== 'open'"
-                  class="text-xs px-2 py-0.5 bg-primary-900 rounded-full text-primary-300"
+                  class="text-xs px-2 py-0.5 bg-accent-900 rounded-full text-accent-300"
                 >
                   {{ esc.status }}
                 </span>

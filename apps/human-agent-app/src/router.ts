@@ -19,6 +19,24 @@ const routes = [
     component: () => import('./views/ChatView.vue'),
     meta: { requiresAuth: true },
   },
+  {
+    path: '/chats',
+    name: 'chats',
+    component: () => import('./views/AllChatsView.vue'),
+    meta: { requiresAuth: true },
+  },
+  {
+    path: '/chats/:sessionId',
+    name: 'conversation',
+    component: () => import('./views/ConversationView.vue'),
+    meta: { requiresAuth: true },
+  },
+  {
+    path: '/profile',
+    name: 'profile',
+    component: () => import('./views/ProfileView.vue'),
+    meta: { requiresAuth: true },
+  },
 ];
 
 const router = createRouter({
@@ -27,7 +45,7 @@ const router = createRouter({
 });
 
 // Navigation guard
-router.beforeEach((to, from, next) => {
+router.beforeEach((to, _from, next) => {
   const auth = useAuthStore();
   
   if (to.meta.requiresAuth && !auth.isAuthenticated) {

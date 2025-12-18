@@ -188,3 +188,51 @@ export async function sendMessage(
     body: JSON.stringify({ escalationId, message }),
   });
 }
+
+// =============================================================================
+// Sessions API
+// =============================================================================
+
+export interface SessionSummary {
+  id: string;
+  channel_type: string;
+  channel_id: string;
+  channel_user_id: string;
+  current_state: string;
+  is_escalated: boolean;
+  last_message_at: string | null;
+  created_at: string;
+  contact: {
+    id: string;
+    full_name: string | null;
+    phone: string | null;
+  } | null;
+  last_message?: {
+    content: string | null;
+    direction: 'inbound' | 'outbound';
+  } | null;
+}
+
+export interface SessionDetail extends SessionSummary {
+  previous_state: string | null;
+  context: Record<string, unknown>;
+  contact: {
+    id: string;
+    full_name: string | null;
+    phone: string | null;
+    email: string | null;
+    country: string | null;
+    language: string | null;
+  } | null;
+}
+
+export async function listSessions(): Promise<{ sessions: SessionSummary[] }> {
+  return request('/manage-escalations/sessions');
+}
+
+export async function getSession(id: string): Promise<{
+  session: SessionDetail;
+  messages: Message[];
+}> {
+  return request(`/manage-escalations/sessions/${id}`);
+}
