@@ -365,12 +365,13 @@ export class StateMachine {
    */
   buildTransitionContext(): string {
     const config = this.config[this.currentState];
-    
+    console.log('config.objective', config.objective);
     const transitionOptions = config.allowedTransitions
       .filter(state => state !== 'escalated') // Escalation handled separately
       .map(state => {
         const guidance = config.transitionGuidance[state] || '';
         const targetConfig = this.config[state];
+        console.log('targetConfig.objective', targetConfig.objective);
         return `- **${state}**: ${guidance}\n  Next objective: ${targetConfig.objective}`;
       })
       .join('\n');
