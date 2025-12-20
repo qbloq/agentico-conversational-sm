@@ -17,6 +17,7 @@ import type {
   ConversationState,
   ConversationExample,
   SessionKey,
+  MessageType,
 } from './types.js';
 
 import { generatePitch12xResponses } from '../flows/pitch-12x.js';
@@ -888,7 +889,7 @@ async function getStateEntryResponse(
     for (const response of output.responses) {
       await messageStore.save(sessionId, {
         direction: 'outbound',
-        type: 'text',
+        type: response.type as MessageType,
         content: response.content,
       });
     }
@@ -902,15 +903,26 @@ function generateClosingResponse(session: Session): EngineOutput {
   
   return {
     sessionId: session.id,
-    responses: [{
-      type: 'text',
-      content: `Excelente, lo primero es hacer el registro. 🚀\n\nEstaré aquí contigo durante todo el proceso. Si tienes alguna duda al llenar el formulario o realizar el depósito, solo pregúntame.\n\nUna vez que hayas completado el registro, pásame tu correo electrónico para verificar que todo esté en orden.`,
-      delayMs: 1000
-    },{
-      type: 'text',
-      content: registrationLink,
-      delayMs: 1000
-    }],
+    responses: [
+      {
+        type: 'text',
+        content: `Excelente, lo primero es hacer el registro. 🚀\n\nEstaré aquí contigo durante todo el proceso. Si tienes alguna duda al llenar el formulario o realizar el depósito, solo pregúntame.`,
+        delayMs: 1000
+      },
+      /*{
+        type: 'text',
+        content: `Una vez que hayas completado el registro, pásame tu correo electrónico para verificar que todo esté en orden.\n\n${registrationLink}`,
+        delayMs: 1000
+      }*/
+      {
+        type: 'template',
+        templateName: 'registro_x12',
+        templateButtonParams: [session.id],
+        templateHeaderImage: 'https://tournament.tagmarkets.com/assets/logo-tag-BYchnq3N.png',
+        content: `Una vez que hayas completado el registro, pásame tu correo electrónico para verificar que todo esté en orden.\n\n${registrationLink}`,
+        delayMs: 1000
+      }
+    ],
     sessionUpdates: {
       lastMessageAt: new Date(),
       context: {

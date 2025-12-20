@@ -191,7 +191,16 @@ export type BotResponseType = 'text' | 'image' | 'template' | 'interactive';
 
 export interface BotResponse {
   type: BotResponseType;
+  /** The message text (fallback if template fails or not on WhatsApp) */
   content: string;
+  /** Optional WhatsApp template name */
+  templateName?: string;
+  /** Parameters for the template (e.g., [{{1}}, {{2}}]) */
+  templateParams?: string[];
+  /** Parameters for template buttons (e.g., dynamic URL suffixes) */
+  templateButtonParams?: string[];
+  /** Optional header image for the template */
+  templateHeaderImage?: string;
   metadata?: Record<string, unknown>;
   delayMs?: number;
 }

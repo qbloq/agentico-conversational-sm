@@ -335,13 +335,22 @@ async function processMessage(
       }
     }
     
-    await sendWhatsAppMessage(
-      phoneNumberId,
-      message.from,
-      response.content,
-      clientConfig.channels.whatsapp?.accessToken || '',
-      'metadata' in response ? (response as any).metadata : undefined
-    );
+    if (response.type === 'template' && (response as any).templateName) {
+      await sendWhatsAppTemplate(
+        phoneNumberId,
+        message.from,
+        response as any,
+        clientConfig.channels.whatsapp?.accessToken || ''
+      );
+    } else {
+      await sendWhatsAppMessage(
+        phoneNumberId,
+        message.from,
+        response.content,
+        clientConfig.channels.whatsapp?.accessToken || '',
+        'metadata' in response ? (response as any).metadata : undefined
+      );
+    }
   }
 }
 
@@ -458,7 +467,7 @@ async function sendWhatsAppMessage(
     recipient_type: 'individual',
     to,
     type: 'text',
-    text: { body: text },
+    text: { body: text, preview_url: true },
   };
 
   // If we have metadata and we are in a dev/mock environment (implied by custom base URL),
@@ -484,4 +493,78 @@ async function sendWhatsAppMessage(
   }
   
   console.log(`Message sent to ${to}`);
+}
+
+/**
+ * Send WhatsApp template message
+ */
+async function sendWhatsAppTemplate(
+  phoneNumberId: string,
+  to: string,
+  response: any,
+  accessToken: string
+): Promise<void> {
+  const baseUrl = Deno.env.get('WHATSAPP_API_BASE_URL') || 'https://graph.facebook.com';
+  const url = `${baseUrl}/v24.0/${phoneNumberId}/messages`;
+
+  console.log(`Sending WhatsApp template: ${response.templateName}`);
+  
+  const components: any[] = [];
+  
+  // Add header image if present
+  if (response.templateHeaderImage) {
+    components.push({
+      type: 'header',
+      parameters: [
+        { type: 'image', image: { link: response.templateHeaderImage } }
+      ]
+    });
+  }
+  
+  // Add body parameters if present
+  if (response.templateParams && response.templateParams.length > 0) {
+    components.push({
+      type: 'body',
+      parameters: response.templateParams.map((p: string) => ({ type: 'text', text: p }))
+    });
+  }
+
+  // Add button parameters if present (typically for dynamic URLs)
+  if (response.templateButtonParams && response.templateButtonParams.length > 0) {
+    components.push({
+      type: 'button',
+      sub_type: 'url',
+      index: '0',
+      parameters: response.templateButtonParams.map((p: string) => ({ type: 'text', text: p }))
+    });
+  }
+
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${accessToken}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      messaging_product: 'whatsapp',
+      recipient_type: 'individual',
+      to,
+      type: 'template',
+      template: {
+        name: response.templateName,
+        language: { code: 'es_CO' },
+        components
+      },
+    }),
+  });
+  
+  if (!res.ok) {
+    const error = await res.text();
+    console.error(`Failed to send WhatsApp template: ${error}`);
+    // Fallback to text if template fails
+    console.log(`Falling back to text for failed template`);
+    await sendWhatsAppMessage(phoneNumberId, to, response.content, accessToken);
+  } else {
+    console.log(`Template sent successfully`);
+  }
 }
