@@ -121,11 +121,12 @@ function getStatusLabel(session: { is_escalated: boolean; current_state: string 
               </div>
               
               <p 
-                v-if="session.last_message?.content" 
+                v-if="session.last_message" 
                 class="text-sm text-surface-400 truncate"
               >
                 <span v-if="session.last_message.direction === 'outbound'" class="text-surface-500">You: </span>
-                {{ session.last_message.content }}
+                <span v-if="session.last_message.type === 'image' && !session.last_message.content">📷 Image</span>
+                <span v-else>{{ session.last_message.content || 'No content' }}</span>
               </p>
             </div>
 

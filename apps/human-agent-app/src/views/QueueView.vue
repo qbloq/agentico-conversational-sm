@@ -128,13 +128,15 @@ function logout() {
                 </span>
               </div>
               
-              <p v-if="esc.ai_summary" class="text-sm text-surface-400 line-clamp-2">
-                {{ esc.ai_summary }}
-              </p>
+              <div v-if="esc.ai_summary" class="mt-2 p-2 bg-surface-900 rounded-lg border border-surface-700">
+                <p class="text-xs text-surface-400 line-clamp-2">
+                  {{ esc.ai_summary }}
+                </p>
+              </div>
             </div>
             
             <!-- Arrow -->
-            <svg class="w-5 h-5 text-surface-500 mt-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <svg class="w-5 h-5 text-surface-500 mt-1 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
             </svg>
           </div>

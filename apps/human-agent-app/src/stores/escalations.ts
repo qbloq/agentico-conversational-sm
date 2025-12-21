@@ -182,6 +182,7 @@ export const useEscalationsStore = defineStore('escalations', () => {
               direction: newMsg.direction,
               type: newMsg.type,
               content: newMsg.content,
+              media_url: newMsg.media_url,
               created_at: newMsg.created_at,
               sent_by_agent_id: newMsg.sent_by_agent_id,
             });

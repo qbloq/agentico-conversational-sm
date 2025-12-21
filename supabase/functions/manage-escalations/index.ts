@@ -407,7 +407,7 @@ async function listSessions(agent: AgentPayload): Promise<Response> {
       const { data: lastMsg } = await supabase
         .schema(agent.clientSchema)
         .from('messages')
-        .select('content, direction')
+        .select('content, direction, type, media_url')
         .eq('session_id', session.id)
         .order('created_at', { ascending: false })
         .limit(1)
@@ -473,7 +473,7 @@ async function getSession(agent: AgentPayload, sessionId: string): Promise<Respo
   const { data: messages, error: msgError } = await supabase
     .schema(agent.clientSchema)
     .from('messages')
-    .select('id, session_id, direction, type, content, created_at, sent_by_agent_id')
+    .select('id, session_id, direction, type, content, media_url, created_at, sent_by_agent_id')
     .eq('session_id', sessionId)
     .order('created_at', { ascending: true });
 

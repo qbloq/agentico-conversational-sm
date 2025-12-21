@@ -124,6 +124,7 @@ export interface Message {
   direction: 'inbound' | 'outbound';
   type: string;
   content: string | null;
+  media_url?: string | null;
   created_at: string;
   sent_by_agent_id?: string | null; // FK to human_agents - indicates message sent by human agent
 }
@@ -210,6 +211,8 @@ export interface SessionSummary {
   last_message?: {
     content: string | null;
     direction: 'inbound' | 'outbound';
+    type: string;
+    media_url?: string | null;
   } | null;
 }
 

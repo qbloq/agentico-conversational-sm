@@ -69,6 +69,15 @@ const isHumanMessage = (msg: { sent_by_agent_id?: string | null }) => {
 const getStateLabel = (state: string) => {
   return state.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
 };
+
+const formatContent = (msg: any) => {
+  if (!msg.content) return '';
+  if (msg.type === 'image') {
+    // Strip analysis text like "[Image Content: ...]" or "\n\n[Image Content: ...]"
+    return msg.content.replace(/\n\n\[Image Content: .*\]$/, '').replace(/^\[Image Content: .*\]$/, '');
+  }
+  return msg.content;
+};
 </script>
 
 <template>
@@ -148,7 +157,16 @@ const getStateLabel = (state: string) => {
                 : 'bg-primary-600 ml-auto rounded-br-md'
           ]"
         >
-          <p class="text-white whitespace-pre-wrap break-words">{{ msg.content }}</p>
+          <div v-if="msg.type === 'image' && msg.media_url" class="mb-2 -mx-2">
+            <a :href="msg.media_url" target="_blank">
+              <img 
+                :src="msg.media_url" 
+                class="w-full h-auto rounded-lg shadow-sm border border-white/10"
+                alt="Message image"
+              />
+            </a>
+          </div>
+          <p v-if="formatContent(msg)" class="text-white whitespace-pre-wrap break-words">{{ formatContent(msg) }}</p>
           <div class="flex items-center justify-end gap-1 mt-1">
             <span v-if="isHumanMessage(msg)" class="text-xs text-white/60">Agent</span>
             <span v-else-if="msg.direction === 'outbound'" class="text-xs text-white/60">AI</span>
