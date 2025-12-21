@@ -91,8 +91,7 @@ export function createConversationEngine(): ConversationEngine {
         try {
           const transcription = await mediaService.transcribe(message.mediaUrl);
           message.transcription = transcription.text;
-          // Use transcription as content for processing
-          message.content = transcription.text;
+          // Clean content stays as is (caption or empty)
         } catch (error) {
           console.error('Audio transcription failed:', error);
           message.content = '[Audio transcription failed]';
@@ -101,10 +100,7 @@ export function createConversationEngine(): ConversationEngine {
         try {
           const analysis = await mediaService.analyzeImage(message.mediaUrl);
           message.imageAnalysis = analysis;
-          // Append analysis to content for context
-          message.content = message.content 
-            ? `${message.content}\n\n[Image Content: ${analysis.description}]`
-            : `[Image Content: ${analysis.description}]`;
+          // Clean content stays as is (caption or empty)
         } catch (error) {
           console.error('Image analysis failed:', error);
           message.content = message.content || '[Image analysis failed]';
@@ -123,9 +119,9 @@ export function createConversationEngine(): ConversationEngine {
         session = await sessionStore.create(sessionKey, contact.id);
       }
 
-            // 3. Check for System Commands (Hidden)
-      const messageText = message.content || message.transcription || '';
-      if (messageText.toLowerCase() === '/reset') {
+      // 3. Check for System Commands (Hidden)
+      const inputForSystem = message.content || message.transcription || '';
+      if (inputForSystem.toLowerCase() === '/reset') {
         console.log(`[System Command] Resetting data for contact: ${session.contactId}`);
         await contactStore.delete(session.contactId);
         return {
@@ -229,7 +225,7 @@ export function createConversationEngine(): ConversationEngine {
       // This allows the LLM to make nuanced decisions about when to escalate
       
       // 8. Retrieve relevant knowledge (RAG)
-      // messageText is already defined above
+      const messageText = message.content || message.transcription || '';
       
       // Generate embedding with logging
       const embeddingStartTime = Date.now();
@@ -282,19 +278,23 @@ export function createConversationEngine(): ConversationEngine {
       // 9. Build LLM prompt with state transition context
       const transitionContext = stateMachine.buildTransitionContext();
       
-      // Flow A: Burst Sequence Logic
-      // if (stateConfig.state === 'pitching_12x' && !session.context?.pitchComplete) {
-      //   console.log('[Flow A] Triggering 12x Pitch Burst');
-      //   return generatePitch12xResponses(session);
-      // }
-
-      const systemPrompt = buildSystemPrompt({ 
-        config: clientConfig, 
-        knowledge: relevantKnowledge, 
-        transitionContext, 
-        examples: relevantExamples,
-        sessionContext: session.context, // Pass collected user data to prompt
+      // 6. Format current message for LLM (including analysis/transcription)
+      const currentFormattedContent = formatMessageForLLM({
+        content: message.content,
+        type: message.type,
+        transcription: message.transcription,
+        imageAnalysis: message.imageAnalysis
       });
+
+      // 7. Call LLM
+      const systemPrompt = buildSystemPrompt({
+        config: clientConfig,
+        transitionContext,
+        knowledge: relevantKnowledge,
+        examples: relevantExamples,
+        sessionContext: session.context,
+      });
+
       const conversationHistory = formatConversationHistory(recentMessages);
       
       // 10. Generate response with structured output (with Retry Logic)
@@ -314,7 +314,7 @@ export function createConversationEngine(): ConversationEngine {
           systemPrompt,
           messages: [
             ...conversationHistory,
-            { role: 'user', content: messageText },
+            { role: 'user', content: currentFormattedContent },
           ],
           temperature: attempts > 1 ? 0.8 : 0.7, // Slightly increase temperature on retry for variety
           maxTokens: 1500,
@@ -323,7 +323,7 @@ export function createConversationEngine(): ConversationEngine {
 
         // Log LLM chat call (fire and forget)
         if (llmLogger) {
-          const fullInput = `${systemPrompt}\n\n${conversationHistory.map(m => `${m.role}: ${m.content}`).join('\n')}\nuser: ${messageText}`;
+          const fullInput = `${systemPrompt}\n\n${conversationHistory.map(m => `${m.role}: ${m.content}`).join('\n')}\nuser: ${currentFormattedContent}`;
           llmLogger.log({
             clientId: clientConfig.clientId,
             sessionId: session.id,
@@ -839,17 +839,34 @@ function parseStructuredResponse(content: string): StructuredLLMResponse | null 
   return null;
 }
 
+function formatMessageForLLM(m: { 
+  content?: string | null; 
+  type?: string; 
+  transcription?: string; 
+  imageAnalysis?: any 
+}): string {
+  let text = m.content || '';
+  
+  if (m.type === 'audio' && m.transcription) {
+    const meta = `\n[SISTEMA: El usuario envió un audio. Transcripción: ${m.transcription}]`;
+    text = text ? `${text}${meta}` : meta;
+  } else if (m.type === 'image' && m.imageAnalysis?.description) {
+    const meta = `\n[SISTEMA: El usuario envió una imagen. Descripción: ${m.imageAnalysis.description}]`;
+    text = text ? `${text}${meta}` : meta;
+  }
+  
+  return text || '[Contenido vacío]';
+}
+
 function formatConversationHistory(
   messages: EngineDependencies['messageStore'] extends { getRecent: (id: string, limit: number) => Promise<infer M> } ? M : never
 ): { role: 'user' | 'assistant'; content: string }[] {
   if (!Array.isArray(messages)) return [];
   
-  return messages
-    .filter(m => m.content)
-    .map(m => ({
-      role: m.direction === 'inbound' ? 'user' as const : 'assistant' as const,
-      content: m.content!,
-    }));
+  return messages.map(m => ({
+    role: m.direction === 'inbound' ? 'user' as const : 'assistant' as const,
+    content: formatMessageForLLM(m),
+  }));
 }
 
 /**

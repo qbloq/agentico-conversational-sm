@@ -74,15 +74,6 @@ const formatTime = (date: string) => {
 const isHumanMessage = (msg: { sent_by_agent_id?: string | null }) => {
   return !!msg.sent_by_agent_id;
 };
-
-const formatContent = (msg: any) => {
-  if (!msg.content) return '';
-  if (msg.type === 'image') {
-    // Strip analysis text like "[Image Content: ...]" or "\n\n[Image Content: ...]"
-    return msg.content.replace(/\n\n\[Image Content: .*\]$/, '').replace(/^\[Image Content: .*\]$/, '');
-  }
-  return msg.content;
-};
 </script>
 
 <template>
@@ -145,7 +136,7 @@ const formatContent = (msg: any) => {
               />
             </a>
           </div>
-          <p v-if="formatContent(msg)" class="text-white whitespace-pre-wrap break-words">{{ formatContent(msg) }}</p>
+          <p v-if="msg.content" class="text-white whitespace-pre-wrap break-words">{{ msg.content }}</p>
           <div class="flex items-center justify-end gap-1 mt-1">
             <span v-if="isHumanMessage(msg)" class="text-xs text-white/60">You</span>
             <span class="text-xs text-white/50">{{ formatTime(msg.created_at) }}</span>
