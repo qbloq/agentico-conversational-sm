@@ -22,7 +22,7 @@ import type {
 
 import { generatePitch12xResponses } from '../flows/pitch-12x.js';
 import { StateMachine } from '../state/machine.js';
-import type { StructuredLLMResponse } from '../llm/types.js';
+import type { StructuredLLMResponse, LLMResponse } from '../llm/types.js';
 import { calculateCost } from '../llm/pricing.js';
 
 import { buildSystemPrompt } from '../prompts/templates.js';
@@ -297,42 +297,70 @@ export function createConversationEngine(): ConversationEngine {
       });
       const conversationHistory = formatConversationHistory(recentMessages);
       
-      // 10. Generate response with structured output
-      const llmStartTime = Date.now();
-      const llmResponse = await llmProvider.generateResponse({
-        systemPrompt,
-        messages: [
-          ...conversationHistory,
-          { role: 'user', content: messageText },
-        ],
-        temperature: 0.7,
-        maxTokens: 1500, // Increased to accommodate JSON structure + longer responses
-      });
-      const llmLatency = Date.now() - llmStartTime;
-      
-      // console.log(`[LLM] Response: ${llmResponse.content}`);
+      // 10. Generate response with structured output (with Retry Logic)
+      let structuredResponse: StructuredLLMResponse | null = null;
+      let llmResponse: LLMResponse | null = null;
+      let attempts = 0;
+      const maxAttempts = 3;
 
-      // 11. Parse structured response
-      const structuredResponse = parseStructuredResponse(llmResponse.content);
-      
-      // Log LLM chat call (fire and forget)
-      if (llmLogger) {
-        const fullInput = `${systemPrompt}\n\n${conversationHistory.map(m => `${m.role}: ${m.content}`).join('\n')}\nuser: ${messageText}`;
-        llmLogger.log({
-          clientId: clientConfig.clientId,
+      while (attempts < maxAttempts && !structuredResponse) {
+        attempts++;
+        if (attempts > 1) {
+          console.warn(`[LLM Retry] Attempt ${attempts}/${maxAttempts} for session ${session.id}`);
+        }
+
+        const llmStartTime = Date.now();
+        llmResponse = await llmProvider.generateResponse({
+          systemPrompt,
+          messages: [
+            ...conversationHistory,
+            { role: 'user', content: messageText },
+          ],
+          temperature: attempts > 1 ? 0.8 : 0.7, // Slightly increase temperature on retry for variety
+          maxTokens: 1500,
+        });
+        const llmLatency = Date.now() - llmStartTime;
+
+        // Log LLM chat call (fire and forget)
+        if (llmLogger) {
+          const fullInput = `${systemPrompt}\n\n${conversationHistory.map(m => `${m.role}: ${m.content}`).join('\n')}\nuser: ${messageText}`;
+          llmLogger.log({
+            clientId: clientConfig.clientId,
+            sessionId: session.id,
+            requestType: 'chat',
+            provider: llmProvider.name,
+            model: clientConfig.llm.model,
+            promptTokens: llmResponse.usage.promptTokens,
+            completionTokens: llmResponse.usage.completionTokens,
+            totalTokens: llmResponse.usage.totalTokens,
+            costUsd: calculateCost(clientConfig.llm.model, llmResponse.usage.promptTokens, llmResponse.usage.completionTokens),
+            inputPreview: fullInput,
+            outputPreview: llmResponse.content,
+            latencyMs: llmLatency,
+            finishReason: llmResponse.finishReason,
+          }).catch(err => console.error('[LLM Logger] Chat log failed:', err));
+        }
+
+        // 11. Parse structured response
+        structuredResponse = parseStructuredResponse(llmResponse.content);
+        
+        if (structuredResponse && llmResponse) {
+          // Attach usage/finishReason from the successful LLM call
+          structuredResponse.usage = llmResponse.usage;
+          structuredResponse.finishReason = llmResponse.finishReason;
+        }
+      }
+
+      if (!structuredResponse || !llmResponse) {
+        console.error(`[LLM Error] Failed to get valid JSON response after ${maxAttempts} attempts.`);
+        return {
           sessionId: session.id,
-          requestType: 'chat',
-          provider: llmProvider.name,
-          model: clientConfig.llm.model,
-          promptTokens: llmResponse.usage.promptTokens,
-          completionTokens: llmResponse.usage.completionTokens,
-          totalTokens: llmResponse.usage.totalTokens,
-          costUsd: calculateCost(clientConfig.llm.model, llmResponse.usage.promptTokens, llmResponse.usage.completionTokens),
-          inputPreview: fullInput,
-          outputPreview: llmResponse.content,
-          latencyMs: llmLatency,
-          finishReason: llmResponse.finishReason,
-        }).catch(err => console.error('[LLM Logger] Chat log failed:', err));
+          responses: [{
+            type: 'text',
+            content: 'Lo siento, estoy teniendo dificultades técnicas para procesar tu solicitud. ¿Podrías intentar de nuevo o esperar un momento?',
+          }],
+          sessionUpdates: { lastMessageAt: new Date() },
+        };
       }
       
       // 12. Check for LLM-recommended escalation
@@ -490,9 +518,9 @@ export function createConversationEngine(): ConversationEngine {
         content: text,
         delayMs: index > 0 ? 800 : 0, // Small delay between messages for natural feel
         metadata: index === 0 ? {
-          tokensUsed: llmResponse.usage.totalTokens,
+          tokensUsed: structuredResponse!.usage.totalTokens,
           state: stateMachine.getState(),
-          transition: structuredResponse.transition,
+          transition: structuredResponse!.transition,
         } : undefined,
       }));
       
@@ -750,9 +778,9 @@ async function retrieveExamples(
 
 /**
  * Parse LLM response to extract structured data
- * The LLM is instructed to return JSON, but we handle graceful fallback
+ * The LLM is instructed to return JSON. If not valid, returns null.
  */
-function parseStructuredResponse(content: string): StructuredLLMResponse {
+function parseStructuredResponse(content: string): StructuredLLMResponse | null {
   // Try to extract JSON from the response
   const jsonMatch = content.match(/```json\s*([\s\S]*?)\s*```/) || 
                     content.match(/\{[\s\S]*"response[\s\S]*\}/);
@@ -798,47 +826,17 @@ function parseStructuredResponse(content: string): StructuredLLMResponse {
       } else {
         // JSON parsed but response is empty - log warning
         console.warn('[parseStructuredResponse] LLM returned empty response field. Raw content:', content.slice(0, 200));
+        return null; // Return null instead of fallback
       }
     } catch (err) {
       // JSON parsing failed - log for debugging
       console.warn('[parseStructuredResponse] JSON parse failed:', err, 'Content:', content.slice(0, 200));
+      return null; // Return null on JSON parse error
     }
   }
   
-  // Fallback: try to extract the response text from truncated/malformed JSON
-  let fallbackResponse = content;
-  
-  // Try to extract the "response" field value even from truncated JSON
-  const responseMatch = content.match(/"response"\s*:\s*"([\s\S]*?)(?:"|$)/);
-  if (responseMatch && responseMatch[1]) {
-    // Unescape JSON string escapes
-    fallbackResponse = responseMatch[1]
-      .replace(/\\n/g, '\n')
-      .replace(/\\"/g, '"')
-      .replace(/\\\\/g, '\\')
-      .trim();
-    
-    // If it ends abruptly, add ellipsis
-    if (!fallbackResponse.endsWith('.') && !fallbackResponse.endsWith('!') && !fallbackResponse.endsWith('?')) {
-      fallbackResponse += '...';
-    }
-  } else if (content.includes('```json') || content.includes('"response"')) {
-    // Remove JSON code blocks entirely
-    fallbackResponse = content.replace(/```json[\s\S]*?```/g, '').trim();
-    if (!fallbackResponse) {
-      fallbackResponse = content;
-    }
-  }
-  
-  console.warn('[parseStructuredResponse] Using fallback response. Original content:', content.slice(0, 200));
-  
-  return {
-    content: content,
-    response: fallbackResponse,
-    responses: [fallbackResponse], // Wrap in array for new consumers
-    usage: { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
-    finishReason: 'stop',
-  };
+  console.warn('[parseStructuredResponse] No JSON found in content. Original content:', content.slice(0, 200));
+  return null;
 }
 
 function formatConversationHistory(

@@ -57,6 +57,7 @@ function createMockDeps(): EngineDependencies {
       findOrCreateByChannelUser: vi.fn().mockResolvedValue(mockContact),
       findById: vi.fn().mockResolvedValue(mockContact),
       update: vi.fn().mockResolvedValue(mockContact),
+      delete: vi.fn().mockResolvedValue(undefined),
     },
     sessionStore: {
       findByKey: vi.fn().mockResolvedValue(mockSession),
@@ -71,7 +72,7 @@ function createMockDeps(): EngineDependencies {
     llmProvider: {
       name: 'mock',
       generateResponse: vi.fn().mockResolvedValue({
-        content: '¡Hola! Bienvenido a TAG Markets. ¿Tienes experiencia en trading?',
+        content: '```json\n{"responses": ["¡Hola! Bienvenido a TAG Markets.", "¿Tienes experiencia en trading?"], "transition": {"to": "initial", "reason": "greeting", "confidence": 0.9}}\n```',
         usage: { promptTokens: 100, completionTokens: 50, totalTokens: 150 },
         finishReason: 'stop',
       }),
@@ -160,7 +161,7 @@ describe('ConversationEngine', () => {
       deps,
     });
     
-    expect(result.responses).toHaveLength(1);
+    expect(result.responses).toHaveLength(2);
     expect(result.responses[0].type).toBe('text');
     expect(result.responses[0].content).toContain('TAG Markets');
   });
@@ -182,6 +183,12 @@ describe('ConversationEngine', () => {
       content: 'Quiero hablar con un agente humano',
     };
     
+    (deps.llmProvider.generateResponse as any).mockResolvedValue({
+      content: '```json\n{"responses": ["¡Hola! Te conecto con un humano."], "escalation": {"shouldEscalate": true, "reason": "explicit_request", "confidence": 0.9, "summary": "User wants to talk to a person"}}\n```',
+      usage: { promptTokens: 100, completionTokens: 50, totalTokens: 150 },
+      finishReason: 'stop',
+    });
+
     const result = await engine.processMessage({
       sessionKey,
       message,
@@ -302,6 +309,12 @@ describe('ConversationEngine', () => {
       content: 'Quiero hablar con un humano urgentemente',
     };
     
+    (deps.llmProvider.generateResponse as any).mockResolvedValue({
+      content: '```json\n{"responses": ["¡Hola! Te conecto con un humano."], "escalation": {"shouldEscalate": true, "reason": "explicit_request", "confidence": 0.9, "summary": "User wants to talk to a person"}}\n```',
+      usage: { promptTokens: 100, completionTokens: 50, totalTokens: 150 },
+      finishReason: 'stop',
+    });
+
     await engine.processMessage({
       sessionKey: { channelType: 'whatsapp', channelId: '1', channelUserId: '1' },
       message,
