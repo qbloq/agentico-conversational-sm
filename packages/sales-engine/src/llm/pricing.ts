@@ -21,22 +21,9 @@ export const MODEL_PRICING: Record<string, ModelPricing> = {
   'gemini-2.5-flash': { promptPer1M: 0.30, completionPer1M: 2.50 },
   'gemini-2.5-flash-lite': { promptPer1M: 0.10, completionPer1M: 0.40 },
   'gemini-3-pro-preview': { promptPer1M: 2, completionPer1M: 12 },
-  
-  // Anthropic Claude
-  'claude-sonnet-4-20250514': { promptPer1M: 3.00, completionPer1M: 15.00 },
-  'claude-3-5-sonnet-20241022': { promptPer1M: 3.00, completionPer1M: 15.00 },
-  'claude-3-5-haiku-20241022': { promptPer1M: 0.80, completionPer1M: 4.00 },
-  
-  // OpenAI
-  'gpt-4o': { promptPer1M: 2.50, completionPer1M: 10.00 },
-  'gpt-4o-mini': { promptPer1M: 0.15, completionPer1M: 0.60 },
-  'gpt-4-turbo': { promptPer1M: 10.00, completionPer1M: 30.00 },
-  
+    
   // Embeddings (completion tokens = 0 for embeddings)
-  'text-embedding-3-small': { promptPer1M: 0.02, completionPer1M: 0 },
-  'text-embedding-3-large': { promptPer1M: 0.13, completionPer1M: 0 },
-  'text-embedding-004': { promptPer1M: 0.00, completionPer1M: 0 }, // Gemini embeddings are free
-  'gemini-embedding-001': { promptPer1M: 0.15, completionPer1M: 0 }, // Gemini embeddings are free
+  'gemini-embedding-001': { promptPer1M: 0.15, completionPer1M: 0.15 }
 };
 
 /**
