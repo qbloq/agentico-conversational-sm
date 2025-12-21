@@ -36,7 +36,10 @@ const isDetailView = computed(() => {
     <!-- Main Content Area -->
     <div class="flex-1 flex flex-col min-w-0">
       <!-- Content -->
-      <main class="flex-1 overflow-hidden">
+      <main 
+        class="flex-1 overflow-hidden"
+        :class="[!hideNav && !isDetailView ? 'pb-16 lg:pb-0' : '']"
+      >
         <slot />
       </main>
 

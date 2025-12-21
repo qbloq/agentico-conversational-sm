@@ -236,3 +236,12 @@ export async function getSession(id: string): Promise<{
 }> {
   return request(`/manage-escalations/sessions/${id}`);
 }
+
+export async function escalateSession(id: string): Promise<{ 
+  success: boolean; 
+  escalationId: string 
+}> {
+  return request(`/manage-escalations/sessions/${id}/escalate`, {
+    method: 'POST',
+  });
+}

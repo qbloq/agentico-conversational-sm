@@ -28,7 +28,7 @@ function navigate(tabRoute: string) {
 </script>
 
 <template>
-  <nav class="flex-shrink-0 bg-surface-800 border-t border-surface-700 safe-bottom">
+  <nav class="fixed bottom-0 left-0 right-0 z-50 flex-shrink-0 bg-surface-800 border-t border-surface-700 safe-bottom">
     <div class="flex items-center justify-around h-16">
       <button
         v-for="tab in tabs"

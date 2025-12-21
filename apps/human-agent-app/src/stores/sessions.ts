@@ -10,6 +10,7 @@ import { supabase, CLIENT_SCHEMA } from '@/api/supabase';
 import {
   listSessions as apiListSessions,
   getSession as apiGetSession,
+  escalateSession as apiEscalateSession,
   type SessionSummary,
   type SessionDetail,
   type Message,
@@ -73,6 +74,24 @@ export const useSessionsStore = defineStore('sessions', () => {
     } catch (e) {
       error.value = e instanceof Error ? e.message : 'Failed to load session';
       return false;
+    } finally {
+      loading.value = false;
+    }
+  }
+
+  async function escalateSession(id: string): Promise<string | null> {
+    loading.value = true;
+    error.value = null;
+
+    try {
+      const result = await apiEscalateSession(id);
+      if (result.success) {
+        return result.escalationId;
+      }
+      return null;
+    } catch (e) {
+      error.value = e instanceof Error ? e.message : 'Failed to escalate session';
+      return null;
     } finally {
       loading.value = false;
     }
@@ -156,6 +175,7 @@ export const useSessionsStore = defineStore('sessions', () => {
     // Actions
     fetchSessions,
     fetchSession,
+    escalateSession,
     clearCurrent,
     subscribeToMessages,
     unsubscribeFromMessages,

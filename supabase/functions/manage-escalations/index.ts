@@ -20,6 +20,7 @@ import { verify } from 'https://deno.land/x/djwt@v3.0.1/mod.ts';
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  'Access-Control-Allow-Methods': 'GET, POST, PATCH, PUT, DELETE, OPTIONS',
 };
 
 interface AgentPayload {
@@ -84,6 +85,11 @@ serve(async (req: Request) => {
     if (req.method === 'GET' && pathParts.length === 3 && pathParts[1] === 'sessions') {
       // GET /manage-escalations/sessions/:id
       return await getSession(agent, pathParts[2]);
+    }
+
+    if (req.method === 'POST' && pathParts.length === 4 && pathParts[1] === 'sessions' && pathParts[3] === 'escalate') {
+      // POST /manage-escalations/sessions/:id/escalate
+      return await escalateSession(agent, pathParts[2]);
     }
 
     return new Response(
@@ -479,6 +485,85 @@ async function getSession(agent: AgentPayload, sessionId: string): Promise<Respo
     JSON.stringify({
       session,
       messages: messages || [],
+    }),
+    { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+  );
+}
+
+/**
+ * Manually escalate a session to the current agent
+ */
+async function escalateSession(agent: AgentPayload, sessionId: string): Promise<Response> {
+  const supabase = createClient(
+    Deno.env.get('SUPABASE_URL') || '',
+    Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || ''
+  );
+
+  // 1. Check if session exists and is not already escalated
+  const { data: session, error: sessionError } = await supabase
+    .schema(agent.clientSchema)
+    .from('sessions')
+    .select('id, is_escalated')
+    .eq('id', sessionId)
+    .single();
+
+  if (sessionError || !session) {
+    return new Response(
+      JSON.stringify({ error: 'Session not found' }),
+      { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+    );
+  }
+
+  if (session.is_escalated) {
+    return new Response(
+      JSON.stringify({ error: 'Session is already escalated' }),
+      { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+    );
+  }
+
+  // 2. Create escalation record
+  const { data: escalation, error: escError } = await supabase
+    .schema(agent.clientSchema)
+    .from('escalations')
+    .insert({
+      session_id: sessionId,
+      reason: 'explicit_request',
+      ai_summary: 'Manual takeover by agent',
+      status: 'assigned',
+      assigned_to: agent.sub,
+      assigned_at: new Date().toISOString(),
+    })
+    .select('id')
+    .single();
+
+  if (escError) {
+    console.error('Failed to create escalation:', escError);
+    return new Response(
+      JSON.stringify({ error: 'Failed to create escalation record' }),
+      { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+    );
+  }
+
+  // 3. Update session
+  const { error: updateError } = await supabase
+    .schema(agent.clientSchema)
+    .from('sessions')
+    .update({
+      is_escalated: true,
+      status: 'paused', // Pause AI while human is handling
+    })
+    .eq('id', sessionId);
+
+  if (updateError) {
+    console.error('Failed to update session:', updateError);
+    // Continue anyway as escalation record is created
+  }
+
+  return new Response(
+    JSON.stringify({ 
+      success: true, 
+      message: 'Session escalated successfully',
+      escalationId: escalation.id 
     }),
     { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
   );

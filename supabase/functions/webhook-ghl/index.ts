@@ -105,6 +105,7 @@ serve(async (req: Request) => {
       headers: {
         'Access-Control-Allow-Origin': '*',
         'Access-Control-Allow-Headers': 'content-type',
+        'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
       },
     });
   }
@@ -208,19 +209,14 @@ serve(async (req: Request) => {
 // =============================================================================
 
 /**
- * Normalize phone number to E.164 format
+ * Normalize phone number to digits only (E.164 without +)
  */
 function normalizePhone(phone: string): string | null {
-  // Remove all non-digit characters except leading +
-  let cleaned = phone.replace(/[^\d+]/g, '');
+  // Remove all non-digit characters
+  const cleaned = phone.replace(/\D/g, '');
   
-  // Ensure it starts with +
-  if (!cleaned.startsWith('+')) {
-    cleaned = '+' + cleaned;
-  }
-  
-  // Basic validation: should have at least 10 digits after country code
-  if (cleaned.length < 11) {
+  // Basic validation: should have at least 10 digits
+  if (cleaned.length < 10) {
     return null;
   }
   

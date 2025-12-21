@@ -16,7 +16,10 @@ export interface Agent {
 export const useAuthStore = defineStore('auth', () => {
   // State
   const token = ref<string | null>(localStorage.getItem('agent_token'));
-  const agent = ref<Agent | null>(null);
+  const agent = ref<Agent | null>((() => {
+    const stored = localStorage.getItem('agent_data');
+    return stored ? JSON.parse(stored) : null;
+  })());
   const clientSchema = ref<string>(localStorage.getItem('client_schema') || 'client_tag_markets');
   const isFirstLogin = ref(false);
   const loading = ref(false);
@@ -54,6 +57,7 @@ export const useAuthStore = defineStore('auth', () => {
       isFirstLogin.value = result.isFirstLogin;
       
       localStorage.setItem('agent_token', result.token);
+      localStorage.setItem('agent_data', JSON.stringify(result.agent));
       localStorage.setItem('client_schema', clientSchema.value);
       
       return true;
@@ -83,6 +87,7 @@ export const useAuthStore = defineStore('auth', () => {
           lastName: lastName || null,
           email: email || null,
         };
+        localStorage.setItem('agent_data', JSON.stringify(agent.value));
       }
       
       isFirstLogin.value = false;
@@ -99,6 +104,7 @@ export const useAuthStore = defineStore('auth', () => {
     token.value = null;
     agent.value = null;
     localStorage.removeItem('agent_token');
+    localStorage.removeItem('agent_data');
   }
 
   function setClientSchema(schema: string) {

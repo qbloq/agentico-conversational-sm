@@ -49,6 +49,15 @@ function goBack() {
   router.push('/chats');
 }
 
+async function handleTakeOver() {
+  if (!sessions.currentSession) return;
+  
+  const escalationId = await sessions.escalateSession(sessions.currentSession.id);
+  if (escalationId) {
+    router.push(`/chat/${escalationId}`);
+  }
+}
+
 const formatTime = (date: string) => {
   return new Date(date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 };
@@ -91,6 +100,15 @@ const getStateLabel = (state: string) => {
             <span class="capitalize">{{ getStateLabel(sessions.currentSession.current_state) }}</span>
           </p>
         </div>
+
+        <button
+          v-if="sessions.currentSession && !sessions.currentSession.is_escalated"
+          @click="handleTakeOver"
+          :disabled="sessions.loading"
+          class="px-3 py-1.5 bg-accent-600 hover:bg-accent-700 disabled:opacity-50 text-white text-sm font-medium rounded-lg transition-colors"
+        >
+          {{ sessions.loading ? '...' : 'Take Over' }}
+        </button>
       </div>
     </header>
 
