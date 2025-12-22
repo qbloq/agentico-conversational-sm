@@ -18,11 +18,11 @@ html, body {
 }
 
 ::-webkit-scrollbar-track {
-  @apply bg-surface-800;
+  @apply bg-surface-200 dark:bg-surface-800;
 }
 
 ::-webkit-scrollbar-thumb {
-  @apply bg-surface-700 rounded-full;
+  @apply bg-surface-400 dark:bg-surface-700 rounded-full;
 }
 
 /* Message bubble transitions */

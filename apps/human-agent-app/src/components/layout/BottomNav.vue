@@ -28,7 +28,7 @@ function navigate(tabRoute: string) {
 </script>
 
 <template>
-  <nav class="fixed bottom-0 left-0 right-0 z-50 flex-shrink-0 bg-surface-800 border-t border-surface-700 safe-bottom">
+  <nav class="fixed bottom-0 left-0 right-0 z-50 flex-shrink-0 bg-white dark:bg-surface-800 border-t border-surface-200 dark:border-surface-700 safe-bottom">
     <div class="flex items-center justify-around h-16">
       <button
         v-for="tab in tabs"
@@ -38,7 +38,7 @@ function navigate(tabRoute: string) {
           'flex flex-col items-center justify-center flex-1 h-full px-2 transition-colors',
           isActive(tab.route) 
             ? 'text-accent-500' 
-            : 'text-surface-400 hover:text-surface-200'
+            : 'text-surface-500 dark:text-surface-400 hover:text-surface-700 dark:hover:text-surface-200'
         ]"
       >
         <!-- Bell Icon (Escalations) -->

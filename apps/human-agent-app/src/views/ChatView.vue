@@ -108,7 +108,7 @@ const isHumanMessage = (msg: { sent_by_agent_id?: string | null }) => {
     <!-- Messages -->
     <div 
       ref="messagesContainer"
-      class="flex-1 overflow-y-auto p-4 space-y-3"
+      class="flex-1 overflow-y-auto p-4 space-y-4"
     >
       <div v-if="escalations.loading" class="flex items-center justify-center h-full">
         <div class="animate-spin w-8 h-8 border-2 border-accent-500 border-t-transparent rounded-full"></div>

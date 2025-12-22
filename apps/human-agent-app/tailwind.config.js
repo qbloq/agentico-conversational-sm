@@ -1,5 +1,6 @@
 /** @type {import('tailwindcss').Config} */
 export default {
+    darkMode: 'class',
     content: [
         './index.html',
         './src/**/*.{vue,js,ts,jsx,tsx}',
@@ -33,7 +34,7 @@ export default {
                     800: '#1e40af',
                     900: '#1e3a8a',
                 },
-                // Dark surfaces with subtle warmth
+                // Surfaces - work for both light and dark
                 surface: {
                     50: '#fafaf9',
                     100: '#f5f5f4',

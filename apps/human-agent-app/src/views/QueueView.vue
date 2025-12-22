@@ -56,17 +56,17 @@ function logout() {
 <template>
   <div class="h-full flex flex-col">
     <!-- Header -->
-    <header class="flex-shrink-0 px-4 py-3 bg-surface-800 border-b border-surface-700 safe-top">
+    <header class="flex-shrink-0 px-4 py-3 bg-white dark:bg-surface-800 border-b border-surface-200 dark:border-surface-700 safe-top">
       <div class="flex items-center justify-between">
         <div>
-          <h1 class="text-lg font-semibold text-white">Escalations</h1>
-          <p class="text-sm text-surface-400">
+          <h1 class="text-lg font-semibold text-surface-900 dark:text-white">Escalations</h1>
+          <p class="text-sm text-surface-600 dark:text-surface-400">
             {{ escalations.openCount }} open
           </p>
         </div>
         <button
           @click="logout"
-          class="p-2 text-surface-400 hover:text-white transition-colors"
+          class="p-2 text-surface-600 dark:text-surface-400 hover:text-surface-900 dark:hover:text-white transition-colors"
         >
           <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" 
@@ -84,7 +84,7 @@ function logout() {
       </div>
 
       <!-- Empty -->
-      <div v-else-if="!escalations.escalations.length" class="flex flex-col items-center justify-center h-full text-surface-400">
+      <div v-else-if="!escalations.escalations.length" class="flex flex-col items-center justify-center h-full text-surface-500 dark:text-surface-400">
         <svg class="w-16 h-16 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1" 
             d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
@@ -94,12 +94,12 @@ function logout() {
       </div>
 
       <!-- Escalation List -->
-      <div v-else class="divide-y divide-surface-700">
+      <div v-else class="divide-y divide-surface-200 dark:divide-surface-700">
         <button
           v-for="esc in escalations.sortedEscalations"
           :key="esc.id"
           @click="openChat(esc.id)"
-          class="w-full p-4 text-left hover:bg-surface-800 transition-colors"
+          class="w-full p-4 text-left hover:bg-surface-100 dark:hover:bg-surface-800 transition-colors"
         >
           <div class="flex items-start gap-3">
             <!-- Priority indicator -->
@@ -108,7 +108,7 @@ function logout() {
             <!-- Content -->
             <div class="flex-1 min-w-0">
               <div class="flex items-center justify-between mb-1">
-                <span class="font-medium text-white truncate">
+                <span class="font-medium text-surface-900 dark:text-white truncate">
                   {{ esc.session?.contact?.full_name || esc.session?.channel_user_id || 'Unknown' }}
                 </span>
                 <span class="text-xs text-surface-500">
@@ -117,7 +117,7 @@ function logout() {
               </div>
               
               <div class="flex items-center gap-2 mb-2">
-                <span class="text-xs px-2 py-0.5 bg-surface-700 rounded-full text-surface-300">
+                <span class="text-xs px-2 py-0.5 bg-surface-200 dark:bg-surface-700 rounded-full text-surface-700 dark:text-surface-300">
                   {{ getReasonLabel(esc.reason) }}
                 </span>
                 <span 
@@ -128,8 +128,8 @@ function logout() {
                 </span>
               </div>
               
-              <div v-if="esc.ai_summary" class="mt-2 p-2 bg-surface-900 rounded-lg border border-surface-700">
-                <p class="text-xs text-surface-400 line-clamp-2">
+              <div v-if="esc.ai_summary" class="mt-2 p-2 bg-surface-100 dark:bg-surface-900 rounded-lg border border-surface-200 dark:border-surface-700">
+                <p class="text-xs text-surface-600 dark:text-surface-400 line-clamp-2">
                   {{ esc.ai_summary }}
                 </p>
               </div>

@@ -72,11 +72,11 @@ const getStateLabel = (state: string) => {
 </script>
 
 <template>
-  <div class="h-full flex flex-col bg-surface-900">
+  <div class="h-full flex flex-col bg-surface-50 dark:bg-surface-900">
     <!-- Header -->
-    <header class="flex-shrink-0 px-4 py-3 bg-surface-800 border-b border-surface-700 safe-top">
+    <header class="flex-shrink-0 px-4 py-3 bg-white dark:bg-surface-800 border-b border-surface-200 dark:border-surface-700 safe-top">
       <div class="flex items-center gap-3">
-        <button @click="goBack" class="p-1 -ml-1 text-surface-400 hover:text-white">
+        <button @click="goBack" class="p-1 -ml-1 text-surface-600 dark:text-surface-400 hover:text-surface-900 dark:hover:text-white">
           <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
           </svg>
@@ -84,7 +84,7 @@ const getStateLabel = (state: string) => {
         
         <div class="flex-1 min-w-0" v-if="sessions.currentSession">
           <div class="flex items-center gap-2">
-            <h1 class="font-semibold text-white truncate">
+            <h1 class="font-semibold text-surface-900 dark:text-white truncate">
               {{ sessions.currentSession.contact?.full_name || 'Customer' }}
             </h1>
             <span 
@@ -94,7 +94,7 @@ const getStateLabel = (state: string) => {
               Escalated
             </span>
           </div>
-          <p class="text-sm text-surface-400 truncate flex items-center gap-2">
+          <p class="text-sm text-surface-600 dark:text-surface-400 truncate flex items-center gap-2">
             <span>{{ sessions.currentSession.contact?.phone }}</span>
             <span class="text-surface-600">•</span>
             <span class="capitalize">{{ getStateLabel(sessions.currentSession.current_state) }}</span>
@@ -115,7 +115,7 @@ const getStateLabel = (state: string) => {
     <!-- Messages -->
     <div 
       ref="messagesContainer"
-      class="flex-1 overflow-y-auto p-4 space-y-3"
+      class="flex-1 overflow-y-auto p-4 space-y-4"
     >
       <div v-if="sessions.loading" class="flex items-center justify-center h-full">
         <div class="animate-spin w-8 h-8 border-2 border-accent-500 border-t-transparent rounded-full"></div>
@@ -125,9 +125,9 @@ const getStateLabel = (state: string) => {
         <!-- State info card -->
         <div 
           v-if="sessions.currentSession"
-          class="mb-4 p-3 bg-surface-800 border border-surface-700 rounded-xl text-sm"
+          class="mb-4 p-3 bg-surface-100 dark:bg-surface-800 border border-surface-200 dark:border-surface-700 rounded-xl text-sm"
         >
-          <div class="flex items-center gap-2 text-surface-400">
+          <div class="flex items-center gap-2 text-surface-600 dark:text-surface-400">
             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" 
                 d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
@@ -168,8 +168,8 @@ const getStateLabel = (state: string) => {
     </div>
 
     <!-- Read-only notice (no compose for non-escalated) -->
-    <div class="flex-shrink-0 p-4 bg-surface-800 border-t border-surface-700 safe-bottom">
-      <div class="flex items-center justify-center gap-2 text-surface-400 py-2">
+    <div class="flex-shrink-0 p-4 bg-white dark:bg-surface-800 border-t border-surface-200 dark:border-surface-700 safe-bottom">
+      <div class="flex items-center justify-center gap-2 text-surface-600 dark:text-surface-400 py-2">
         <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" 
             d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
