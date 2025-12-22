@@ -3,13 +3,19 @@
 @tailwind utilities;
 
 /* Global styles */
-html, body {
-  @apply h-full;
+html,
+body {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  @apply overflow-hidden;
   -webkit-tap-highlight-color: transparent;
 }
 
 #app {
-  @apply h-full;
+  height: 100%;
+  height: 100dvh;
+  @apply overflow-hidden;
 }
 
 /* Custom scrollbar */

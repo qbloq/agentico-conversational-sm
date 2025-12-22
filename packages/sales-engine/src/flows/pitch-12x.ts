@@ -12,30 +12,12 @@ export function generatePitch12xResponses(session: Session): EngineOutput {
   const responses: BotResponse[] = [
     {
       type: 'text',
-      content: `Te explico cómo funcionan:\n\nLas Cuentas Apalancadas X12, son cuentas que te permiten operar con un capital mayor al que depositas.
-
-Por ejemplo, si depositas $500 en una cuenta apalancada, podrás operar con $6,000. Es importante no perder más del 10% del balance de la cuenta apalancada para evitar el cierre de la misma.
-
-Puedes retirar las ganancias desde el día #1 y el depósito inicial después de 30 días.
-
-- Multiplicación del Saldo: Incrementa tu saldo 12 veces.
-- Comisión Fija: $1 por 0.1 lote.
-- Apalancamiento: 1:30
-- Spreads: Desde 0.2 pips, ofreciendo precios muy competitivos.
-- Ideal para: Traders que desean operar con un capital significativamente aumentado, disfrutando de alto apalancamiento y spreads ajustados.
-
-La única regla en este tipo de cuentas es que no puedes perder más del 10% del monto inicial de tu Cuenta Apalancada.
-
-Puedes operar Swing, Intradía, Scalping, Noticias o Bots, sin limitaciones.`,
+      content: `Te explico cómo funcionan:\n\nLas Cuentas Apalancadas X12, son cuentas que te permiten operar con un capital mayor al que depositas.\n\nPor ejemplo, si depositas $500 en una cuenta apalancada, podrás operar con $6,000. \n\nEs importante no perder más del 10% del balance de la cuenta apalancada para evitar el cierre de la misma.\n\nEste drawdown es estático y no crece conforme aumente el balance de tu cuenta. (Así que no afecta tus ganancias)`,
       delayMs: 1000
     },
     {
       type: 'text',
-      content: 
-`*Recalcar que:*
-1. No debes pasar ningún examen o prueba, la cuenta se entrega de inmediato y lista para operar
-2. Puedes retirar ganancias todos los días, desde el primer día
-3. No hay reparto de ganancias, te quedas con el 100% de tus profits`,
+      content: `*Recalcar que:*\n1. No debes pasar ningún examen o prueba, la cuenta se entrega de inmediato y lista para operar\n2. Puedes retirar ganancias todos los días, desde el primer día\n3. No hay reparto de ganancias, te quedas con el 100% de tus profits`,
       delayMs: 4000
     },
     {

@@ -77,7 +77,7 @@ const isHumanMessage = (msg: { sent_by_agent_id?: string | null }) => {
 </script>
 
 <template>
-  <div class="h-full flex flex-col">
+  <div class="h-full flex flex-col overflow-hidden">
     <!-- Header -->
     <header class="flex-shrink-0 px-4 py-3 bg-surface-800 border-b border-surface-700 safe-top">
       <div class="flex items-center gap-3">
@@ -108,7 +108,7 @@ const isHumanMessage = (msg: { sent_by_agent_id?: string | null }) => {
     <!-- Messages -->
     <div 
       ref="messagesContainer"
-      class="flex-1 overflow-y-auto p-4 space-y-4"
+      class="flex-1 overflow-y-auto p-3 space-y-2"
     >
       <div v-if="escalations.loading" class="flex items-center justify-center h-full">
         <div class="animate-spin w-8 h-8 border-2 border-accent-500 border-t-transparent rounded-full"></div>
@@ -119,7 +119,7 @@ const isHumanMessage = (msg: { sent_by_agent_id?: string | null }) => {
           v-for="msg in escalations.messages"
           :key="msg.id"
           :class="[
-            'max-w-[85%] rounded-2xl px-4 py-2',
+            'max-w-[85%] rounded-xl px-2.5 py-1',
             msg.direction === 'inbound' 
               ? 'bg-surface-700 mr-auto rounded-bl-md' 
               : isHumanMessage(msg)
@@ -136,29 +136,29 @@ const isHumanMessage = (msg: { sent_by_agent_id?: string | null }) => {
               />
             </a>
           </div>
-          <p v-if="msg.content" class="text-white whitespace-pre-wrap break-words">{{ msg.content }}</p>
-          <div class="flex items-center justify-end gap-1 mt-1">
-            <span v-if="isHumanMessage(msg)" class="text-xs text-white/60">You</span>
-            <span class="text-xs text-white/50">{{ formatTime(msg.created_at) }}</span>
+          <p v-if="msg.content" class="text-sm leading-snug text-white whitespace-pre-wrap break-words">{{ msg.content }}</p>
+          <div class="flex items-center justify-end gap-1 mt-0.5">
+            <span v-if="isHumanMessage(msg)" class="text-[10px] text-white/60">You</span>
+            <span class="text-[10px] text-white/50">{{ formatTime(msg.created_at) }}</span>
           </div>
         </div>
       </template>
     </div>
 
     <!-- Compose -->
-    <div class="flex-shrink-0 p-4 bg-surface-800 border-t border-surface-700 safe-bottom">
+    <div class="flex-shrink-0 px-3 py-2 bg-surface-800 border-t border-surface-700 safe-bottom">
       <div class="flex gap-2">
         <input
           v-model="messageInput"
           @keyup.enter="handleSend"
           type="text"
           placeholder="Type a message..."
-          class="flex-1 px-4 py-3 bg-surface-700 border border-surface-600 rounded-xl text-white placeholder-surface-400 focus:outline-none focus:ring-2 focus:ring-accent-500 focus:border-transparent"
+          class="flex-1 px-3 py-2 bg-surface-700 border border-surface-600 rounded-xl text-[15px] text-white placeholder-surface-400 focus:outline-none focus:ring-2 focus:ring-accent-500 focus:border-transparent"
         />
         <button
           @click="handleSend"
           :disabled="escalations.sending || !messageInput.trim()"
-          class="px-4 py-3 bg-primary-600 hover:bg-primary-700 disabled:bg-surface-700 disabled:cursor-not-allowed text-white rounded-xl transition-colors"
+          class="px-3 py-2 bg-primary-600 hover:bg-primary-700 disabled:bg-surface-700 disabled:cursor-not-allowed text-white rounded-xl transition-colors"
         >
           <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" 

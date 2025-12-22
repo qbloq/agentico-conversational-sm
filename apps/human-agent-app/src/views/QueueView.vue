@@ -54,7 +54,7 @@ function logout() {
 </script>
 
 <template>
-  <div class="h-full flex flex-col">
+  <div class="h-full flex flex-col overflow-hidden">
     <!-- Header -->
     <header class="flex-shrink-0 px-4 py-3 bg-white dark:bg-surface-800 border-b border-surface-200 dark:border-surface-700 safe-top">
       <div class="flex items-center justify-between">

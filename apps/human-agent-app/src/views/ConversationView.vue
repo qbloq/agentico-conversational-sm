@@ -72,7 +72,7 @@ const getStateLabel = (state: string) => {
 </script>
 
 <template>
-  <div class="h-full flex flex-col bg-surface-50 dark:bg-surface-900">
+  <div class="h-full flex flex-col overflow-hidden bg-surface-50 dark:bg-surface-900">
     <!-- Header -->
     <header class="flex-shrink-0 px-4 py-3 bg-white dark:bg-surface-800 border-b border-surface-200 dark:border-surface-700 safe-top">
       <div class="flex items-center gap-3">
@@ -115,7 +115,7 @@ const getStateLabel = (state: string) => {
     <!-- Messages -->
     <div 
       ref="messagesContainer"
-      class="flex-1 overflow-y-auto p-4 space-y-4"
+      class="flex-1 overflow-y-auto p-3 space-y-2"
     >
       <div v-if="sessions.loading" class="flex items-center justify-center h-full">
         <div class="animate-spin w-8 h-8 border-2 border-accent-500 border-t-transparent rounded-full"></div>
@@ -140,7 +140,7 @@ const getStateLabel = (state: string) => {
           v-for="msg in sessions.messages"
           :key="msg.id"
           :class="[
-            'max-w-[85%] rounded-2xl px-4 py-2',
+            'max-w-[85%] rounded-xl px-2.5 py-1',
             msg.direction === 'inbound' 
               ? 'bg-surface-700 mr-auto rounded-bl-md' 
               : isHumanMessage(msg)
@@ -157,19 +157,19 @@ const getStateLabel = (state: string) => {
               />
             </a>
           </div>
-          <p v-if="msg.content" class="text-white whitespace-pre-wrap break-words">{{ msg.content }}</p>
-          <div class="flex items-center justify-end gap-1 mt-1">
-            <span v-if="isHumanMessage(msg)" class="text-xs text-white/60">Agent</span>
-            <span v-else-if="msg.direction === 'outbound'" class="text-xs text-white/60">AI</span>
-            <span class="text-xs text-white/50">{{ formatTime(msg.created_at) }}</span>
+          <p v-if="msg.content" class="text-sm leading-snug text-white whitespace-pre-wrap break-words">{{ msg.content }}</p>
+          <div class="flex items-center justify-end gap-1 mt-0.5">
+            <span v-if="isHumanMessage(msg)" class="text-[10px] text-white/60">Agent</span>
+            <span v-else-if="msg.direction === 'outbound'" class="text-[10px] text-white/60">AI</span>
+            <span class="text-[10px] text-white/50">{{ formatTime(msg.created_at) }}</span>
           </div>
         </div>
       </template>
     </div>
 
     <!-- Read-only notice (no compose for non-escalated) -->
-    <div class="flex-shrink-0 p-4 bg-white dark:bg-surface-800 border-t border-surface-200 dark:border-surface-700 safe-bottom">
-      <div class="flex items-center justify-center gap-2 text-surface-600 dark:text-surface-400 py-2">
+    <div class="flex-shrink-0 px-3 py-2 bg-white dark:bg-surface-800 border-t border-surface-200 dark:border-surface-700 safe-bottom">
+      <div class="flex items-center justify-center gap-2 text-surface-600 dark:text-surface-400 py-1">
         <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" 
             d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />

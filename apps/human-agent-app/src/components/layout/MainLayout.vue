@@ -24,11 +24,11 @@ const isDetailView = computed(() => {
 </script>
 
 <template>
-  <div class="h-full flex">
+  <div class="h-full flex overflow-hidden">
     <!-- Desktop Sidebar (hidden on mobile) -->
     <aside 
       v-if="!hideNav"
-      class="hidden lg:flex lg:w-72 xl:w-80 flex-shrink-0 flex-col bg-surface-900 border-r border-surface-700"
+      class="hidden lg:flex lg:w-72 xl:w-80 flex-shrink-0 flex-col bg-white dark:bg-surface-900 border-r border-surface-200 dark:border-surface-700"
     >
       <SidebarNav />
     </aside>
@@ -38,7 +38,7 @@ const isDetailView = computed(() => {
       <!-- Content -->
       <main 
         class="flex-1 overflow-hidden"
-        :class="[!hideNav && !isDetailView ? 'pb-16 lg:pb-0' : '']"
+        :class="[!hideNav && !isDetailView ? 'pb-14 lg:pb-0' : '']"
       >
         <slot />
       </main>

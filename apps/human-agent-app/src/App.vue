@@ -12,7 +12,7 @@ const themeStore = useThemeStore();
 </script>
 
 <template>
-  <div class="h-full flex flex-col bg-surface-50 dark:bg-surface-900">
+  <div class="h-full flex flex-col overflow-hidden bg-surface-50 dark:bg-surface-900">
     <!-- Use layout for authenticated routes -->
     <MainLayout v-if="useLayout">
       <RouterView />

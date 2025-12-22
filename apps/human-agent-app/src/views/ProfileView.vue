@@ -21,7 +21,7 @@ function goBack() {
 </script>
 
 <template>
-  <div class="h-full flex flex-col bg-surface-50 dark:bg-surface-900">
+  <div class="h-full flex flex-col overflow-hidden bg-surface-50 dark:bg-surface-900">
     <!-- Header -->
     <header class="flex-shrink-0 px-4 py-3 bg-white dark:bg-surface-800 border-b border-surface-200 dark:border-surface-700 safe-top">
       <div class="flex items-center gap-3">
@@ -50,7 +50,7 @@ function goBack() {
           <h2 class="mt-4 text-xl font-semibold text-surface-900 dark:text-white">
             {{ auth.agent?.firstName || 'Agent' }} {{ auth.agent?.lastName || '' }}
           </h2>
-          <p class="text-surface-600 dark:text-surface-400">Human Agent</p>
+          <p class="text-surface-600 dark:text-surface-400">Agente de Ventas</p>
         </div>
 
         <!-- Info Card -->
@@ -130,7 +130,7 @@ function goBack() {
 
         <!-- Version -->
         <p class="text-center text-xs text-surface-500 dark:text-surface-500">
-          Agent Hub v1.0.0
+          Agent Hub v1.0.4
         </p>
       </div>
     </div>

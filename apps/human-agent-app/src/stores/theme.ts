@@ -23,10 +23,19 @@ export const useThemeStore = defineStore('theme', () => {
   }
 
   function updateDocumentTheme(newTheme: Theme) {
-    if (newTheme === 'light') {
-      document.documentElement.classList.add('light');
+    const metaThemeColor = document.querySelector('meta[name="theme-color"]');
+    const isDark = newTheme === 'dark';
+    
+    if (isDark) {
+      document.documentElement.classList.add('dark');
+      document.documentElement.style.backgroundColor = '#0c0a09';
+      document.body.style.backgroundColor = '#0c0a09';
+      if (metaThemeColor) metaThemeColor.setAttribute('content', '#1c1917');
     } else {
-      document.documentElement.classList.remove('light');
+      document.documentElement.classList.remove('dark');
+      document.documentElement.style.backgroundColor = '#fafaf9';
+      document.body.style.backgroundColor = '#fafaf9';
+      if (metaThemeColor) metaThemeColor.setAttribute('content', '#ffffff');
     }
   }
 

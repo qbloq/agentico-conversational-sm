@@ -225,31 +225,35 @@ export function createConversationEngine(): ConversationEngine {
       // This allows the LLM to make nuanced decisions about when to escalate
       
       // 8. Retrieve relevant knowledge (RAG)
-      const messageText = message.content || message.transcription || '';
+      // Use caption, transcription, or image description as the search query
+      const messageTextForRAG = message.content || message.transcription || message.imageAnalysis?.description || '';
       
-      // Generate embedding with logging
-      const embeddingStartTime = Date.now();
-      const embedding = await embeddingProvider.generateEmbedding(messageText, { taskType: 'RETRIEVAL_QUERY' });
+      let embedding: number[] = [];
+      let embeddingLatency = 0;
 
-      const embeddingLatency = Date.now() - embeddingStartTime;
-      
-      // Log embedding call (fire and forget)
-      if (llmLogger) {
-        const embeddingTokens = Math.ceil(messageText.length / 4); // Rough estimate
-        llmLogger.log({
-          clientId: clientConfig.clientId,
-          sessionId: session.id,
-          requestType: 'embedding',
-          provider: 'gemini', // TODO: get from embeddingProvider.name if available
-          model: 'gemini-embedding-001',
-          promptTokens: embeddingTokens,
-          completionTokens: 0,
-          totalTokens: embeddingTokens,
-          costUsd: calculateCost('gemini-embedding-001', embeddingTokens, 0),
-          inputPreview: messageText,
-          latencyMs: embeddingLatency,
-          finishReason: 'stop',
-        }).catch(err => console.error('[LLM Logger] Embedding log failed:', err));
+      if (messageTextForRAG.trim()) {
+        const embeddingStartTime = Date.now();
+        embedding = await embeddingProvider.generateEmbedding(messageTextForRAG, { taskType: 'RETRIEVAL_QUERY' });
+        embeddingLatency = Date.now() - embeddingStartTime;
+        
+        // Log embedding call (fire and forget)
+        if (llmLogger) {
+          const embeddingTokens = Math.ceil(messageTextForRAG.length / 4); // Rough estimate
+          llmLogger.log({
+            clientId: clientConfig.clientId,
+            sessionId: session.id,
+            requestType: 'embedding',
+            provider: 'gemini', // TODO: get from embeddingProvider.name if available
+            model: 'gemini-embedding-001',
+            promptTokens: embeddingTokens,
+            completionTokens: 0,
+            totalTokens: embeddingTokens,
+            costUsd: calculateCost('gemini-embedding-001', embeddingTokens, 0),
+            inputPreview: messageTextForRAG,
+            latencyMs: embeddingLatency,
+            finishReason: 'stop',
+          }).catch(err => console.error('[LLM Logger] Embedding log failed:', err));
+        }
       }
 
       const relevantKnowledge = await retrieveKnowledge(
@@ -377,7 +381,7 @@ export function createConversationEngine(): ConversationEngine {
                 reason: structuredResponse.escalation.reason,
                 userName: contact.fullName || contact.phone || 'Unknown User',
                 userPhone: contact.phone || sessionKey.channelUserId,
-                summary: structuredResponse.escalation.summary || messageText.slice(0, 100),
+                summary: structuredResponse.escalation.summary || messageTextForRAG.slice(0, 100),
               }
             );
           } catch (error) {
@@ -725,6 +729,8 @@ async function retrieveKnowledge(
   embedding: number[],
   categories: string[]
 ): Promise<KnowledgeEntry[]> {
+  if (!embedding || embedding.length === 0) return [];
+  
   // Get similar by embedding
   const similarEntries = await store.findSimilar(embedding, 3);
   
