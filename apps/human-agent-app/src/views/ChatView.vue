@@ -2,6 +2,7 @@
 import { ref, onMounted, onUnmounted, nextTick, computed, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { useEscalationsStore } from '@/stores/escalations';
+import TemplatePicker from '@/components/TemplatePicker.vue';
 
 const route = useRoute();
 const router = useRouter();
@@ -11,6 +12,9 @@ const messageInput = ref('');
 const messagesContainer = ref<HTMLElement | null>(null);
 const showResolveModal = ref(false);
 const resolveNotes = ref('');
+const showTemplatePicker = ref(false);
+const currentTime = ref(Date.now());
+let timer: number | null = null;
 
 const escalationId = computed(() => route.params.escalationId as string);
 
@@ -22,11 +26,17 @@ onMounted(async () => {
   if (escalations.currentEscalation?.session?.id) {
     escalations.subscribeToMessages(escalations.currentEscalation.session.id);
   }
+
+  // Update countdown timer
+  timer = window.setInterval(() => {
+    currentTime.value = Date.now();
+  }, 1000);
 });
 
 onUnmounted(() => {
   // Clean up Realtime subscription
   escalations.unsubscribeFromMessages();
+  if (timer) clearInterval(timer);
 });
 
 // Auto-scroll when new messages arrive
@@ -67,6 +77,24 @@ function goBack() {
   router.push('/');
 }
 
+async function handleTemplateSelect(templateName: string) {
+  showTemplatePicker.value = false;
+  await escalations.sendTemplate(templateName);
+  scrollToBottom();
+}
+
+const formatRemainingTime = computed(() => {
+  const remaining = escalations.windowTimeRemaining;
+  if (remaining <= 0) return 'Expired';
+  
+  const hours = Math.floor(remaining / (1000 * 60 * 60));
+  const minutes = Math.floor((remaining % (1000 * 60 * 60)) / (1000 * 60));
+  const seconds = Math.floor((remaining % (1000 * 60)) / 1000);
+  
+  if (hours > 0) return `${hours}h ${minutes}m`;
+  return `${minutes}m ${seconds}s`;
+});
+
 const formatTime = (date: string) => {
   return new Date(date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 };
@@ -77,21 +105,32 @@ const isHumanMessage = (msg: { sent_by_agent_id?: string | null }) => {
 </script>
 
 <template>
-  <div class="h-full flex flex-col overflow-hidden">
+  <div class="h-full flex flex-col overflow-hidden bg-surface-50 dark:bg-surface-900">
     <!-- Header -->
-    <header class="flex-shrink-0 px-4 py-3 bg-surface-800 border-b border-surface-700 safe-top">
+    <header class="flex-shrink-0 px-4 py-3 bg-white dark:bg-surface-800 border-b border-surface-100 dark:border-surface-700 safe-top">
       <div class="flex items-center gap-3">
-        <button @click="goBack" class="p-1 -ml-1 text-surface-400 hover:text-white">
+        <button @click="goBack" class="p-1 -ml-1 text-surface-500 hover:text-surface-900 dark:text-surface-400 dark:hover:text-white">
           <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
           </svg>
         </button>
         
         <div class="flex-1 min-w-0" v-if="escalations.currentEscalation">
-          <h1 class="font-semibold text-white truncate">
-            {{ escalations.currentEscalation.session?.contact?.full_name || 'Customer' }}
-          </h1>
-          <p class="text-sm text-surface-400 truncate">
+          <div class="flex items-center gap-2">
+            <h1 class="font-semibold text-surface-900 dark:text-white truncate">
+              {{ escalations.currentEscalation.session?.contact?.full_name || 'Customer' }}
+            </h1>
+            <div 
+              class="flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-medium transition-colors"
+              :class="escalations.isWindowOpen ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'"
+            >
+              <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              <span>{{ formatRemainingTime }}</span>
+            </div>
+          </div>
+          <p class="text-xs text-surface-500 dark:text-surface-400 truncate">
             {{ escalations.currentEscalation.session?.contact?.phone }}
           </p>
         </div>
@@ -121,7 +160,7 @@ const isHumanMessage = (msg: { sent_by_agent_id?: string | null }) => {
           :class="[
             'max-w-[85%] rounded-xl px-2.5 py-1',
             msg.direction === 'inbound' 
-              ? 'bg-surface-700 mr-auto rounded-bl-md' 
+              ? 'bg-white dark:bg-surface-800 border border-surface-100 dark:border-surface-700 shadow-sm mr-auto rounded-bl-md' 
               : isHumanMessage(msg)
                 ? 'bg-accent-600 ml-auto rounded-br-md'
                 : 'bg-primary-600 ml-auto rounded-br-md'
@@ -131,39 +170,62 @@ const isHumanMessage = (msg: { sent_by_agent_id?: string | null }) => {
             <a :href="msg.media_url" target="_blank">
               <img 
                 :src="msg.media_url" 
-                class="w-full h-auto rounded-lg shadow-sm border border-white/10"
+                class="w-full h-auto rounded-lg shadow-sm border border-surface-100 dark:border-white/10"
                 alt="Message image"
               />
             </a>
           </div>
-          <p v-if="msg.content" class="text-sm leading-snug text-white whitespace-pre-wrap break-words">{{ msg.content }}</p>
+          <p v-if="msg.content" 
+            :class="[
+              'text-[15px] leading-snug whitespace-pre-wrap break-words',
+              msg.direction === 'inbound' ? 'text-surface-900 dark:text-white' : 'text-white'
+            ]"
+          >
+            {{ msg.content }}
+          </p>
           <div class="flex items-center justify-end gap-1 mt-0.5">
-            <span v-if="isHumanMessage(msg)" class="text-[10px] text-white/60">You</span>
-            <span class="text-[10px] text-white/50">{{ formatTime(msg.created_at) }}</span>
+            <span v-if="isHumanMessage(msg)" class="text-[10px] text-white/70">You</span>
+            <span 
+              class="text-[10px]"
+              :class="msg.direction === 'inbound' ? 'text-surface-400 dark:text-white/40' : 'text-white/60'"
+            >
+              {{ formatTime(msg.created_at) }}
+            </span>
           </div>
         </div>
       </template>
     </div>
 
     <!-- Compose -->
-    <div class="flex-shrink-0 px-3 py-2 bg-surface-800 border-t border-surface-700 safe-bottom">
-      <div class="flex gap-2">
+    <div class="flex-shrink-0 px-3 py-2 pb-[calc(8px+2px)] bg-white dark:bg-surface-800 border-t border-surface-100 dark:border-surface-700 safe-bottom">
+      <div v-if="escalations.isWindowOpen" class="flex gap-2">
         <input
           v-model="messageInput"
           @keyup.enter="handleSend"
           type="text"
           placeholder="Type a message..."
-          class="flex-1 px-3 py-2 bg-surface-700 border border-surface-600 rounded-xl text-[15px] text-white placeholder-surface-400 focus:outline-none focus:ring-2 focus:ring-accent-500 focus:border-transparent"
+          class="flex-1 px-3 py-2 bg-surface-50 dark:bg-surface-700 border border-surface-200 dark:border-surface-600 rounded-xl text-[15px] text-surface-900 dark:text-white placeholder-surface-400 focus:outline-none focus:ring-2 focus:ring-accent-500 focus:border-transparent"
         />
         <button
           @click="handleSend"
           :disabled="escalations.sending || !messageInput.trim()"
-          class="px-3 py-2 bg-primary-600 hover:bg-primary-700 disabled:bg-surface-700 disabled:cursor-not-allowed text-white rounded-xl transition-colors"
+          class="px-3 py-2 bg-primary-600 hover:bg-primary-700 disabled:bg-surface-100 dark:disabled:bg-surface-700 disabled:text-surface-400 dark:disabled:text-surface-500 disabled:cursor-not-allowed text-white rounded-xl transition-colors"
         >
           <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" 
               d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
           </svg>
+        </button>
+      </div>
+      <div v-else class="flex flex-col gap-2">
+        <button
+          @click="showTemplatePicker = true"
+          class="w-full py-2.5 bg-white dark:bg-surface-800 border-2 border-accent-600 text-accent-600 hover:bg-accent-50 dark:hover:bg-accent-900/10 font-medium rounded-xl transition-colors flex items-center justify-center gap-2"
+        >
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+          </svg>
+          Send WhatsApp Template to Resume
         </button>
       </div>
     </div>
@@ -172,28 +234,28 @@ const isHumanMessage = (msg: { sent_by_agent_id?: string | null }) => {
     <Teleport to="body">
       <div 
         v-if="showResolveModal"
-        class="fixed inset-0 bg-black/60 flex items-end justify-center z-50"
+        class="fixed inset-0 bg-black/60 flex items-end justify-center z-50 p-4"
         @click.self="showResolveModal = false"
       >
-        <div class="w-full max-w-lg bg-surface-800 rounded-t-2xl p-6 space-y-4 animate-slide-up">
-          <h2 class="text-xl font-semibold text-white">Resolve Escalation</h2>
+        <div class="w-full max-w-lg bg-white dark:bg-surface-800 rounded-2xl p-6 space-y-4 animate-slide-up">
+          <h2 class="text-xl font-semibold text-surface-900 dark:text-white">Resolve Escalation</h2>
           
           <div>
-            <label class="block text-sm font-medium text-surface-300 mb-2">
+            <label class="block text-sm font-medium text-surface-600 dark:text-surface-300 mb-2">
               Resolution Notes (optional)
             </label>
             <textarea
               v-model="resolveNotes"
               rows="3"
               placeholder="What was the resolution?"
-              class="w-full px-4 py-3 bg-surface-700 border border-surface-600 rounded-xl text-white placeholder-surface-400 focus:outline-none focus:ring-2 focus:ring-primary-500 resize-none"
+              class="w-full px-4 py-3 bg-surface-50 dark:bg-surface-700 border border-surface-200 dark:border-surface-600 rounded-xl text-surface-900 dark:text-white placeholder-surface-400 focus:outline-none focus:ring-2 focus:ring-primary-500 resize-none"
             ></textarea>
           </div>
           
           <div class="flex gap-3">
             <button
               @click="showResolveModal = false"
-              class="flex-1 py-3 bg-surface-700 hover:bg-surface-600 text-white font-medium rounded-xl transition-colors"
+              class="flex-1 py-3 bg-surface-100 dark:bg-surface-700 hover:bg-surface-200 dark:hover:bg-surface-600 text-surface-900 dark:text-white font-medium rounded-xl transition-colors"
             >
               Cancel
             </button>
@@ -205,6 +267,21 @@ const isHumanMessage = (msg: { sent_by_agent_id?: string | null }) => {
             </button>
           </div>
         </div>
+      </div>
+    </Teleport>
+
+    <!-- Template Picker Modal -->
+    <Teleport to="body">
+      <div 
+        v-if="showTemplatePicker"
+        class="fixed inset-0 bg-black/60 flex items-end justify-center z-50"
+        @click.self="showTemplatePicker = false"
+      >
+        <TemplatePicker 
+          class="w-full max-w-lg animate-slide-up"
+          @select="handleTemplateSelect"
+          @cancel="showTemplatePicker = false"
+        />
       </div>
     </Teleport>
   </div>

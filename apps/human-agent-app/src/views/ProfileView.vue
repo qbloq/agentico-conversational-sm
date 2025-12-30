@@ -130,7 +130,7 @@ function goBack() {
 
         <!-- Version -->
         <p class="text-center text-xs text-surface-500 dark:text-surface-500">
-          Agent Hub v1.0.4
+          Agent Hub v1.0.7
         </p>
       </div>
     </div>

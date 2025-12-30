@@ -40,7 +40,7 @@ async function handleCompleteProfile() {
 </script>
 
 <template>
-  <div class="min-h-full flex items-center justify-center p-4 bg-gradient-to-b from-surface-900 to-surface-950">
+  <div class="min-h-full flex items-center justify-center p-4 bg-surface-50 dark:bg-gradient-to-b dark:from-surface-900 dark:to-surface-950">
     <div class="w-full max-w-sm">
       <!-- Logo -->
       <div class="text-center mb-8">
@@ -50,21 +50,21 @@ async function handleCompleteProfile() {
               d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z" />
           </svg>
         </div>
-        <h1 class="text-2xl font-bold text-white">Agent Hub</h1>
-        <p class="text-surface-400 mt-1">Manage customer escalations</p>
+        <h1 class="text-2xl font-bold text-surface-900 dark:text-white">Agent Hub</h1>
+        <p class="text-surface-500 dark:text-surface-400 mt-1">Manage customer escalations</p>
       </div>
 
       <!-- Phone Step -->
       <div v-if="step === 'phone'" class="space-y-4">
         <div>
-          <label class="block text-sm font-medium text-surface-300 mb-2">
+          <label class="block text-sm font-medium text-surface-700 dark:text-surface-300 mb-2">
             Phone Number
           </label>
           <input
             v-model="phone"
             type="tel"
             placeholder="+1234567890"
-            class="w-full px-4 py-3 bg-surface-800 border border-surface-700 rounded-xl text-white placeholder-surface-500 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+            class="w-full px-4 py-3 bg-white dark:bg-surface-800 border border-surface-200 dark:border-surface-700 rounded-xl text-surface-900 dark:text-white placeholder-surface-400 dark:placeholder-surface-500 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
           />
         </div>
 
@@ -84,10 +84,10 @@ async function handleCompleteProfile() {
       <!-- OTP Step -->
       <div v-else-if="step === 'otp'" class="space-y-4">
         <div class="text-center mb-4">
-          <p class="text-surface-400">
+          <p class="text-surface-500 dark:text-surface-400">
             Enter the 6-digit code sent to
           </p>
-          <p class="text-white font-medium">{{ phone }}</p>
+          <p class="text-surface-900 dark:text-white font-medium">{{ phone }}</p>
         </div>
 
         <div>
@@ -98,21 +98,21 @@ async function handleCompleteProfile() {
             pattern="[0-9]*"
             maxlength="6"
             placeholder="000000"
-            class="w-full px-4 py-4 bg-surface-800 border border-surface-700 rounded-xl text-white text-center text-2xl tracking-widest font-mono placeholder-surface-500 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+            class="w-full px-4 py-4 bg-white dark:bg-surface-800 border border-surface-200 dark:border-surface-700 rounded-xl text-surface-900 dark:text-white text-center text-2xl tracking-widest font-mono placeholder-surface-400 dark:placeholder-surface-500 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
           />
         </div>
 
         <button
           @click="handleVerifyOtp"
           :disabled="auth.loading || otp.length !== 6"
-          class="w-full py-3 bg-primary-600 hover:bg-primary-700 disabled:bg-surface-700 disabled:cursor-not-allowed text-white font-medium rounded-xl transition-colors"
+          class="w-full py-3 bg-primary-600 hover:bg-primary-700 disabled:bg-surface-100 dark:disabled:bg-surface-700 disabled:text-surface-400 dark:disabled:text-surface-500 disabled:cursor-not-allowed text-white font-medium rounded-xl transition-colors"
         >
           {{ auth.loading ? 'Verifying...' : 'Verify' }}
         </button>
 
         <button
           @click="step = 'phone'"
-          class="w-full py-3 text-surface-400 hover:text-white transition-colors"
+          class="w-full py-3 text-surface-500 dark:text-surface-400 hover:text-surface-900 dark:hover:text-white transition-colors"
         >
           ← Use different number
         </button>
@@ -125,41 +125,41 @@ async function handleCompleteProfile() {
       <!-- Profile Step -->
       <div v-else-if="step === 'profile'" class="space-y-4">
         <div class="text-center mb-4">
-          <p class="text-surface-400">
+          <p class="text-surface-500 dark:text-surface-400">
             Complete your profile
           </p>
         </div>
 
         <div>
-          <label class="block text-sm font-medium text-surface-300 mb-2">
+          <label class="block text-sm font-medium text-surface-700 dark:text-surface-300 mb-2">
             First Name *
           </label>
           <input
             v-model="firstName"
             type="text"
-            class="w-full px-4 py-3 bg-surface-800 border border-surface-700 rounded-xl text-white focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+            class="w-full px-4 py-3 bg-white dark:bg-surface-800 border border-surface-200 dark:border-surface-700 rounded-xl text-surface-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
           />
         </div>
 
         <div>
-          <label class="block text-sm font-medium text-surface-300 mb-2">
+          <label class="block text-sm font-medium text-surface-700 dark:text-surface-300 mb-2">
             Last Name
           </label>
           <input
             v-model="lastName"
             type="text"
-            class="w-full px-4 py-3 bg-surface-800 border border-surface-700 rounded-xl text-white focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+            class="w-full px-4 py-3 bg-white dark:bg-surface-800 border border-surface-200 dark:border-surface-700 rounded-xl text-surface-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
           />
         </div>
 
         <div>
-          <label class="block text-sm font-medium text-surface-300 mb-2">
+          <label class="block text-sm font-medium text-surface-700 dark:text-surface-300 mb-2">
             Email
           </label>
           <input
             v-model="email"
             type="email"
-            class="w-full px-4 py-3 bg-surface-800 border border-surface-700 rounded-xl text-white focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+            class="w-full px-4 py-3 bg-white dark:bg-surface-800 border border-surface-200 dark:border-surface-700 rounded-xl text-surface-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
           />
         </div>
 

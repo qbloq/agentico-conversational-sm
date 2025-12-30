@@ -500,6 +500,7 @@ async function escalateSession(agent: AgentPayload, sessionId: string): Promise<
   );
 
   // 1. Check if session exists and is not already escalated
+  // We check BOTH the sessions flag and the escalations table for active records
   const { data: session, error: sessionError } = await supabase
     .schema(agent.clientSchema)
     .from('sessions')
@@ -514,9 +515,19 @@ async function escalateSession(agent: AgentPayload, sessionId: string): Promise<
     );
   }
 
-  if (session.is_escalated) {
+  // Proactive check in the escalations table
+  const { data: activeEscalation } = await supabase
+    .schema(agent.clientSchema)
+    .from('escalations')
+    .select('id')
+    .eq('session_id', sessionId)
+    .in('status', ['open', 'assigned', 'in_progress'])
+    .limit(1)
+    .maybeSingle();
+
+  if (session.is_escalated || activeEscalation) {
     return new Response(
-      JSON.stringify({ error: 'Session is already escalated' }),
+      JSON.stringify({ error: 'Session already has an active escalation' }),
       { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   }
@@ -538,6 +549,12 @@ async function escalateSession(agent: AgentPayload, sessionId: string): Promise<
 
   if (escError) {
     console.error('Failed to create escalation:', escError);
+    if ((escError as any).code === '23505') {
+      return new Response(
+        JSON.stringify({ error: 'Session already has an active escalation' }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
     return new Response(
       JSON.stringify({ error: 'Failed to create escalation record' }),
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }

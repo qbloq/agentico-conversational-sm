@@ -190,6 +190,33 @@ export async function sendMessage(
   });
 }
 
+export async function sendTemplateMessage(
+  escalationId: string,
+  templateName: string,
+  languageCode: string = 'es_CO'
+): Promise<{ success: boolean; messageId: string }> {
+  return request('/send-human-message', {
+    method: 'POST',
+    body: JSON.stringify({ escalationId, templateName, languageCode }),
+  });
+}
+
+// =============================================================================
+// Templates API
+// =============================================================================
+
+export interface WhatsAppTemplate {
+  name: string;
+  status: string;
+  category: string;
+  language: string;
+  components: any[];
+}
+
+export async function listTemplates(): Promise<{ templates: WhatsAppTemplate[] }> {
+  return request('/manage-whatsapp-templates/templates');
+}
+
 // =============================================================================
 // Sessions API
 // =============================================================================

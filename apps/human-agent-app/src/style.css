@@ -42,7 +42,7 @@ body {
 }
 
 /* Safe area insets for mobile */
-.safe-bottom {
+.safe-bottom_ {
   padding-bottom: env(safe-area-inset-bottom, 0);
 }
 

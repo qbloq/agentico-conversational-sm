@@ -19,6 +19,21 @@ export function createSupabaseEscalationStore(
       aiConfidence?: number;
       priority?: 'low' | 'medium' | 'high' | 'urgent';
     }): Promise<{ id: string }> {
+      // 1. Proactive check for existing active escalation
+      const { data: existingActive } = await supabase
+        .schema(schemaName)
+        .from('escalations')
+        .select('id')
+        .eq('session_id', data.sessionId)
+        .in('status', ['open', 'assigned', 'in_progress'])
+        .limit(1)
+        .maybeSingle();
+
+      if (existingActive) {
+        return { id: existingActive.id };
+      }
+
+      // 2. Attempt to create new escalation
       const { data: escalation, error } = await supabase
         .schema(schemaName)
         .from('escalations')
@@ -33,8 +48,15 @@ export function createSupabaseEscalationStore(
         .select('id')
         .single();
 
-      if (error || !escalation) {
-        throw new Error(`Failed to create escalation: ${error?.message}`);
+      if (error) {
+        if (error.code === '23505') { // Unique constraint violation
+          throw new Error(`Session already has an active escalation`);
+        }
+        throw new Error(`Failed to create escalation: ${error.message}`);
+      }
+
+      if (!escalation) {
+        throw new Error(`Failed to create escalation: No data returned`);
       }
 
       return { id: escalation.id };

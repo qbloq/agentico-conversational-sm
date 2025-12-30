@@ -142,7 +142,7 @@ const getStateLabel = (state: string) => {
           :class="[
             'max-w-[85%] rounded-xl px-2.5 py-1',
             msg.direction === 'inbound' 
-              ? 'bg-surface-700 mr-auto rounded-bl-md' 
+              ? 'bg-white dark:bg-surface-800 border border-surface-200 dark:border-surface-700 shadow-sm mr-auto rounded-bl-md' 
               : isHumanMessage(msg)
                 ? 'bg-accent-600 ml-auto rounded-br-md'
                 : 'bg-primary-600 ml-auto rounded-br-md'
@@ -152,16 +152,28 @@ const getStateLabel = (state: string) => {
             <a :href="msg.media_url" target="_blank">
               <img 
                 :src="msg.media_url" 
-                class="w-full h-auto rounded-lg shadow-sm border border-white/10"
+                class="w-full h-auto rounded-lg shadow-sm border border-surface-100 dark:border-white/10"
                 alt="Message image"
               />
             </a>
           </div>
-          <p v-if="msg.content" class="text-sm leading-snug text-white whitespace-pre-wrap break-words">{{ msg.content }}</p>
+          <p v-if="msg.content" 
+            :class="[
+              'text-[15px] leading-snug whitespace-pre-wrap break-words font-medium',
+              msg.direction === 'inbound' ? 'text-surface-900 dark:text-white' : 'text-white'
+            ]"
+          >
+            {{ msg.content }}
+          </p>
           <div class="flex items-center justify-end gap-1 mt-0.5">
-            <span v-if="isHumanMessage(msg)" class="text-[10px] text-white/60">Agent</span>
-            <span v-else-if="msg.direction === 'outbound'" class="text-[10px] text-white/60">AI</span>
-            <span class="text-[10px] text-white/50">{{ formatTime(msg.created_at) }}</span>
+            <span v-if="isHumanMessage(msg)" class="text-[10px] text-white/70">Agent</span>
+            <span v-else-if="msg.direction === 'outbound'" class="text-[10px] text-white/70">AI</span>
+            <span 
+              class="text-[10px]"
+              :class="msg.direction === 'inbound' ? 'text-surface-500 dark:text-white/40' : 'text-white/60'"
+            >
+              {{ formatTime(msg.created_at) }}
+            </span>
           </div>
         </div>
       </template>

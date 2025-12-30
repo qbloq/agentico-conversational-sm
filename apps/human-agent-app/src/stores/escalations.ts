@@ -10,9 +10,12 @@ import {
   assignEscalation,
   resolveEscalation,
   sendMessage,
+  sendTemplateMessage,
+  listTemplates,
   type Escalation,
   type EscalationDetail,
   type Message,
+  type WhatsAppTemplate,
 } from '@/api/client';
 import { supabase, CLIENT_SCHEMA } from '@/api/supabase';
 
@@ -21,9 +24,11 @@ export const useEscalationsStore = defineStore('escalations', () => {
   const escalations = ref<Escalation[]>([]);
   const currentEscalation = ref<EscalationDetail | null>(null);
   const messages = ref<Message[]>([]);
+  const templates = ref<WhatsAppTemplate[]>([]);
   const loading = ref(false);
   const error = ref<string | null>(null);
   const sending = ref(false);
+  const loadingTemplates = ref(false);
   
   // Realtime
   let messageChannel: RealtimeChannel | null = null;
@@ -44,6 +49,25 @@ export const useEscalationsStore = defineStore('escalations', () => {
       return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
     });
   });
+
+  const lastInboundMessage = computed(() => {
+    return [...messages.value]
+      .reverse()
+      .find(m => m.direction === 'inbound');
+  });
+
+  const windowTimeRemaining = computed(() => {
+    if (!lastInboundMessage.value) return 0;
+    
+    const lastMsgTime = new Date(lastInboundMessage.value.created_at).getTime();
+    const now = new Date().getTime();
+    const twentyFourHours = 24 * 60 * 60 * 1000;
+    const elapsed = now - lastMsgTime;
+    
+    return Math.max(0, twentyFourHours - elapsed);
+  });
+
+  const isWindowOpen = computed(() => windowTimeRemaining.value > 0);
 
   // Actions
   async function fetchEscalations(): Promise<boolean> {
@@ -144,6 +168,52 @@ export const useEscalationsStore = defineStore('escalations', () => {
     }
   }
 
+  async function fetchTemplates(): Promise<void> {
+    loadingTemplates.value = true;
+    try {
+      const result = await listTemplates();
+      templates.value = result.templates;
+    } catch (e) {
+      console.error('Failed to fetch templates:', e);
+    } finally {
+      loadingTemplates.value = false;
+    }
+  }
+
+  async function sendTemplate(templateName: string): Promise<boolean> {
+    if (!currentEscalation.value) return false;
+
+    sending.value = true;
+    error.value = null;
+
+    try {
+      const result = await sendTemplateMessage(currentEscalation.value.id, templateName);
+      
+      // Add to local messages (optimistic update)
+      messages.value.push({
+        id: result.messageId,
+        session_id: currentEscalation.value.session.id,
+        direction: 'outbound',
+        type: 'template',
+        content: `Sent WhatsApp template: ${templateName}`,
+        created_at: new Date().toISOString(),
+        sent_by_agent_id: 'current-agent',
+      });
+
+      // Update status
+      if (currentEscalation.value.status === 'assigned') {
+        currentEscalation.value.status = 'in_progress';
+      }
+
+      return true;
+    } catch (e) {
+      error.value = e instanceof Error ? e.message : 'Failed to send template';
+      return false;
+    } finally {
+      sending.value = false;
+    }
+  }
+
   /**
    * Subscribe to Realtime updates for messages in the current session
    */
@@ -218,19 +288,26 @@ export const useEscalationsStore = defineStore('escalations', () => {
     escalations,
     currentEscalation,
     messages,
+    templates,
     loading,
     error,
     sending,
+    loadingTemplates,
     realtimeConnected,
     // Computed
     openCount,
     sortedEscalations,
+    lastInboundMessage,
+    windowTimeRemaining,
+    isWindowOpen,
     // Actions
     fetchEscalations,
     fetchEscalation,
     assign,
     resolve,
     send,
+    fetchTemplates,
+    sendTemplate,
     clearCurrent,
     subscribeToMessages,
     unsubscribeFromMessages,

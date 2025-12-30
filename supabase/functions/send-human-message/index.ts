@@ -47,11 +47,11 @@ serve(async (req: Request) => {
       );
     }
 
-    const { escalationId, message } = await req.json();
+    const { escalationId, message, templateName, languageCode } = await req.json();
 
-    if (!escalationId || !message) {
+    if (!escalationId || (!message && !templateName)) {
       return new Response(
-        JSON.stringify({ error: 'escalationId and message are required' }),
+        JSON.stringify({ error: 'escalationId and either message or templateName are required' }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
@@ -123,8 +123,8 @@ serve(async (req: Request) => {
       .insert({
         session_id: session.id,
         direction: 'outbound',
-        type: 'text',
-        content: message,
+        type: templateName ? 'template' : 'text',
+        content: message || `Template: ${templateName}`,
         sent_by_agent_id: agent.sub, // Proper FK to human_agents table
       })
       .select()
@@ -142,8 +142,10 @@ serve(async (req: Request) => {
     const sent = await sendWhatsAppMessage(
       session.channel_id,          // phone_number_id
       session.channel_user_id,     // customer phone
-      message,
-      agent.clientSchema
+      message || '',
+      agent.clientSchema,
+      templateName,
+      languageCode
     );
 
     if (!sent) {
@@ -217,7 +219,9 @@ async function sendWhatsAppMessage(
   phoneNumberId: string,
   to: string,
   text: string,
-  clientSchema: string
+  clientSchema: string,
+  templateName?: string,
+  languageCode: string = 'es_CO'
 ): Promise<boolean> {
   // Get access token based on client (for now use env var)
   const accessToken = Deno.env.get('TAG_WHATSAPP_ACCESS_TOKEN');
@@ -230,19 +234,30 @@ async function sendWhatsAppMessage(
   try {
     const url = `https://graph.facebook.com/v24.0/${phoneNumberId}/messages`;
 
+    const body: any = {
+      messaging_product: 'whatsapp',
+      recipient_type: 'individual',
+      to,
+    };
+
+    if (templateName) {
+      body.type = 'template';
+      body.template = {
+        name: templateName,
+        language: { code: languageCode },
+      };
+    } else {
+      body.type = 'text';
+      body.text = { body: text };
+    }
+
     const response = await fetch(url, {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${accessToken}`,
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({
-        messaging_product: 'whatsapp',
-        recipient_type: 'individual',
-        to,
-        type: 'text',
-        text: { body: text },
-      }),
+      body: JSON.stringify(body),
     });
 
     if (!response.ok) {
@@ -251,7 +266,7 @@ async function sendWhatsAppMessage(
       return false;
     }
 
-    console.log(`Message sent to ${to} by agent`);
+    console.log(`Message sent to ${to} by agent (${templateName ? 'template' : 'text'})`);
     return true;
   } catch (error) {
     console.error('Failed to send WhatsApp message:', error);
