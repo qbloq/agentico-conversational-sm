@@ -7,8 +7,13 @@ export default defineConfig({
   plugins: [
     vue(),
     VitePWA({
+      strategies: 'injectManifest',
+      srcDir: resolve(__dirname, 'src'),
+      filename: 'sw.ts',
       registerType: 'autoUpdate',
-      includeAssets: ['favicon.ico', 'apple-touch-icon.png'],
+      injectManifest: {
+        injectionPoint: 'self.__WB_MANIFEST',
+      },
       manifest: {
         name: 'Agent Hub',
         short_name: 'Agent Hub',
@@ -28,6 +33,10 @@ export default defineConfig({
             type: 'image/png',
           },
         ],
+      },
+      devOptions: {
+        enabled: true,
+        type: 'module',
       },
     }),
   ],

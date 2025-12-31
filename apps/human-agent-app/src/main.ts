@@ -3,6 +3,10 @@ import { createPinia } from 'pinia';
 import App from './App.vue';
 import router from './router';
 import './style.css';
+import { registerSW } from 'virtual:pwa-register';
+
+// Register service worker
+registerSW({ immediate: true });
 
 const app = createApp(App);
 

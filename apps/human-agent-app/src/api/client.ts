@@ -275,3 +275,25 @@ export async function escalateSession(id: string): Promise<{
     method: 'POST',
   });
 }
+// =============================================================================
+// Push Subscriptions API
+// =============================================================================
+
+export async function savePushSubscription(
+  subscription: PushSubscription,
+  deviceName?: string
+): Promise<{ success: boolean }> {
+  return request('/manage-push-subscriptions', {
+    method: 'POST',
+    body: JSON.stringify({ subscription, deviceName }),
+  });
+}
+
+export async function deletePushSubscription(
+  subscription?: PushSubscription
+): Promise<{ success: boolean }> {
+  return request('/manage-push-subscriptions', {
+    method: 'DELETE',
+    body: JSON.stringify({ subscription }),
+  });
+}
