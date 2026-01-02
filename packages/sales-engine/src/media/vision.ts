@@ -6,7 +6,7 @@ import type { VisionProvider, ImageAnalysis } from './types.js';
 
 export class GeminiVisionAnalyzer implements VisionProvider {
   private genAI: GoogleGenerativeAI;
-  private modelName = 'gemini-2.0-flash'; // Supports vision
+  private modelName = 'gemini-2.5-flash'; // Supports vision
 
   constructor(apiKey: string) {
     this.genAI = new GoogleGenerativeAI(apiKey);

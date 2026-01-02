@@ -139,3 +139,41 @@ ${examples.length < 0 ? '- Study the reference examples above and match their co
 - Never pretend to be human if directly asked
 `;
 }
+
+/**
+ * Prompt to decide the next state when an escalation is resolved
+ */
+export function buildEscalationResolutionPrompt(states: Record<string, any>): string {
+  const statesDescription = Object.entries(states)
+    .filter(([name]) => name !== 'escalated')
+    .map(([name, config]) => {
+      return `- **${name}**: ${config.objective}\n  Description: ${config.description}`;
+    })
+    .join('\n\n');
+
+  return `# Role
+You are an expert conversation analyst for a sales bot.
+
+# Task
+A human agent has just finished talking to a user. You need to analyze the conversation and decide which state the AI should resume in.
+
+# Available States
+${statesDescription}
+
+# Analysis Guidelines
+- Look at the last few messages to see if the user's question was answered.
+- If the user was ready to register, transition to "closing".
+- If the user has more questions about 12x accounts, transition to "pitching_12x".
+- If the agent successfully finished the help, transition to "completed" or "returning_customer" if they are already a customer.
+- Default to "returning_customer" or "initial" if unsure, based on the flow.
+
+# Response Format
+You MUST respond with a JSON object:
+\`\`\`json
+{
+  "nextState": "state_name",
+  "reason": "Brief explanation of why this state was chosen"
+}
+\`\`\`
+`;
+}

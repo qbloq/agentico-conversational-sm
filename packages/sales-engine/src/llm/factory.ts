@@ -106,5 +106,14 @@ function createProviderWithFallback(
         return await fallback.generateResponse(request);
       }
     },
+
+    async generateContent(prompt, options) {
+      try {
+        return await primary.generateContent(prompt, options);
+      } catch (error) {
+        console.warn(`Primary provider (${primary.name}) failed, falling back to ${fallback.name}:`, error);
+        return await fallback.generateContent(prompt, options);
+      }
+    },
   };
 }

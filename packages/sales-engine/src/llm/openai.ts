@@ -57,8 +57,33 @@ export function createOpenAIProvider(config: LLMProviderConfig): LLMProvider {
         finishReason: mapFinishReason(choice.finish_reason),
       };
     },
+
+    async generateContent(prompt: string, options?: { temperature?: number; maxTokens?: number }): Promise<LLMResponse> {
+      if (!OpenAI) {
+        const module = await import('openai');
+        OpenAI = module.default;
+      }
+      const client = new OpenAI({ apiKey: config.apiKey });
+      const response = await client.chat.completions.create({
+        model: config.model || 'gpt-4o',
+        messages: [{ role: 'user', content: prompt }],
+        temperature: options?.temperature ?? 0.7,
+        max_tokens: options?.maxTokens ?? 1024,
+      });
+      const choice = response.choices[0];
+      return {
+        content: choice.message.content || '',
+        usage: {
+          promptTokens: response.usage?.prompt_tokens ?? 0,
+          completionTokens: response.usage?.completion_tokens ?? 0,
+          totalTokens: response.usage?.total_tokens ?? 0,
+        },
+        finishReason: mapFinishReason(choice.finish_reason),
+      };
+    }
   };
 }
+
 
 function mapFinishReason(reason: string | null): LLMResponse['finishReason'] {
   switch (reason) {

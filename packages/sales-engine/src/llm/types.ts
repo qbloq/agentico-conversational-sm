@@ -85,7 +85,9 @@ export interface StructuredLLMResponse extends LLMResponse {
 export interface LLMProvider {
   readonly name: string;
   generateResponse(request: LLMRequest): Promise<LLMResponse>;
+  generateContent(prompt: string, options?: { temperature?: number; maxTokens?: number }): Promise<LLMResponse>;
 }
+
 
 export interface EmbeddingOptions {
   taskType?: string;

@@ -6,6 +6,15 @@
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'https://your-project.supabase.co/functions/v1';
 
+let onUnauthorizedCallback: (() => void) | null = null;
+
+/**
+ * Register a callback for 401 Unauthorized responses
+ */
+export function onUnauthorized(callback: () => void) {
+  onUnauthorizedCallback = callback;
+}
+
 /**
  * Get stored auth token
  */
@@ -34,6 +43,9 @@ async function request<T>(
   const data = await response.json();
 
   if (!response.ok) {
+    if (response.status === 401 && onUnauthorizedCallback) {
+      onUnauthorizedCallback();
+    }
     throw new Error(data.error || 'Request failed');
   }
 

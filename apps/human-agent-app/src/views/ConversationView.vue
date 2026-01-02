@@ -152,7 +152,7 @@ const getStateLabel = (state: string) => {
             <a :href="msg.media_url" target="_blank">
               <img 
                 :src="msg.media_url" 
-                class="w-full h-auto rounded-lg shadow-sm border border-surface-100 dark:border-white/10"
+                class="max-w-full max-h-72 w-auto object-contain rounded-lg shadow-sm border border-surface-200 dark:border-white/10"
                 alt="Message image"
               />
             </a>

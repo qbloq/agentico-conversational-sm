@@ -61,8 +61,33 @@ export function createAnthropicProvider(config: LLMProviderConfig): LLMProvider 
         finishReason: mapFinishReason(response.stop_reason),
       };
     },
+
+    async generateContent(prompt: string, options?: { temperature?: number; maxTokens?: number }): Promise<LLMResponse> {
+      if (!Anthropic) {
+        const module = await import('@anthropic-ai/sdk');
+        Anthropic = module.default;
+      }
+      const client = new Anthropic({ apiKey: config.apiKey });
+      const response = await client.messages.create({
+        model: config.model || 'claude-sonnet-4-20250514',
+        max_tokens: options?.maxTokens ?? 1024,
+        messages: [{ role: 'user', content: prompt }],
+      });
+      const textContent = response.content.find(c => c.type === 'text');
+      const text = textContent?.type === 'text' ? textContent.text : '';
+      return {
+        content: text,
+        usage: {
+          promptTokens: response.usage.input_tokens,
+          completionTokens: response.usage.output_tokens,
+          totalTokens: response.usage.input_tokens + response.usage.output_tokens,
+        },
+        finishReason: mapFinishReason(response.stop_reason),
+      };
+    }
   };
 }
+
 
 /**
  * Map Anthropic stop reason to our standard format

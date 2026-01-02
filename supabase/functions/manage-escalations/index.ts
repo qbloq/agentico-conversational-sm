@@ -16,6 +16,9 @@
 import { serve } from 'https://deno.land/std@0.177.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.38.4';
 import { verify } from 'https://deno.land/x/djwt@v3.0.1/mod.ts';
+import { createGeminiProvider } from '../_shared/sales-engine-llm.bundle.ts';
+import { buildEscalationResolutionPrompt } from '../_shared/sales-engine.bundle.ts';
+
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -306,7 +309,7 @@ async function resolveEscalation(
   const { data: escalation, error: escError } = await supabase
     .schema(agent.clientSchema)
     .from('escalations')
-    .select('*, session:session_id(id)')
+    .select('*, session:session_id(id, current_state)')
     .eq('id', escalationId)
     .single();
 
@@ -323,6 +326,63 @@ async function resolveEscalation(
       JSON.stringify({ error: 'Escalation assigned to another agent' }),
       { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
+  }
+
+  // 1. Get Conversation History
+  const { data: messages } = await supabase
+    .schema(agent.clientSchema)
+    .from('messages')
+    .select('content, direction, type')
+    .eq('session_id', escalation.session.id)
+    .order('created_at', { ascending: false })
+    .limit(20);
+
+  const history = (messages || [])
+    .reverse()
+    .map(m => `${m.direction === 'inbound' ? 'User' : 'Agent'}: ${m.content}`)
+    .join('\n');
+
+  // 2. Get State Machine Config
+  const { data: sm } = await supabase
+    .schema(agent.clientSchema)
+    .from('state_machines')
+    .select('states')
+    .eq('name', 'default_sales_flow')
+    .eq('is_active', true)
+    .single();
+
+  let nextState = escalation.session.current_state;
+  let transitionReason = 'Determined by human agent (default)';
+
+  if (sm && sm.states) {
+    try {
+      // 3. Call Gemini to decide next state
+      const llmProvider = createGeminiProvider({
+        apiKey: Deno.env.get('GOOGLE_API_KEY') || '',
+        model: 'gemini-2.5-flash',
+      });
+
+      const systemPrompt = buildEscalationResolutionPrompt(sm.states);
+      const userMessage = `Based on this conversation, what should be the next state?\n\nCONVERSATION:\n${history}\n\nAgent Notes: ${notes || 'None'}`;
+
+      const llmResponse = await llmProvider.generateResponse({
+        systemPrompt,
+        messages: [{ role: 'user', content: userMessage }],
+        temperature: 0.2,
+      });
+
+      const jsonMatch = llmResponse.content.match(/\{[\s\S]*\}/);
+      if (jsonMatch) {
+        const parsed = JSON.parse(jsonMatch[0]);
+        if (parsed.nextState && sm.states[parsed.nextState]) {
+          nextState = parsed.nextState;
+          transitionReason = parsed.reason;
+          console.log(`[Escalation Resolution] Gemini selected next state: ${nextState} (${transitionReason})`);
+        }
+      }
+    } catch (err) {
+      console.error('[Escalation Resolution] Gemini analysis failed:', err);
+    }
   }
 
   // Update escalation
@@ -343,23 +403,28 @@ async function resolveEscalation(
     );
   }
 
-  // Update session to no longer be escalated
+  // Update session to no longer be escalated and set new state
   await supabase
     .schema(agent.clientSchema)
     .from('sessions')
     .update({
       is_escalated: false,
       status: 'active',
+      current_state: nextState,
+      previous_state: escalation.session.current_state,
     })
     .eq('id', escalation.session.id);
 
-  // TODO: Trigger semantic enrichment (async)
-  // Could invoke another function or use a queue
-
   return new Response(
-    JSON.stringify({ success: true, message: 'Escalation resolved' }),
+    JSON.stringify({ 
+      success: true, 
+      message: 'Escalation resolved',
+      nextState,
+      reason: transitionReason
+    }),
     { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
   );
+
 }
 
 /**

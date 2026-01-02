@@ -1,14 +1,26 @@
 <script setup lang="ts">
-import { RouterView, useRoute } from 'vue-router';
-import { computed } from 'vue';
+import { RouterView, useRoute, useRouter } from 'vue-router';
+import { computed, onMounted } from 'vue';
 import MainLayout from '@/components/layout/MainLayout.vue';
 import { useThemeStore } from '@/stores/theme';
+import { useAuthStore } from '@/stores/auth';
+import { onUnauthorized } from '@/api/client';
 
 const route = useRoute();
+const router = useRouter();
+const auth = useAuthStore();
 const useLayout = computed(() => route.meta?.requiresAuth === true);
 
 // Initialize theme store
 const themeStore = useThemeStore();
+
+// Handle unauthorized responses globally
+onMounted(() => {
+  onUnauthorized(() => {
+    auth.logout();
+    router.push({ name: 'login' });
+  });
+});
 </script>
 
 <template>

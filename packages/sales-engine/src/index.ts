@@ -128,6 +128,7 @@ export type {
   ConversationExample as EngineConversationExample,
 } from './engine/types.js';
 
+
 export {
   SupabaseExampleStore,
   InMemoryExampleStore,
@@ -136,3 +137,6 @@ export {
   extractAgentResponses,
   summarizeExample,
 } from './examples/index.js';
+
+export { buildEscalationResolutionPrompt } from './prompts/templates.js';
+
