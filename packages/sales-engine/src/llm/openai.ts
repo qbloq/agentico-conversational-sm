@@ -80,6 +80,14 @@ export function createOpenAIProvider(config: LLMProviderConfig): LLMProvider {
         },
         finishReason: mapFinishReason(choice.finish_reason),
       };
+    },
+
+    async generateContentWithFileSearch(): Promise<LLMResponse> {
+      throw new Error('File Search not implemented for OpenAI provider');
+    },
+
+    async generateResponseWithFileSearch(): Promise<LLMResponse> {
+      throw new Error('File Search not implemented for OpenAI provider');
     }
   };
 }

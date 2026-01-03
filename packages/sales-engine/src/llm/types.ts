@@ -76,16 +76,47 @@ export interface StructuredLLMResponse extends LLMResponse {
     interestLevel?: 'high' | 'medium' | 'low';
     /** Any specific concerns or objections */
     concerns?: string[];
+    /** Whether user has registered on the platform */
+    hasRegistered?: boolean;
+    /** Whether user has made a deposit */
+    deposit?: boolean;
+    /** The amount of the deposit if mentioned */
+    depositAmount?: number;
   };
   
   /** Whether the LLM is uncertain and might need escalation */
   isUncertain?: boolean;
 }
 
+export interface StructuredOutputConfig {
+  responseMimeType: 'application/json' | 'text/plain';
+  responseJsonSchema?: any;
+}
+
+export interface FileSearchConfig {
+  fileSearchStoreNames: string[];
+}
+
 export interface LLMProvider {
   readonly name: string;
   generateResponse(request: LLMRequest): Promise<LLMResponse>;
   generateContent(prompt: string, options?: { temperature?: number; maxTokens?: number }): Promise<LLMResponse>;
+  generateContentWithFileSearch(request: {
+    systemPrompt?: string;
+    prompt: string;
+    fileSearch: FileSearchConfig;
+    structuredOutput?: StructuredOutputConfig;
+    temperature?: number;
+    maxTokens?: number;
+  }): Promise<LLMResponse>;
+  generateResponseWithFileSearch(request: {
+    systemPrompt?: string;
+    messages: LLMMessage[];
+    fileSearch: FileSearchConfig;
+    structuredOutput?: StructuredOutputConfig;
+    temperature?: number;
+    maxTokens?: number;
+  }): Promise<LLMResponse>;
 }
 
 

@@ -131,9 +131,9 @@ serve(async (req: Request) => {
       .single();
 
     if (msgError) {
-      console.error('Failed to save message:', msgError);
+      console.error('Failed to save messageooo:', msgError);
       return new Response(
-        JSON.stringify({ error: 'Failed to save message' }),
+        JSON.stringify({ error: 'Failed to save messageppppppp' }),
         { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }

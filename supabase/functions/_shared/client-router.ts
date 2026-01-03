@@ -32,9 +32,11 @@ export async function routeByChannelId(
     .single();
   
   if (error || !mapping) {
-    console.error(`No client mapping found for ${channelType}:${channelId}`, error);
+    console.error(`[DEBUG] No client mapping found for ${channelType}:${channelId}`, error);
     return null;
   }
+  
+  console.log(`[DEBUG] Found mapping: client=${mapping.client_id}, schema=${mapping.schema_name}`);
   
   // 2. Load client configuration from Vault or config file
   const config = await loadClientConfig(supabase, mapping.client_id);
@@ -69,6 +71,9 @@ async function loadClientConfig(
       clientId: 'tag_markets',
       schemaName: 'client_tag_markets',
       storageBucket: 'media-tag-markets',
+      knowledgeBase: {
+        storeIds: ['tag-markets-knowledge-base'],
+      },
       channels: {
         whatsapp: {
           phoneNumberId: Deno.env.get('TAG_WHATSAPP_PHONE_NUMBER_ID') || '',
@@ -99,7 +104,9 @@ async function loadClientConfig(
     },
   };
   
-  return configs[clientId] || null;
+  const config = configs[clientId] || null;
+  console.log(`[DEBUG] Config for ${clientId}: ${config ? 'Loaded' : 'NOT FOUND'}`);
+  return config;
 }
 
 /**
@@ -114,6 +121,9 @@ export function getAllClientConfigs(): Array<{ clientId: string; schemaName: str
       clientId: 'tag_markets',
       schemaName: 'client_tag_markets',
       storageBucket: 'media-tag-markets',
+      knowledgeBase: {
+        storeIds: ['tag-markets-knowledge-base'],
+      },
       channels: {
         whatsapp: {
           phoneNumberId: Deno.env.get('TAG_WHATSAPP_PHONE_NUMBER_ID') || '',
@@ -127,7 +137,7 @@ export function getAllClientConfigs(): Array<{ clientId: string; schemaName: str
       },
       llm: {
         provider: 'gemini',
-        model: 'gemini-2.5-flash',
+        model: 'gemini-3-flash-preview',
         fallbackProvider: 'anthropic',
         fallbackModel: 'claude-sonnet-4-20250514',
       },

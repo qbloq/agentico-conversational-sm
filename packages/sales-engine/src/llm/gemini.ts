@@ -1,12 +1,11 @@
-/**
- * Google Gemini LLM Provider
- * 
- * Primary LLM provider for the sales engine.
- * Uses @google/genai SDK.
- */
-
 import { GoogleGenAI } from "@google/genai";
-import type { LLMProvider, LLMProviderConfig, LLMRequest, LLMResponse } from './types.js';
+import type {
+  LLMProvider,
+  LLMRequest,
+  LLMResponse,
+  LLMMessage,
+  LLMProviderConfig
+} from "./types.js";
 
 /**
  * Create a Gemini LLM provider
@@ -62,6 +61,96 @@ export function createGeminiProvider(config: LLMProviderConfig): LLMProvider {
         config: {
           temperature: options?.temperature ?? 0.7,
           maxOutputTokens: options?.maxTokens ?? 1024,
+        }
+      });
+
+      return {
+        content: response.text || '',
+        usage: {
+          promptTokens: response.usageMetadata?.promptTokenCount ?? 0,
+          completionTokens: response.usageMetadata?.candidatesTokenCount ?? 0,
+          totalTokens: response.usageMetadata?.totalTokenCount ?? 0,
+        },
+        finishReason: mapFinishReason(response.candidates?.[0]?.finishReason),
+      };
+    },
+
+    /**
+     * Content generation with File Search and Structured Output support
+     */
+    async generateContentWithFileSearch(request: {
+      systemPrompt?: string;
+      prompt: string;
+      fileSearch: { fileSearchStoreNames: string[] };
+      structuredOutput?: { responseMimeType: string; responseJsonSchema?: any };
+      temperature?: number;
+      maxTokens?: number;
+    }): Promise<LLMResponse> {
+      const response = await client.models.generateContent({
+        model: modelId,
+        contents: request.prompt,
+        config: {
+          systemInstruction: request.systemPrompt,
+          temperature: request.temperature ?? 0.7,
+          maxOutputTokens: request.maxTokens ?? 1500,
+          tools: [
+            {
+              fileSearch: {
+                fileSearchStoreNames: request.fileSearch.fileSearchStoreNames,
+              },
+            },
+          ],
+          responseMimeType: request.structuredOutput?.responseMimeType as any,
+          responseJsonSchema: request.structuredOutput?.responseJsonSchema,
+        }
+      });
+
+      return {
+        content: response.text || '',
+        usage: {
+          promptTokens: response.usageMetadata?.promptTokenCount ?? 0,
+          completionTokens: response.usageMetadata?.candidatesTokenCount ?? 0,
+          totalTokens: response.usageMetadata?.totalTokenCount ?? 0,
+        },
+        finishReason: mapFinishReason(response.candidates?.[0]?.finishReason),
+      };
+    },
+
+    /**
+     * Response generation with File Search and Structured Output support for conversations
+     */
+    async generateResponseWithFileSearch(request: {
+      systemPrompt?: string;
+      messages: LLMMessage[];
+      fileSearch: { fileSearchStoreNames: string[] };
+      structuredOutput?: { responseMimeType: string; responseJsonSchema?: any };
+      temperature?: number;
+      maxTokens?: number;
+    }): Promise<LLMResponse> {
+      // Build conversation history for Gemini format
+      const contents = request.messages
+        .filter(m => m.role !== 'system')
+        .map(m => ({
+          role: m.role === 'user' ? 'user' : 'model',
+          parts: [{ text: m.content }],
+        }));
+
+      const response = await client.models.generateContent({
+        model: modelId,
+        contents,
+        config: {
+          systemInstruction: request.systemPrompt,
+          temperature: request.temperature ?? 0.7,
+          maxOutputTokens: request.maxTokens ?? 1500,
+          tools: [
+            {
+              fileSearch: {
+                fileSearchStoreNames: request.fileSearch.fileSearchStoreNames,
+              },
+            },
+          ],
+          responseMimeType: request.structuredOutput?.responseMimeType as any,
+          responseJsonSchema: request.structuredOutput?.responseJsonSchema,
         }
       });
 

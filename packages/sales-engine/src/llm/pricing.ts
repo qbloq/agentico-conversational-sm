@@ -21,6 +21,7 @@ export const MODEL_PRICING: Record<string, ModelPricing> = {
   'gemini-2.5-flash': { promptPer1M: 0.30, completionPer1M: 2.50 },
   'gemini-2.5-flash-lite': { promptPer1M: 0.10, completionPer1M: 0.40 },
   'gemini-3-pro-preview': { promptPer1M: 2, completionPer1M: 12 },
+  'gemini-3-flash-preview': { promptPer1M: 0.5, completionPer1M: 3 },
     
   // Embeddings (completion tokens = 0 for embeddings)
   'gemini-embedding-001': { promptPer1M: 0.15, completionPer1M: 0.15 }

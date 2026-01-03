@@ -152,6 +152,14 @@ export function createGeminiProvider(config: LLMProviderConfig): LLMProvider {
         finishReason: mapFinishReason(response.candidates?.[0]?.finishReason),
       };
     },
+
+    async generateContentWithFileSearch(): Promise<LLMResponse> {
+      throw new Error('File Search not implemented for Legacy Gemini provider');
+    },
+
+    async generateResponseWithFileSearch(): Promise<LLMResponse> {
+      throw new Error('File Search not implemented for Legacy Gemini provider');
+    }
   };
 }
 

@@ -22,7 +22,7 @@ dotenv.config();
 const WEBHOOK_URL = 'http://127.0.0.1:54321/functions/v1/webhook-whatsapp';
 const MOCK_SERVER_PORT = 3000;
 const MOCK_PHONE_ID = '123456789';
-const MOCK_APP_SECRET = 'mock_app_secret'; // Must match clients/tag_markets.json or config used
+const MOCK_APP_SECRET = 'mock_app_secret'; // From .env
 const USER_PHONE = '5215555555555';
 const CLIENT_SCHEMA = 'client_tag_markets';
 
@@ -278,6 +278,7 @@ async function sendWebhook(text: string) {
   // console.log('Signature:', signature);
   // console.log('Body:', body);
   try {
+    console.log(`[DEBUG] Sending webhook to ${WEBHOOK_URL}...`);
     const response = await fetch(WEBHOOK_URL, {
       method: 'POST',
       headers: {
@@ -287,6 +288,8 @@ async function sendWebhook(text: string) {
       },
       body: body,
     });
+    
+    console.log(`[DEBUG] Webhook response status: ${response.status}`);
     
     if (!response.ok) {
       console.error(`❌ Webhook Error: ${response.status} ${response.statusText}`);

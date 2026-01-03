@@ -84,6 +84,14 @@ export function createAnthropicProvider(config: LLMProviderConfig): LLMProvider 
         },
         finishReason: mapFinishReason(response.stop_reason),
       };
+    },
+
+    async generateContentWithFileSearch(): Promise<LLMResponse> {
+      throw new Error('File Search not implemented for Anthropic provider');
+    },
+
+    async generateResponseWithFileSearch(): Promise<LLMResponse> {
+      throw new Error('File Search not implemented for Anthropic provider');
     }
   };
 }

@@ -43,6 +43,8 @@
   },
   "dependencies": {
     "@google/genai": "^1.30.0",
-    "@parallelo/sales-engine": "workspace:*"
+    "@parallelo/sales-engine": "workspace:*",
+    "zod": "^3.24.1",
+    "zod-to-json-schema": "^3.25.1"
   }
 }

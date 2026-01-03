@@ -2,10 +2,35 @@
  * Core types for the conversation engine
  */
 
-import type { MediaService } from '../media/types.js';
-import type { NotificationService } from '../escalation/types.js';
+import type { 
+  MediaService 
+} from '../media/types.js';
+import type { 
+  NotificationService 
+} from '../escalation/types.js';
+import type { 
+  LLMProvider, 
+  LLMRequest, 
+  LLMMessage, 
+  LLMResponse,
+  StructuredLLMResponse,
+  EmbeddingProvider,
+  FileSearchConfig,
+  StructuredOutputConfig
+} from '../llm/types.js';
 
-export type { MediaService, NotificationService };
+export type { 
+  MediaService, 
+  NotificationService,
+  LLMProvider,
+  LLMRequest,
+  LLMMessage,
+  LLMResponse,
+  StructuredLLMResponse,
+  EmbeddingProvider,
+  FileSearchConfig,
+  StructuredOutputConfig
+};
 
 // =============================================================================
 // Session & Contact Types
@@ -439,41 +464,7 @@ export interface KnowledgeEntry {
   relatedArticles?: { title: string; url: string }[];
 }
 
-// =============================================================================
-// LLM Interfaces
-// =============================================================================
-
-export interface LLMProvider {
-  readonly name: string;
-  generateResponse(request: LLMRequest): Promise<LLMResponse>;
-}
-
-export interface LLMRequest {
-  systemPrompt: string;
-  messages: LLMMessage[];
-  temperature?: number;
-  maxTokens?: number;
-}
-
-export interface LLMMessage {
-  role: 'user' | 'assistant' | 'system';
-  content: string;
-}
-
-export interface LLMResponse {
-  content: string;
-  usage: {
-    promptTokens: number;
-    completionTokens: number;
-    totalTokens: number;
-  };
-  finishReason: 'stop' | 'length' | 'content_filter' | 'error';
-}
-
-export interface EmbeddingProvider {
-  generateEmbedding(text: string, options?: { taskType?: string }): Promise<number[]>;
-  readonly dimensions: number;
-}
+// LLM Types are now imported from ../llm/types.js
 
 // =============================================================================
 // LLM Logging
@@ -530,6 +521,11 @@ export interface ClientConfig {
     model: string;
     fallbackProvider?: 'gemini' | 'anthropic' | 'openai';
     fallbackModel?: string;
+  };
+  
+  // Knowledge Base settings (native File Search)
+  knowledgeBase?: {
+    storeIds: string[];
   };
   
   // Escalation settings

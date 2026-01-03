@@ -13,7 +13,6 @@ import type {
   Contact,
   NormalizedMessage,
   EngineDependencies,
-  KnowledgeEntry,
   ConversationState,
   ConversationExample,
   SessionKey,
@@ -25,7 +24,9 @@ import { StateMachine } from '../state/machine.js';
 import type { StructuredLLMResponse, LLMResponse } from '../llm/types.js';
 import { calculateCost } from '../llm/pricing.js';
 
-import { buildSystemPrompt } from '../prompts/templates.js';
+import { buildSystemPromptWithoutKB } from '../prompts/templates.js';
+import { zodToJsonSchema } from 'zod-to-json-schema';
+import { ConversationResponseSchema } from '../llm/schemas.js';
 
 /**
  * Result of ingesting a message (debounce)
@@ -72,13 +73,13 @@ export function createConversationEngine(): ConversationEngine {
   return {
     async processMessage(input: EngineInput): Promise<EngineOutput> {
       const { sessionKey, message, deps } = input;
+      console.log(`[DEBUG] processMessage: sessionKey=${JSON.stringify(sessionKey)}, type=${message.type}`);
+      console.log(`[DEBUG] processMessage: channel=${sessionKey.channelType}, userId=${sessionKey.channelUserId}, type=${message.type}`);
       const { 
         contactStore, 
         sessionStore, 
         messageStore, 
         llmProvider, 
-        embeddingProvider, 
-        knowledgeStore, 
         exampleStore,
         mediaService,
         notificationService,
@@ -188,7 +189,8 @@ export function createConversationEngine(): ConversationEngine {
         }
       }*/
       
-      // 4. Save inbound message
+      // 4. Save incoming message
+      console.log(`[DEBUG] Saving incoming message: ${message.content?.slice(0, 50)}...`);
       await messageStore.save(session.id, {
         direction: 'inbound',
         type: message.type,
@@ -198,6 +200,7 @@ export function createConversationEngine(): ConversationEngine {
         imageAnalysis: message.imageAnalysis,
         platformMessageId: message.id,
       });
+      console.log(`[DEBUG] Incoming message saved successfully`);
       
       // 5. Get conversation history
       const recentMessages = await messageStore.getRecent(session.id, 20);
@@ -206,8 +209,6 @@ export function createConversationEngine(): ConversationEngine {
       let smConfig = undefined;
       if (deps.stateMachineStore) {
         try {
-          // Try to load active SM
-          // TODO: Make SM name configurable in clientConfig
           const loadedConfig = await deps.stateMachineStore.findActive('default_sales_flow');
           if (loadedConfig) {
             smConfig = loadedConfig;
@@ -217,114 +218,85 @@ export function createConversationEngine(): ConversationEngine {
         }
       }
 
-      // console.log('State machine config:\n\n', smConfig);
       const stateMachine = StateMachine.fromSession(session, smConfig);
       const stateConfig = stateMachine.getConfig();
       
-      // NOTE: Escalation detection is now handled post-LLM via structuredResponse.escalation
-      // This allows the LLM to make nuanced decisions about when to escalate
-      
-      // 8. Retrieve relevant knowledge (RAG)
-      // Use caption, transcription, or image description as the search query
-      const messageTextForRAG = message.content || message.transcription || message.imageAnalysis?.description || '';
-      
-      let embedding: number[] = [];
-      let embeddingLatency = 0;
-
-      if (messageTextForRAG.trim()) {
-        const embeddingStartTime = Date.now();
-        embedding = await embeddingProvider.generateEmbedding(messageTextForRAG, { taskType: 'RETRIEVAL_QUERY' });
-        embeddingLatency = Date.now() - embeddingStartTime;
-        
-        // Log embedding call (fire and forget)
-        if (llmLogger) {
-          const embeddingTokens = Math.ceil(messageTextForRAG.length / 4); // Rough estimate
-          llmLogger.log({
-            clientId: clientConfig.clientId,
-            sessionId: session.id,
-            requestType: 'embedding',
-            provider: 'gemini', // TODO: get from embeddingProvider.name if available
-            model: 'gemini-embedding-001',
-            promptTokens: embeddingTokens,
-            completionTokens: 0,
-            totalTokens: embeddingTokens,
-            costUsd: calculateCost('gemini-embedding-001', embeddingTokens, 0),
-            inputPreview: messageTextForRAG,
-            latencyMs: embeddingLatency,
-            finishReason: 'stop',
-          }).catch(err => console.error('[LLM Logger] Embedding log failed:', err));
-        }
-      }
-
-      const relevantKnowledge = await retrieveKnowledge(
-        knowledgeStore,
-        embedding,
-        stateConfig.ragCategories
-      );
-
-      // 8b. Retrieve relevant conversation examples (few-shot)
+      // 7. Get relevant conversation examples (few-shot)
+      // For now, we use a simple state-based retrieval or empty if not available
       let relevantExamples: ConversationExample[] = [];
       if (exampleStore) {
-        relevantExamples = await retrieveExamples(
-          exampleStore,
-          stateConfig.state,
-          embedding
-        );
+        relevantExamples = await retrieveExamples(exampleStore, session.currentState, []);
       }
 
-      console.log(`[State] Current: ${stateConfig.state}`);
-      if (relevantExamples.length > 0) {
-        console.log(`[Examples Selected] ${relevantExamples.map(e => e.exampleId).join(', ')}`);
-      } else {
-        console.log('[Examples Selected] None');
-      }
-      
-      // 9. Build LLM prompt with state transition context
+      // 8. Build LLM prompt with state transition context
       const transitionContext = stateMachine.buildTransitionContext();
-      
-      // 6. Format current message for LLM (including analysis/transcription)
-      const currentFormattedContent = formatMessageForLLM({
-        content: message.content,
-        type: message.type,
-        transcription: message.transcription,
-        imageAnalysis: message.imageAnalysis
-      });
+      const currentFormattedContent = formatMessageForLLM(message);
 
-      // 7. Call LLM
-      const systemPrompt = buildSystemPrompt({
+      const systemPrompt = buildSystemPromptWithoutKB({
         config: clientConfig,
         transitionContext,
-        knowledge: relevantKnowledge,
         examples: relevantExamples,
         sessionContext: session.context,
       });
 
       const conversationHistory = formatConversationHistory(recentMessages);
       
-      // 10. Generate response with structured output (with Retry Logic)
+      // 9. Generate response with structured output (with Retry Logic)
       let structuredResponse: StructuredLLMResponse | null = null;
       let llmResponse: LLMResponse | null = null;
       let attempts = 0;
-      const maxAttempts = 3;
+      const maxAttempts = 5;
 
       while (attempts < maxAttempts && !structuredResponse) {
-        attempts++;
-        if (attempts > 1) {
-          console.warn(`[LLM Retry] Attempt ${attempts}/${maxAttempts} for session ${session.id}`);
+        if (attempts > 0) {
+          const delayMs = attempts * 2000;
+          console.warn(`[LLM Retry] Waiting ${delayMs}ms before attempt ${attempts + 1}/${maxAttempts} for session ${session.id}`);
+          await new Promise(resolve => setTimeout(resolve, delayMs));
         }
 
-        const llmStartTime = Date.now();
-        llmResponse = await llmProvider.generateResponse({
-          systemPrompt,
-          messages: [
-            ...conversationHistory,
-            { role: 'user', content: currentFormattedContent },
-          ],
-          temperature: attempts > 1 ? 0.8 : 0.7, // Slightly increase temperature on retry for variety
-          maxTokens: 1500,
-        });
-        const llmLatency = Date.now() - llmStartTime;
+        attempts++;
 
+        const llmStartTime = Date.now();
+        
+        // Use generateResponseWithFileSearch if knowledge base is configured
+        if (clientConfig.knowledgeBase?.storeIds?.length) {
+          console.log('Using knowledge base for session', session.id, 'with stores:', clientConfig.knowledgeBase.storeIds);
+          try {
+            llmResponse = await llmProvider.generateResponseWithFileSearch({
+              systemPrompt,
+              messages: [
+                ...conversationHistory,
+                { role: 'user', content: currentFormattedContent }
+              ],
+              fileSearch: {
+                fileSearchStoreNames: clientConfig.knowledgeBase.storeIds
+              },
+              structuredOutput: {
+                responseMimeType: 'application/json',
+                responseJsonSchema: zodToJsonSchema(ConversationResponseSchema)
+              },
+              temperature: attempts > 1 ? 0.8 : (stateConfig as any).temperature,
+              maxTokens: 65536,
+            });
+          } catch (err) {
+            console.error('[LLM Error] File Search failed, falling back to regular chat:', err);
+            // Fallback will happen in next attempt or via regular generateResponse if retry logic handles it
+          }
+        } 
+        
+        if (!llmResponse) {
+          llmResponse = await llmProvider.generateResponse({
+            systemPrompt,
+            messages: [
+              ...conversationHistory,
+              { role: 'user', content: currentFormattedContent }
+            ],
+            temperature: attempts > 1 ? 0.8 : (stateConfig as any).temperature,
+          });
+        }
+
+        const llmLatency = Date.now() - llmStartTime;
+console.log(llmResponse.usage)
         // Log LLM chat call (fire and forget)
         if (llmLogger) {
           const fullInput = `${systemPrompt}\n\n${conversationHistory.map(m => `${m.role}: ${m.content}`).join('\n')}\nuser: ${currentFormattedContent}`;
@@ -345,13 +317,13 @@ export function createConversationEngine(): ConversationEngine {
           }).catch(err => console.error('[LLM Logger] Chat log failed:', err));
         }
 
-        // 11. Parse structured response
-        structuredResponse = parseStructuredResponse(llmResponse.content);
-        
-        if (structuredResponse && llmResponse) {
-          // Attach usage/finishReason from the successful LLM call
-          structuredResponse.usage = llmResponse.usage;
-          structuredResponse.finishReason = llmResponse.finishReason;
+        // 10. Parse structured response
+        if (llmResponse) {
+          structuredResponse = parseStructuredResponse(llmResponse.content);
+          if (structuredResponse) {
+            structuredResponse.usage = llmResponse.usage;
+            structuredResponse.finishReason = llmResponse.finishReason;
+          }
         }
       }
 
@@ -361,16 +333,15 @@ export function createConversationEngine(): ConversationEngine {
           sessionId: session.id,
           responses: [{
             type: 'text',
-            content: 'Lo siento, estoy teniendo dificultades técnicas para procesar tu solicitud. ¿Podrías intentar de nuevo o esperar un momento?',
+            content: 'Dame un momento por favor ...',
           }],
           sessionUpdates: { lastMessageAt: new Date() },
         };
       }
       
-      // 12. Check for LLM-recommended escalation
+      // 11. Check for LLM-recommended escalation
       if (structuredResponse.escalation?.shouldEscalate) {
         console.log(`[Escalation] LLM detected escalation: ${structuredResponse.escalation.reason}`);
-        console.log(`[Escalation] Summary: ${structuredResponse.escalation.summary || 'No summary'}`);
         
         // Send notification if enabled
         if (clientConfig.escalation.enabled && clientConfig.escalation.notifyWhatsApp) {
@@ -381,7 +352,7 @@ export function createConversationEngine(): ConversationEngine {
                 reason: structuredResponse.escalation.reason,
                 userName: contact.fullName || contact.phone || 'Unknown User',
                 userPhone: contact.phone || sessionKey.channelUserId,
-                summary: structuredResponse.escalation.summary || messageTextForRAG.slice(0, 100),
+                summary: structuredResponse.escalation.summary || currentFormattedContent.slice(0, 100),
               }
             );
           } catch (error) {
@@ -396,7 +367,6 @@ export function createConversationEngine(): ConversationEngine {
           lastMessageAt: new Date(),
         };
         
-        // Save the escalation response before updating session
         const escalationResponse = createEscalationResponse(structuredResponse.escalation, clientConfig);
         await messageStore.save(session.id, {
           direction: 'outbound',
@@ -404,21 +374,18 @@ export function createConversationEngine(): ConversationEngine {
           content: escalationResponse.content,
         });
         
-        // Create escalation record if store is available
         const { escalationStore } = deps;
         if (escalationStore) {
           try {
-            const { id: escalationId } = await escalationStore.create({
+            await escalationStore.create({
               sessionId: session.id,
               reason: structuredResponse.escalation.reason,
               aiSummary: structuredResponse.escalation.summary,
               aiConfidence: structuredResponse.escalation.confidence,
-              priority: 'high', // LLM-detected escalations are high priority
+              priority: 'high',
             });
-            console.log(`[Escalation] Created escalation record: ${escalationId}`);
           } catch (error) {
             console.error('[Escalation] Failed to create escalation record:', error);
-            // Continue even if record creation fails - session is still escalated
           }
         }
         
@@ -437,18 +404,16 @@ export function createConversationEngine(): ConversationEngine {
         };
       }
       
-      // 13. Evaluate state transition from LLM recommendation
+      // 12. Evaluate state transition
       let sessionUpdates: Partial<Session> = {
         lastMessageAt: new Date(),
         updatedAt: new Date(),
       };
       
-      // Apply LLM-recommended transition if valid
       if (structuredResponse.transition && structuredResponse.transition.to) {
         const targetState = structuredResponse.transition.to as ConversationState;
         if (stateMachine.canTransitionTo(targetState) && structuredResponse.transition.confidence >= 0.6) {
           console.log(`[State Transition] ${session.currentState} -> ${targetState}`);
-          console.log(`[Transition Reason] ${structuredResponse.transition.reason}`);
           
           stateMachine.transitionTo(targetState, structuredResponse.transition.reason);
           sessionUpdates = {
@@ -457,7 +422,6 @@ export function createConversationEngine(): ConversationEngine {
             currentState: targetState,
           };
 
-          // Check for special entry response for the new state
           const entryResponse = await getStateEntryResponse(
             targetState, 
             {
@@ -470,57 +434,42 @@ export function createConversationEngine(): ConversationEngine {
           );
 
           if (entryResponse) {
-            console.log(`[State Entry] Triggering special response for ${targetState}`);
-            
-            // We must save the session state update first
             await sessionStore.update(session.id, sessionUpdates);
-            
             return {
               ...entryResponse,
               transitionReason: structuredResponse.transition.reason,
               sessionUpdates: {
                 ...entryResponse.sessionUpdates,
-                ...sessionUpdates, // Ensure state change is included in return
+                ...sessionUpdates,
               }
             };
           }
-        } else {
-            console.log(`[State Transition] Rejected: ${targetState} (Allowed: ${stateMachine.canTransitionTo(targetState)}, Confidence: ${structuredResponse.transition.confidence})`);
         }
       }
       
-      // Update session context with extracted data
-      let contactUpdates: Partial<Contact> = {};
+      // 13. Update session context with extracted data
+      const contactUpdates: Partial<Contact> = {};
       if (structuredResponse.extractedData) {
         sessionUpdates.context = {
           ...session.context,
           ...structuredResponse.extractedData,
         };
         
-        // Also persist email to Contact record if provided
-        if (structuredResponse.extractedData.email) {
-          contactUpdates.email = structuredResponse.extractedData.email;
-          console.log(`[Contact Update] Email captured: ${structuredResponse.extractedData.email}`);
-        }
+        // Persist email/name to Contact if provided
+        if (structuredResponse.extractedData.email) contactUpdates.email = structuredResponse.extractedData.email;
+        if (structuredResponse.extractedData.userName) contactUpdates.fullName = structuredResponse.extractedData.userName;
         
-        // Persist userName to Contact if provided
-        if (structuredResponse.extractedData.userName) {
-          contactUpdates.fullName = structuredResponse.extractedData.userName;
+        if (Object.keys(contactUpdates).length > 0) {
+          await contactStore.update(contact.id, contactUpdates);
         }
       }
       
-      // Check for AI uncertainty escalation
-      if (structuredResponse.isUncertain) {
-        console.log('[AI Uncertainty] LLM flagged uncertainty, consider escalation');
-        // Could trigger soft escalation here in future
-      }
-      
-      // 13. Create bot responses (multi-message support)
+      // 14. Create bot responses
       const responseTexts = structuredResponse.responses || [structuredResponse.response];
       const botResponses: BotResponse[] = responseTexts.map((text, index) => ({
         type: 'text' as const,
         content: text,
-        delayMs: index > 0 ? 800 : 0, // Small delay between messages for natural feel
+        delayMs: index > 0 ? 800 : 0,
         metadata: index === 0 ? {
           tokensUsed: structuredResponse!.usage.totalTokens,
           state: stateMachine.getState(),
@@ -528,7 +477,6 @@ export function createConversationEngine(): ConversationEngine {
         } : undefined,
       }));
       
-      // 14. Save outbound messages
       for (const response of botResponses) {
         await messageStore.save(session.id, {
           direction: 'outbound',
@@ -537,9 +485,6 @@ export function createConversationEngine(): ConversationEngine {
         });
       }
       
-      // 15. Consolidate and Save Session Updates
-      // We must save the updates before returning so that the simulation/CLI/webhook
-      // all have consistent state without needing to handle persistence themselves.
       const finalUpdates = { ...sessionUpdates, ...resumeUpdates };
       if (Object.keys(finalUpdates).length > 0) {
         await sessionStore.update(session.id, finalUpdates);
@@ -608,6 +553,8 @@ export function createConversationEngine(): ConversationEngine {
       sessionKeyHash: string,
       deps: EngineDependencies
     ): Promise<EngineOutput> {
+      console.log(`[DEBUG] processPendingMessages: sessionKeyHash=${sessionKeyHash}`);
+      
       const { messageBufferStore } = deps;
       
       if (!messageBufferStore) {
@@ -724,33 +671,6 @@ function createEscalationResponse(
   };
 }
 
-async function retrieveKnowledge(
-  store: EngineDependencies['knowledgeStore'],
-  embedding: number[],
-  categories: string[]
-): Promise<KnowledgeEntry[]> {
-  if (!embedding || embedding.length === 0) return [];
-  
-  // Get similar by embedding
-  const similarEntries = await store.findSimilar(embedding, 3);
-  
-  // Also get by category if specified
-  let categoryEntries: KnowledgeEntry[] = [];
-  if (categories.length > 0) {
-    for (const category of categories.slice(0, 2)) {
-      const entries = await store.findByCategory(category, 2);
-      categoryEntries = [...categoryEntries, ...entries];
-    }
-  }
-  
-  // Deduplicate and limit
-  const allEntries = [...similarEntries, ...categoryEntries];
-  const uniqueEntries = allEntries.filter(
-    (entry, index, self) => self.findIndex(e => e.id === entry.id) === index
-  );
-  
-  return uniqueEntries.slice(0, 5);
-}
 
 /**
  * Retrieve relevant conversation examples for few-shot prompting

@@ -126,9 +126,11 @@ async function handleIncomingMessage(req: Request): Promise<Response> {
     // Verify signature
     const signature = req.headers.get('x-hub-signature-256') || '';
     const body = await req.text();
+    console.log(`[DEBUG] Received webhook body: ${body.slice(0, 500)}...`);
     
     // Parse payload
     const payload: WhatsAppWebhookPayload = JSON.parse(body);
+    console.log(`[DEBUG] Payload object: ${payload.object}`);
     
     // Validate it's a WhatsApp message
     if (payload.object !== 'whatsapp_business_account') {
@@ -148,8 +150,9 @@ async function handleIncomingMessage(req: Request): Promise<Response> {
         
         // Route to client
         const supabase = createSupabaseClient();
+        console.log(`[DEBUG] Routing for phone_number_id: ${phoneNumberId}`);
         const route = await routeByChannelId(supabase, 'whatsapp', phoneNumberId);
-        // console.log('Route:', route);
+        console.log(`[DEBUG] Route result: ${route ? `Found (${route.clientId})` : 'NOT FOUND'}`);
         
         if (!route) {
           console.error(`No client found for phone_number_id: ${phoneNumberId}`);

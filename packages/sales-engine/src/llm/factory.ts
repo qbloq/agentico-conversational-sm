@@ -115,5 +115,23 @@ function createProviderWithFallback(
         return await fallback.generateContent(prompt, options);
       }
     },
+
+    async generateContentWithFileSearch(request) {
+      try {
+        return await primary.generateContentWithFileSearch(request);
+      } catch (error) {
+        console.warn(`Primary provider (${primary.name}) failed, falling back to ${fallback.name}:`, error);
+        return await fallback.generateContentWithFileSearch(request);
+      }
+    },
+
+    async generateResponseWithFileSearch(request) {
+      try {
+        return await primary.generateResponseWithFileSearch(request);
+      } catch (error) {
+        console.warn(`Primary provider (${primary.name}) failed, falling back to ${fallback.name}:`, error);
+        return await fallback.generateResponseWithFileSearch(request);
+      }
+    },
   };
 }
