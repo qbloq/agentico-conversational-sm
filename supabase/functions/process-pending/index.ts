@@ -45,8 +45,8 @@ serve(async (req: Request) => {
   let errors = 0;
   
   try {
-    // Get all client configs (from hardcoded dev config or database in production)
-    const clients = getAllClientConfigs();
+    // Get all client configs from database
+    const clients = await getAllClientConfigs(supabase);
     
     console.log(`[ProcessPending] Processing ${clients.length} clients`);
     

@@ -92,7 +92,8 @@ export function createConversationEngine(): ConversationEngine {
         try {
           const transcription = await mediaService.transcribe(message.mediaUrl);
           message.transcription = transcription.text;
-          // Clean content stays as is (caption or empty)
+          // Also set content to transcription for searchability and LLM processing
+          message.content = transcription.text;
         } catch (error) {
           console.error('Audio transcription failed:', error);
           message.content = '[Audio transcription failed]';
@@ -285,6 +286,7 @@ export function createConversationEngine(): ConversationEngine {
         } 
         
         if (!llmResponse) {
+          console.log('Using regular chat for session', session.id);
           llmResponse = await llmProvider.generateResponse({
             systemPrompt,
             messages: [

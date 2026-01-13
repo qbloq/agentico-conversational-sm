@@ -54,111 +54,119 @@ export async function routeByChannelId(
 }
 
 /**
- * Load client configuration
+ * Load client configuration from database
  * 
- * In production, this would load from Supabase Vault for secrets
- * and a config table or file for non-sensitive settings.
+ * Queries client_configs and client_secrets tables to build complete ClientConfig.
+ * Falls back to environment variables for secrets if not in database.
  */
 async function loadClientConfig(
   supabase: SupabaseClient,
   clientId: string
 ): Promise<ClientConfig | null> {
-  // For now, we'll use environment variables and a simple mapping
-  // In production, this would query a config table or Vault
+  // 1. Load client config from database
+  const { data: clientConfig, error: configError } = await supabase
+    .from('client_configs')
+    .select('*')
+    .eq('client_id', clientId)
+    .eq('is_active', true)
+    .single();
   
-  const configs: Record<string, ClientConfig> = {
-    tag_markets: {
-      clientId: 'tag_markets',
-      schemaName: 'client_tag_markets',
-      storageBucket: 'media-tag-markets',
-      knowledgeBase: {
-        storeIds: ['tag-markets-knowledge-base'],
-      },
-      channels: {
-        whatsapp: {
-          phoneNumberId: Deno.env.get('TAG_WHATSAPP_PHONE_NUMBER_ID') || '',
-          accessToken: Deno.env.get('TAG_WHATSAPP_ACCESS_TOKEN') || '',
-          appSecret: Deno.env.get('TAG_WHATSAPP_APP_SECRET') || '',
-        },
-      },
-      debounce: {
-        enabled: true,
-        delayMs: 3000,
-      },
-      llm: {
-        provider: 'gemini',
-        model: 'gemini-2.5-flash',
-        fallbackProvider: 'anthropic',
-        fallbackModel: 'claude-sonnet-4-20250514',
-      },
-      escalation: {
-        enabled: true,
-        notifyWhatsApp: Deno.env.get('TAG_ESCALATION_WHATSAPP'),
-      },
-      business: {
-        name: 'TAG Markets',
-        description: 'Broker de trading con cuentas amplificadas 12x.',
-        language: 'es',
-        timezone: 'America/Bogota',
-      },
-    },
+  if (configError || !clientConfig) {
+    console.error(`[loadClientConfig] No config found for client: ${clientId}`, configError);
+    return null;
+  }
+  
+  // 2. Load secrets from database
+  const { data: secrets, error: secretsError } = await supabase
+    .from('client_secrets')
+    .select('*')
+    .eq('client_id', clientId);
+  
+  if (secretsError) {
+    console.error(`[loadClientConfig] Error loading secrets for ${clientId}:`, secretsError);
+  }
+  
+  // 3. Build channels object from secrets
+  const channels: Record<string, any> = {};
+  
+  if (secrets && secrets.length > 0) {
+    for (const secret of secrets) {
+      channels[secret.channel_type] = secret.secrets;
+    }
+  }
+  
+  // 4. Build complete ClientConfig object
+  const config: ClientConfig = {
+    clientId: clientConfig.client_id,
+    schemaName: clientConfig.schema_name,
+    storageBucket: clientConfig.storage_bucket,
+    channels,
+    ...clientConfig.config, // Spread JSONB config (business, llm, debounce, escalation, knowledgeBase)
   };
   
-  const config = configs[clientId] || null;
-  console.log(`[DEBUG] Config for ${clientId}: ${config ? 'Loaded' : 'NOT FOUND'}`);
+  console.log(`[loadClientConfig] Loaded config for ${clientId}`);
   return config;
 }
 
 /**
- * Get all client configurations
+ * Get all client configurations from database
  * Used by process-pending worker to iterate over all clients
  */
-export function getAllClientConfigs(): Array<{ clientId: string; schemaName: string; config: ClientConfig }> {
-  // Same hardcoded configs as loadClientConfig
-  // In production, this would query from database
-  const configs: ClientConfig[] = [
-    {
-      clientId: 'tag_markets',
-      schemaName: 'client_tag_markets',
-      storageBucket: 'media-tag-markets',
-      knowledgeBase: {
-        storeIds: ['tag-markets-knowledge-base'],
-      },
-      channels: {
-        whatsapp: {
-          phoneNumberId: Deno.env.get('TAG_WHATSAPP_PHONE_NUMBER_ID') || '',
-          accessToken: Deno.env.get('TAG_WHATSAPP_ACCESS_TOKEN') || '',
-          appSecret: Deno.env.get('TAG_WHATSAPP_APP_SECRET') || '',
-        },
-      },
-      debounce: {
-        enabled: true,
-        delayMs: 3000,
-      },
-      llm: {
-        provider: 'gemini',
-        model: 'gemini-3-flash-preview',
-        fallbackProvider: 'anthropic',
-        fallbackModel: 'claude-sonnet-4-20250514',
-      },
-      escalation: {
-        enabled: true,
-        notifyWhatsApp: Deno.env.get('TAG_ESCALATION_WHATSAPP'),
-      },
-      business: {
-        name: 'TAG Markets',
-        description: 'Broker de trading con cuentas amplificadas 12x.',
-        language: 'es',
-        timezone: 'America/Bogota',
-      },
-    },
-  ];
+export async function getAllClientConfigs(
+  supabase: SupabaseClient
+): Promise<Array<{ clientId: string; schemaName: string; config: ClientConfig }>> {
+  // 1. Load all active client configs
+  const { data: clientConfigs, error: configError } = await supabase
+    .from('client_configs')
+    .select('*')
+    .eq('is_active', true);
   
-  return configs.map(c => ({
-    clientId: c.clientId,
-    schemaName: c.schemaName,
-    config: c,
-  }));
+  if (configError || !clientConfigs) {
+    console.error('[getAllClientConfigs] Error loading client configs:', configError);
+    return [];
+  }
+  
+  // 2. Load all secrets
+  const { data: allSecrets, error: secretsError } = await supabase
+    .from('client_secrets')
+    .select('*');
+  
+  if (secretsError) {
+    console.error('[getAllClientConfigs] Error loading secrets:', secretsError);
+  }
+  
+  // 3. Build result array
+  const results: Array<{ clientId: string; schemaName: string; config: ClientConfig }> = [];
+  
+  for (const clientConfig of clientConfigs) {
+    // Build channels object from secrets for this client
+    const channels: Record<string, any> = {};
+    
+    if (allSecrets) {
+      const clientSecrets = allSecrets.filter(s => s.client_id === clientConfig.client_id);
+      for (const secret of clientSecrets) {
+        channels[secret.channel_type] = secret.secrets;
+      }
+    }
+    
+    // Build complete ClientConfig
+    const config: ClientConfig = {
+      clientId: clientConfig.client_id,
+      schemaName: clientConfig.schema_name,
+      storageBucket: clientConfig.storage_bucket,
+      channels,
+      ...clientConfig.config, // Spread JSONB config
+    };
+    
+    results.push({
+      clientId: clientConfig.client_id,
+      schemaName: clientConfig.schema_name,
+      config,
+    });
+  }
+  
+  console.log(`[getAllClientConfigs] Loaded ${results.length} client(s)`);
+  return results;
 }
 
 /**
