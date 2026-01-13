@@ -365,7 +365,9 @@ export class StateMachine {
    */
   buildTransitionContext(): string {
     const config = this.config[this.currentState];
-    console.log('config.objective', config.objective);
+    console.log('>>>>>>>this.currentState', this.currentState);
+    console.log('>>>>>>>config', config);
+    console.log('>>>>>>>config.objective', config.objective);
     const transitionOptions = config.allowedTransitions
       .filter(state => state !== 'escalated') // Escalation handled separately
       .map(state => {

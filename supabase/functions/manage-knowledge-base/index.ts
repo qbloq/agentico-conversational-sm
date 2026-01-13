@@ -45,14 +45,22 @@ serve(async (req) => {
       const action = url.searchParams.get('action');
       const id = url.searchParams.get('id');
       const category = url.searchParams.get('category');
+      const kbId = url.searchParams.get('kb_id'); // Filter by KB ID
 
       // Get distinct categories
       if (action === 'categories') {
-        const { data, error } = await supabase
+        let query = supabase
           .schema(schemaName)
           .from(table)
           .select('category')
           .eq('is_active', true);
+
+        // Filter by KB if specified
+        if (kbId) {
+          query = query.eq('kb_id', kbId);
+        }
+
+        const { data, error } = await query;
 
         if (error) throw error;
 
@@ -94,12 +102,19 @@ serve(async (req) => {
         console.log('[DEBUG] Embedding string length:', embeddingString.length);
         
         // Try direct query using sql template (bypass RPC issues)
-        const { data: rawData, error: rawError } = await supabase
+        let searchQuery = supabase
           .from('knowledge_base')
           .select('id, title, answer, url, category, semantic_tags, key_concepts, related_entities, summary, related_articles, priority, embedding')
           .eq('is_active', true)
           .not('embedding', 'is', null)
           .limit(200);  // Get more to do local similarity calculation
+
+        // Filter by KB if specified
+        if (kbId) {
+          searchQuery = searchQuery.eq('kb_id', kbId);
+        }
+
+        const { data: rawData, error: rawError } = await searchQuery;
         
         if (rawError) {
           console.error('[DEBUG] Raw query error:', JSON.stringify(rawError));
@@ -171,12 +186,17 @@ serve(async (req) => {
       let query = supabase
         .schema(schemaName)
         .from(table)
-        .select('id, title, answer, url, category, semantic_tags, key_concepts, related_entities, summary, related_articles, priority, is_active, created_at, updated_at')
+        .select('id, title, answer, url, category, semantic_tags, key_concepts, related_entities, summary, related_articles, priority, is_active, created_at, updated_at, kb_id')
         .order('priority', { ascending: false })
         .order('created_at', { ascending: false });
 
       if (category) {
         query = query.eq('category', category);
+      }
+
+      // Filter by KB if specified
+      if (kbId) {
+        query = query.eq('kb_id', kbId);
       }
 
       // By default, only show active entries unless showAll is specified
@@ -198,8 +218,8 @@ serve(async (req) => {
     if (req.method === 'POST') {
       const body: KBEntryPayload = await req.json();
 
-      if (!body.title || !body.answer || !body.category) {
-        throw new Error('Missing required fields: title, answer, category');
+      if (!body.title || !body.answer || !body.category || !body.kbId) {
+        throw new Error('Missing required fields: title, answer, category, kbId');
       }
 
       // Generate embedding
@@ -209,6 +229,7 @@ serve(async (req) => {
         title: body.title,
         answer: body.answer,
         category: body.category,
+        kb_id: body.kbId,
         url: body.url || null,
         semantic_tags: body.semanticTags || [],
         key_concepts: body.keyConcepts || [],

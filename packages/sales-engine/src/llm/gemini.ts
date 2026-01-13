@@ -36,7 +36,7 @@ export function createGeminiProvider(config: LLMProviderConfig): LLMProvider {
         config: {
           systemInstruction: request.systemPrompt,
           temperature: request.temperature ?? 0.7,
-          maxOutputTokens: request.maxTokens ?? 1024,
+          maxOutputTokens: request.maxTokens ?? 65000,
         }
       });
 
@@ -135,6 +135,7 @@ export function createGeminiProvider(config: LLMProviderConfig): LLMProvider {
           parts: [{ text: m.content }],
         }));
 
+      console.log('>>>>>>>>>>>>>contents', modelId, contents);
       const response = await client.models.generateContent({
         model: modelId,
         contents,

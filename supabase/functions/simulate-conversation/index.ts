@@ -12,14 +12,24 @@ import {
 } from '../_shared/adapters/index.ts';
 import { createConversationEngine } from '../_shared/sales-engine.bundle.ts';
 import { createGeminiProvider, createGeminiEmbeddingProvider } from '../_shared/sales-engine-llm.bundle.ts';
-import type { 
-  ChannelType, 
-  SessionKey, 
-  NormalizedMessage, 
-  Session,
-  StateConfig,
-  ConversationState
-} from '../_shared/sales-engine.bundle.ts';
+
+// Type definitions (inline because esbuild strips type-only exports from bundles)
+type SessionKey = {
+  channelType: 'whatsapp' | 'instagram' | 'messenger';
+  channelId: string;
+  channelUserId: string;
+};
+
+type NormalizedMessage = {
+  id: string;
+  timestamp: Date;
+  type: 'text' | 'image' | 'audio' | 'template' | 'interactive';
+  content?: string;
+  mediaUrl?: string;
+  transcription?: string;
+  imageAnalysis?: { description: string; extractedText?: string; isReceipt?: boolean; confidence?: number };
+  interactivePayload?: { type: 'button_reply' | 'list_reply'; buttonId?: string; listId?: string; title: string };
+};
 
 // Mock Notification Service (No-op)
 const mockNotificationService = {
@@ -40,7 +50,7 @@ const mockLLMLogger = {
   log: async () => {},
 };
 
-serve(async (req) => {
+serve(async (req: Request) => {
   // CORS headers
   const corsHeaders = {
     'Access-Control-Allow-Origin': '*',
@@ -81,7 +91,7 @@ serve(async (req) => {
     // Create LLM provider
     const llmProvider = createGeminiProvider({
       apiKey: Deno.env.get('GOOGLE_API_KEY') || '',
-      model: 'gemini-2.5-flash', // Fast model for simulation
+      model: 'gemini-3-flash-preview', // Fast model for simulation
     });
     
     const embeddingProvider = createGeminiEmbeddingProvider({
@@ -94,14 +104,17 @@ serve(async (req) => {
       schemaName,
       storageBucket: 'simulation',
       channels: {},
-      llm: { provider: 'gemini', model: 'gemini-2.5-flash' },
+      llm: { provider: 'gemini', model: 'gemini-3-flash-preview' },
       escalation: { enabled: false },
       business: {
-        name: 'TAG Markets',
-        description: 'Broker de trading con cuentas amplificadas 12x.',
+        name: 'Premium Academy',
+        description: 'Academia de trading y crecimiento y desarrollo personal.',
         language: 'es',
         timezone: 'America/New_York',
-      }
+      },
+      knowledgeBase: {
+        storeIds: ['fileSearchStores/e3j36960jgde-ggrguvwvpndf'],
+      },
     };
 
     const llmLogger = createSupabaseLLMLogger(supabase);
@@ -156,6 +169,8 @@ serve(async (req) => {
       },
     });
 
+    console.log
+
     // 4. Return result
     return new Response(JSON.stringify({
       responses: result.responses,
@@ -171,7 +186,8 @@ serve(async (req) => {
 
   } catch (error) {
     console.error('Simulation error:', error);
-    return new Response(JSON.stringify({ error: error.message }), { 
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    return new Response(JSON.stringify({ error: errorMessage }), { 
       status: 500,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' }
     });

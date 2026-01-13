@@ -52,7 +52,7 @@ serve(async (req) => {
 
     const provider = createGeminiProvider({
       apiKey: Deno.env.get('GOOGLE_API_KEY') || '',
-      model: 'gemini-2.5-flash',
+      model: 'gemini-3-flash-preview',
     });
 
     const systemPrompt = buildSystemPrompt(body);

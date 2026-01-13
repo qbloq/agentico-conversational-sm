@@ -29,14 +29,38 @@ serve(async (req) => {
 
     // GET: List or Fetch State Machine
     if (req.method === 'GET') {
+      const id = url.searchParams.get('id');
       const name = url.searchParams.get('name');
       
-      if (name) {
-        // Fetch specific by name
+      if (id) {
+        // Fetch specific by ID (UUID)
         const { data, error } = await supabase
           .schema(schemaName)
           .from(table)
-          .select('*, visualization')
+          .select('*')
+          .eq('id', id)
+          .single();
+          
+        if (error) throw error;
+
+        // Fetch associated KBs
+        const { data: kbAssociations } = await supabase
+          .schema(schemaName)
+          .from('state_machine_knowledge_bases')
+          .select('kb_id')
+          .eq('state_machine_id', id);
+
+        const knowledgeBaseIds = (kbAssociations || []).map((assoc: any) => assoc.kb_id);
+        
+        return new Response(JSON.stringify({ ...data, knowledgeBaseIds }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      } else if (name) {
+        // Fetch specific by name (backward compatibility)
+        const { data, error } = await supabase
+          .schema(schemaName)
+          .from(table)
+          .select('*')
           .eq('name', name)
           .eq('is_active', true)
           .single();
@@ -47,11 +71,12 @@ serve(async (req) => {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' }
         });
       } else {
-        // List all
+        // List all state machines
         const { data, error } = await supabase
           .schema(schemaName)
           .from(table)
-          .select('id, name, version, is_active, created_at, visualization');
+          .select('id, name, version, is_active, created_at, updated_at')
+          .order('created_at', { ascending: false });
           
         if (error) throw error;
         
@@ -61,22 +86,15 @@ serve(async (req) => {
       }
     }
 
-    // POST: Create or Update (Upsert based on name/version strategy)
+    // POST: Create or Update
     if (req.method === 'POST') {
       const body = await req.json();
-      const { name, states, initial_state, version = '1.0.0', visualization } = body;
+      const { id, name, states, initial_state, version = '1.0.0', visualization, knowledgeBaseIds = [] } = body;
       
       if (!name || !states || !initial_state) {
         throw new Error('Missing required fields: name, states, initial_state');
       }
 
-      // Check if exists to determine if we update or insert new version
-      // For simplicity in this iteration, we'll upsert based on name and mark as active
-      // In a real robust system we might want versioning history.
-      
-      // 1. Deactivate others with same name? Optional, but good practice if only one active allowed.
-      // For now, let's just upsert the row.
-      
       const payload = {
         name,
         states, // JSONB
@@ -87,36 +105,74 @@ serve(async (req) => {
         visualization: visualization // TEXT for Mermaid diagram
       };
       
-      // We need to query first to see if we update by ID or Name
-      // Assuming 'name' is unique for active config in this simple implementation
-      const { data: existing } = await supabase
-        .schema(schemaName)
-        .from(table)
-        .select('id')
-        .eq('name', name)
-        .single();
-        
       let result;
-      if (existing) {
+      
+      // If ID is provided, update that specific record
+      if (id) {
         result = await supabase
           .schema(schemaName)
           .from(table)
           .update(payload)
-          .eq('id', existing.id)
+          .eq('id', id)
           .select()
           .single();
       } else {
-         result = await supabase
+        // No ID provided - check if a state machine with this name exists
+        const { data: existing } = await supabase
           .schema(schemaName)
           .from(table)
-          .insert(payload)
-          .select()
-          .single();
+          .select('id')
+          .eq('name', name)
+          .maybeSingle();
+          
+        if (existing) {
+          // Update existing by name
+          result = await supabase
+            .schema(schemaName)
+            .from(table)
+            .update(payload)
+            .eq('id', existing.id)
+            .select()
+            .single();
+        } else {
+          // Create new
+          result = await supabase
+            .schema(schemaName)
+            .from(table)
+            .insert(payload)
+            .select()
+            .single();
+        }
       }
 
       if (result.error) throw result.error;
 
-      return new Response(JSON.stringify(result.data), {
+      const stateMachineId = result.data.id;
+
+      // Update KB associations
+      // First, delete existing associations
+      await supabase
+        .schema(schemaName)
+        .from('state_machine_knowledge_bases')
+        .delete()
+        .eq('state_machine_id', stateMachineId);
+
+      // Then, insert new associations
+      if (knowledgeBaseIds && knowledgeBaseIds.length > 0) {
+        const associations = knowledgeBaseIds.map((kbId: string) => ({
+          state_machine_id: stateMachineId,
+          kb_id: kbId
+        }));
+
+        const { error: assocError } = await supabase
+          .schema(schemaName)
+          .from('state_machine_knowledge_bases')
+          .insert(associations);
+
+        if (assocError) throw assocError;
+      }
+
+      return new Response(JSON.stringify({ ...result.data, knowledgeBaseIds }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' }
       });
     }

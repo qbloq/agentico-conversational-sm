@@ -59,8 +59,19 @@ serve(async (req) => {
     
     let result;
     try {
-        result = JSON.parse(response.content || '{}');
+        let content = response.content || '{}';
+        
+        // Strip markdown code blocks if present (e.g., ```json ... ```)
+        const codeBlockMatch = content.match(/```(?:json)?\s*\n?([\s\S]*?)\n?```/);
+        if (codeBlockMatch) {
+            content = codeBlockMatch[1].trim();
+        }
+        
+        result = JSON.parse(content);
     } catch (e) {
+        console.error('JSON parsing error:', e);
+        console.error('Raw content:', response.content);
+        
         // Fallback if JSON parsing fails
         result = {
             message: response.content || "I'm sorry, I couldn't process that request correctly."
