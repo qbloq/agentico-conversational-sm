@@ -237,7 +237,7 @@ serve(async (req: Request) => {
         session_id: session.id,
         direction: 'outbound',
         type: imageFile ? 'image' : (templateName ? 'template' : 'text'),
-        content: caption || message || `Template: ${templateName}`,
+        content: imageFile ? (caption || null) : (message || (templateName ? `Template: ${templateName}` : null)),
         media_url: mediaUrl,
         sent_by_agent_id: agent.sub, // Proper FK to human_agents table
       })
