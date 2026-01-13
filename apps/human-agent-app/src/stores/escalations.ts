@@ -168,6 +168,45 @@ export const useEscalationsStore = defineStore('escalations', () => {
     }
   }
 
+  async function sendImage(imageFile: File, caption?: string): Promise<boolean> {
+    if (!currentEscalation.value) return false;
+
+    sending.value = true;
+    error.value = null;
+
+    try {
+      const { sendImageMessage } = await import('@/api/client');
+      const result = await sendImageMessage(currentEscalation.value.id, imageFile, caption);
+      
+      // Create temporary URL for preview
+      const tempUrl = URL.createObjectURL(imageFile);
+      
+      // Add to local messages (optimistic update)
+      messages.value.push({
+        id: result.messageId,
+        session_id: currentEscalation.value.session.id,
+        direction: 'outbound',
+        type: 'image',
+        content: caption || null,
+        media_url: tempUrl, // Temporary URL for immediate display
+        created_at: new Date().toISOString(),
+        sent_by_agent_id: 'current-agent',
+      });
+
+      // Update status
+      if (currentEscalation.value.status === 'assigned') {
+        currentEscalation.value.status = 'in_progress';
+      }
+
+      return true;
+    } catch (e) {
+      error.value = e instanceof Error ? e.message : 'Failed to send image';
+      return false;
+    } finally {
+      sending.value = false;
+    }
+  }
+
   async function fetchTemplates(): Promise<void> {
     loadingTemplates.value = true;
     try {
@@ -306,6 +345,7 @@ export const useEscalationsStore = defineStore('escalations', () => {
     assign,
     resolve,
     send,
+    sendImage,
     fetchTemplates,
     sendTemplate,
     clearCurrent,

@@ -47,11 +47,64 @@ serve(async (req: Request) => {
       );
     }
 
-    const { escalationId, message, templateName, languageCode } = await req.json();
+    // Parse request body (JSON or FormData)
+    let escalationId: string;
+    let message: string | undefined;
+    let templateName: string | undefined;
+    let languageCode: string | undefined;
+    let imageFile: File | undefined;
+    let caption: string | undefined;
 
-    if (!escalationId || (!message && !templateName)) {
+    const contentType = req.headers.get('content-type') || '';
+    console.log('Content-Type:', contentType);
+    
+    // Check if it's multipart/form-data (image upload)
+    const isFormData = contentType.toLowerCase().includes('multipart/form-data');
+    
+    if (isFormData) {
+      // Handle image upload
+      console.log('Parsing as FormData...');
+      try {
+        const formData = await req.formData();
+        escalationId = formData.get('escalationId') as string;
+        imageFile = formData.get('image') as File;
+        caption = formData.get('caption') as string | undefined;
+        
+        console.log('Received image upload:', {
+          escalationId,
+          imageFileName: imageFile?.name,
+          imageSize: imageFile?.size,
+          caption
+        });
+      } catch (formError) {
+        console.error('FormData parse error:', formError);
+        return new Response(
+          JSON.stringify({ error: 'Failed to parse form data' }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+    } else {
+      // Handle JSON (text or template message)
+      console.log('Parsing as JSON...');
+      try {
+        const body = await req.json();
+        escalationId = body.escalationId;
+        message = body.message;
+        templateName = body.templateName;
+        languageCode = body.languageCode;
+      } catch (jsonError) {
+        console.error('JSON parse error:', jsonError);
+        console.error('Content-Type was:', contentType);
+        return new Response(
+          JSON.stringify({ error: 'Invalid request format. Expected JSON or multipart/form-data.' }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+    }
+
+    if (!escalationId || (!message && !templateName && !imageFile)) {
       return new Response(
-        JSON.stringify({ error: 'escalationId and either message or templateName are required' }),
+        JSON.stringify({ error: 'escalationId and either message, templateName, or image are required' }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
@@ -116,6 +169,66 @@ serve(async (req: Request) => {
 
     const session = escalation.session;
 
+    // Handle image upload if present
+    let mediaUrl: string | undefined;
+    if (imageFile) {
+      try {
+        console.log('Processing image upload...');
+        console.log('Image details:', {
+          name: imageFile.name,
+          type: imageFile.type,
+          size: imageFile.size
+        });
+        
+        // Upload to Supabase Storage
+        const date = new Date();
+        const ext = imageFile.name.split('.').pop() || 'jpg';
+        const path = `${agent.clientSchema}/${date.getFullYear()}/${date.getMonth() + 1}/${date.getDate()}/${crypto.randomUUID()}.${ext}`;
+        
+        console.log('Uploading to path:', path);
+        
+        const { data: uploadData, error: uploadError } = await supabase
+          .storage
+          .from('media-tag-markets') // Using existing bucket
+          .upload(path, await imageFile.arrayBuffer(), {
+            contentType: imageFile.type,
+            upsert: false,
+          });
+
+        if (uploadError) {
+          console.error('Failed to upload image:', uploadError);
+          console.error('Upload error details:', JSON.stringify(uploadError));
+          return new Response(
+            JSON.stringify({ 
+              error: 'Failed to upload image', 
+              details: uploadError.message 
+            }),
+            { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+
+        console.log('Upload successful:', uploadData);
+
+        // Get public URL
+        const { data: urlData } = supabase.storage
+          .from('media-tag-markets')
+          .getPublicUrl(path);
+        
+        mediaUrl = urlData.publicUrl;
+        console.log('Image uploaded to:', mediaUrl);
+      } catch (error) {
+        console.error('Image upload error:', error);
+        console.error('Error details:', error instanceof Error ? error.message : String(error));
+        return new Response(
+          JSON.stringify({ 
+            error: 'Failed to process image',
+            details: error instanceof Error ? error.message : 'Unknown error'
+          }),
+          { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+    }
+
     // Save message to DB
     const { data: savedMessage, error: msgError } = await supabase
       .schema(agent.clientSchema)
@@ -123,17 +236,18 @@ serve(async (req: Request) => {
       .insert({
         session_id: session.id,
         direction: 'outbound',
-        type: templateName ? 'template' : 'text',
-        content: message || `Template: ${templateName}`,
+        type: imageFile ? 'image' : (templateName ? 'template' : 'text'),
+        content: caption || message || `Template: ${templateName}`,
+        media_url: mediaUrl,
         sent_by_agent_id: agent.sub, // Proper FK to human_agents table
       })
       .select()
       .single();
 
     if (msgError) {
-      console.error('Failed to save messageooo:', msgError);
+      console.error('Failed to save message:', msgError);
       return new Response(
-        JSON.stringify({ error: 'Failed to save messageppppppp' }),
+        JSON.stringify({ error: 'Failed to save message' }),
         { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
@@ -142,10 +256,11 @@ serve(async (req: Request) => {
     const sent = await sendWhatsAppMessage(
       session.channel_id,          // phone_number_id
       session.channel_user_id,     // customer phone
-      message || '',
+      message || caption || '',
       agent.clientSchema,
       templateName,
-      languageCode
+      languageCode,
+      mediaUrl                     // Pass media URL for image messages
     );
 
     if (!sent) {
@@ -221,7 +336,8 @@ async function sendWhatsAppMessage(
   text: string,
   clientSchema: string,
   templateName?: string,
-  languageCode: string = 'es_CO'
+  languageCode: string = 'es_CO',
+  mediaUrl?: string
 ): Promise<boolean> {
   // Get access token based on client (for now use env var)
   const accessToken = Deno.env.get('TAG_WHATSAPP_ACCESS_TOKEN');
@@ -246,6 +362,15 @@ async function sendWhatsAppMessage(
         name: templateName,
         language: { code: languageCode },
       };
+    } else if (mediaUrl) {
+      // Send image with optional caption
+      body.type = 'image';
+      body.image = {
+        link: mediaUrl,
+      };
+      if (text) {
+        body.image.caption = text;
+      }
     } else {
       body.type = 'text';
       body.text = { body: text };
@@ -266,7 +391,7 @@ async function sendWhatsAppMessage(
       return false;
     }
 
-    console.log(`Message sent to ${to} by agent (${templateName ? 'template' : 'text'})`);
+    console.log(`Message sent to ${to} by agent (${mediaUrl ? 'image' : templateName ? 'template' : 'text'})`);
     return true;
   } catch (error) {
     console.error('Failed to send WhatsApp message:', error);

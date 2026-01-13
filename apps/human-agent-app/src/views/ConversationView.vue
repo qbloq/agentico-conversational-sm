@@ -69,6 +69,50 @@ const isHumanMessage = (msg: { sent_by_agent_id?: string | null }) => {
 const getStateLabel = (state: string) => {
   return state.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
 };
+
+// Group messages by date for daily separators
+const messagesGroupedByDate = computed(() => {
+  const groups: Array<{ date: string, dateLabel: string, messages: any[] }> = [];
+  
+  sessions.messages.forEach((msg) => {
+    const msgDate = new Date(msg.created_at);
+    const dateKey = msgDate.toDateString();
+    
+    let group = groups.find(g => g.date === dateKey);
+    if (!group) {
+      group = {
+        date: dateKey,
+        dateLabel: formatDateLabel(msgDate),
+        messages: []
+      };
+      groups.push(group);
+    }
+    group.messages.push(msg);
+  });
+  
+  return groups;
+});
+
+const formatDateLabel = (date: Date) => {
+  const today = new Date();
+  const yesterday = new Date(today);
+  yesterday.setDate(yesterday.getDate() - 1);
+  
+  const dateStr = date.toDateString();
+  const todayStr = today.toDateString();
+  const yesterdayStr = yesterday.toDateString();
+  
+  if (dateStr === todayStr) return 'Hoy';
+  if (dateStr === yesterdayStr) return 'Ayer';
+  
+  // Format as "Lun, 12 de ene de 2026"
+  return date.toLocaleDateString('es-ES', { 
+    weekday: 'short', 
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric'
+  });
+};
 </script>
 
 <template>
@@ -136,46 +180,56 @@ const getStateLabel = (state: string) => {
           </div>
         </div>
 
-        <div
-          v-for="msg in sessions.messages"
-          :key="msg.id"
-          :class="[
-            'max-w-[85%] rounded-xl px-2.5 py-1',
-            msg.direction === 'inbound' 
-              ? 'bg-white dark:bg-surface-800 border border-surface-200 dark:border-surface-700 shadow-sm mr-auto rounded-bl-md' 
-              : isHumanMessage(msg)
-                ? 'bg-accent-600 ml-auto rounded-br-md'
-                : 'bg-primary-600 ml-auto rounded-br-md'
-          ]"
-        >
-          <div v-if="msg.type === 'image' && msg.media_url" class="mb-2 -mx-2">
-            <a :href="msg.media_url" target="_blank">
-              <img 
-                :src="msg.media_url" 
-                class="max-w-full max-h-72 w-auto object-contain rounded-lg shadow-sm border border-surface-200 dark:border-white/10"
-                alt="Message image"
-              />
-            </a>
+        <template v-for="group in messagesGroupedByDate" :key="group.date">
+          <!-- Date Separator -->
+          <div class="flex items-center justify-center my-4">
+            <div class="px-3 py-1 bg-surface-200/80 dark:bg-surface-700/80 backdrop-blur-sm rounded-full text-xs font-medium text-surface-600 dark:text-surface-300 shadow-sm">
+              {{ group.dateLabel }}
+            </div>
           </div>
-          <p v-if="msg.content" 
+
+          <!-- Messages for this date -->
+          <div
+            v-for="msg in group.messages"
+            :key="msg.id"
             :class="[
-              'text-[15px] leading-snug whitespace-pre-wrap break-words font-medium',
-              msg.direction === 'inbound' ? 'text-surface-900 dark:text-white' : 'text-white'
+              'max-w-[85%] rounded-xl px-2.5 py-1',
+              msg.direction === 'inbound' 
+                ? 'bg-white dark:bg-surface-800 border border-surface-200 dark:border-surface-700 shadow-sm mr-auto rounded-bl-md' 
+                : isHumanMessage(msg)
+                  ? 'bg-accent-600 ml-auto rounded-br-md'
+                  : 'bg-primary-600 ml-auto rounded-br-md'
             ]"
           >
-            {{ msg.content }}
-          </p>
-          <div class="flex items-center justify-end gap-1 mt-0.5">
-            <span v-if="isHumanMessage(msg)" class="text-[10px] text-white/70">Agent</span>
-            <span v-else-if="msg.direction === 'outbound'" class="text-[10px] text-white/70">AI</span>
-            <span 
-              class="text-[10px]"
-              :class="msg.direction === 'inbound' ? 'text-surface-500 dark:text-white/40' : 'text-white/60'"
+            <div v-if="msg.type === 'image' && msg.media_url" class="mb-2 -mx-2">
+              <a :href="msg.media_url" target="_blank">
+                <img 
+                  :src="msg.media_url" 
+                  class="max-w-full max-h-72 w-auto object-contain rounded-lg shadow-sm border border-surface-200 dark:border-white/10"
+                  alt="Message image"
+                />
+              </a>
+            </div>
+            <p v-if="msg.content" 
+              :class="[
+                'text-[15px] leading-snug whitespace-pre-wrap break-words font-medium',
+                msg.direction === 'inbound' ? 'text-surface-900 dark:text-white' : 'text-white'
+              ]"
             >
-              {{ formatTime(msg.created_at) }}
-            </span>
+              {{ msg.content }}
+            </p>
+            <div class="flex items-center justify-end gap-1 mt-0.5">
+              <span v-if="isHumanMessage(msg)" class="text-[10px] text-white/70">Agent</span>
+              <span v-else-if="msg.direction === 'outbound'" class="text-[10px] text-white/70">AI</span>
+              <span 
+                class="text-[10px]"
+                :class="msg.direction === 'inbound' ? 'text-surface-500 dark:text-white/40' : 'text-white/60'"
+              >
+                {{ formatTime(msg.created_at) }}
+              </span>
+            </div>
           </div>
-        </div>
+        </template>
       </template>
     </div>
 

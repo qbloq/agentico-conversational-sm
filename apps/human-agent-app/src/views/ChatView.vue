@@ -16,6 +16,11 @@ const showTemplatePicker = ref(false);
 const currentTime = ref(Date.now());
 let timer: number | null = null;
 
+// Image upload
+const selectedImage = ref<File | null>(null);
+const imagePreviewUrl = ref<string | null>(null);
+const fileInput = ref<HTMLInputElement | null>(null);
+
 const escalationId = computed(() => route.params.escalationId as string);
 
 onMounted(async () => {
@@ -56,6 +61,18 @@ function scrollToBottom() {
 }
 
 async function handleSend() {
+  // Send image if selected
+  if (selectedImage.value) {
+    const caption = messageInput.value.trim() || undefined;
+    messageInput.value = '';
+    
+    await escalations.sendImage(selectedImage.value, caption);
+    removeImage();
+    scrollToBottom();
+    return;
+  }
+  
+  // Send text message
   if (!messageInput.value.trim()) return;
   
   const message = messageInput.value;
@@ -63,6 +80,31 @@ async function handleSend() {
   
   await escalations.send(message);
   scrollToBottom();
+}
+
+function handleImageSelect(event: Event) {
+  const target = event.target as HTMLInputElement;
+  const file = target.files?.[0];
+  
+  if (file && file.type.startsWith('image/')) {
+    selectedImage.value = file;
+    imagePreviewUrl.value = URL.createObjectURL(file);
+  }
+  
+  // Reset input so same file can be selected again
+  if (target) target.value = '';
+}
+
+function removeImage() {
+  if (imagePreviewUrl.value) {
+    URL.revokeObjectURL(imagePreviewUrl.value);
+  }
+  selectedImage.value = null;
+  imagePreviewUrl.value = null;
+}
+
+function openFileSelector() {
+  fileInput.value?.click();
 }
 
 async function handleResolve() {
@@ -101,6 +143,50 @@ const formatTime = (date: string) => {
 
 const isHumanMessage = (msg: { sent_by_agent_id?: string | null }) => {
   return !!msg.sent_by_agent_id;
+};
+
+// Group messages by date for daily separators
+const messagesGroupedByDate = computed(() => {
+  const groups: Array<{ date: string, dateLabel: string, messages: any[] }> = [];
+  
+  escalations.messages.forEach((msg) => {
+    const msgDate = new Date(msg.created_at);
+    const dateKey = msgDate.toDateString();
+    
+    let group = groups.find(g => g.date === dateKey);
+    if (!group) {
+      group = {
+        date: dateKey,
+        dateLabel: formatDateLabel(msgDate),
+        messages: []
+      };
+      groups.push(group);
+    }
+    group.messages.push(msg);
+  });
+  
+  return groups;
+});
+
+const formatDateLabel = (date: Date) => {
+  const today = new Date();
+  const yesterday = new Date(today);
+  yesterday.setDate(yesterday.getDate() - 1);
+  
+  const dateStr = date.toDateString();
+  const todayStr = today.toDateString();
+  const yesterdayStr = yesterday.toDateString();
+  
+  if (dateStr === todayStr) return 'Hoy';
+  if (dateStr === yesterdayStr) return 'Ayer';
+  
+  // Format as "Lun, 12 de ene de 2026"
+  return date.toLocaleDateString('es-ES', { 
+    weekday: 'short', 
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric'
+  });
 };
 </script>
 
@@ -154,68 +240,118 @@ const isHumanMessage = (msg: { sent_by_agent_id?: string | null }) => {
       </div>
 
       <template v-else>
-        <div
-          v-for="msg in escalations.messages"
-          :key="msg.id"
-          :class="[
-            'max-w-[85%] rounded-xl px-2.5 py-1',
-            msg.direction === 'inbound' 
-              ? 'bg-white dark:bg-surface-800 border border-surface-100 dark:border-surface-700 shadow-sm mr-auto rounded-bl-md' 
-              : isHumanMessage(msg)
-                ? 'bg-accent-600 ml-auto rounded-br-md'
-                : 'bg-primary-600 ml-auto rounded-br-md'
-          ]"
-        >
-          <div v-if="msg.type === 'image' && msg.media_url" class="mb-2 -mx-2">
-            <a :href="msg.media_url" target="_blank">
-              <img 
-                :src="msg.media_url" 
-                class="max-w-full max-h-72 w-auto object-contain rounded-lg shadow-sm border border-surface-100 dark:border-white/10"
-                alt="Message image"
-              />
-            </a>
+        <template v-for="group in messagesGroupedByDate" :key="group.date">
+          <!-- Date Separator -->
+          <div class="flex items-center justify-center my-4">
+            <div class="px-3 py-1 bg-surface-200/80 dark:bg-surface-700/80 backdrop-blur-sm rounded-full text-xs font-medium text-surface-600 dark:text-surface-300 shadow-sm">
+              {{ group.dateLabel }}
+            </div>
           </div>
-          <p v-if="msg.content" 
+
+          <!-- Messages for this date -->
+          <div
+            v-for="msg in group.messages"
+            :key="msg.id"
             :class="[
-              'text-[15px] leading-snug whitespace-pre-wrap break-words',
-              msg.direction === 'inbound' ? 'text-surface-900 dark:text-white' : 'text-white'
+              'max-w-[85%] rounded-xl px-2.5 py-1',
+              msg.direction === 'inbound' 
+                ? 'bg-white dark:bg-surface-800 border border-surface-100 dark:border-surface-700 shadow-sm mr-auto rounded-bl-md' 
+                : isHumanMessage(msg)
+                  ? 'bg-accent-600 ml-auto rounded-br-md'
+                  : 'bg-primary-600 ml-auto rounded-br-md'
             ]"
           >
-            {{ msg.content }}
-          </p>
-          <div class="flex items-center justify-end gap-1 mt-0.5">
-            <span v-if="isHumanMessage(msg)" class="text-[10px] text-white/70">You</span>
-            <span 
-              class="text-[10px]"
-              :class="msg.direction === 'inbound' ? 'text-surface-400 dark:text-white/40' : 'text-white/60'"
+            <div v-if="msg.type === 'image' && msg.media_url" class="mb-2 -mx-2">
+              <a :href="msg.media_url" target="_blank">
+                <img 
+                  :src="msg.media_url" 
+                  class="max-w-full max-h-72 w-auto object-contain rounded-lg shadow-sm border border-surface-100 dark:border-white/10"
+                  alt="Message image"
+                />
+              </a>
+            </div>
+            <p v-if="msg.content" 
+              :class="[
+                'text-[15px] leading-snug whitespace-pre-wrap break-words',
+                msg.direction === 'inbound' ? 'text-surface-900 dark:text-white' : 'text-white'
+              ]"
             >
-              {{ formatTime(msg.created_at) }}
-            </span>
+              {{ msg.content }}
+            </p>
+            <div class="flex items-center justify-end gap-1 mt-0.5">
+              <span v-if="isHumanMessage(msg)" class="text-[10px] text-white/70">You</span>
+              <span 
+                class="text-[10px]"
+                :class="msg.direction === 'inbound' ? 'text-surface-400 dark:text-white/40' : 'text-white/60'"
+              >
+                {{ formatTime(msg.created_at) }}
+              </span>
+            </div>
           </div>
-        </div>
+        </template>
       </template>
     </div>
 
     <!-- Compose -->
     <div class="flex-shrink-0 px-3 py-2 pb-[calc(8px+2px)] bg-white dark:bg-surface-800 border-t border-surface-100 dark:border-surface-700 safe-bottom">
-      <div v-if="escalations.isWindowOpen" class="flex gap-2">
-        <input
-          v-model="messageInput"
-          @keyup.enter="handleSend"
-          type="text"
-          placeholder="Type a message..."
-          class="flex-1 px-3 py-2 bg-surface-50 dark:bg-surface-700 border border-surface-200 dark:border-surface-600 rounded-xl text-[15px] text-surface-900 dark:text-white placeholder-surface-400 focus:outline-none focus:ring-2 focus:ring-accent-500 focus:border-transparent"
-        />
-        <button
-          @click="handleSend"
-          :disabled="escalations.sending || !messageInput.trim()"
-          class="px-3 py-2 bg-primary-600 hover:bg-primary-700 disabled:bg-surface-100 dark:disabled:bg-surface-700 disabled:text-surface-400 dark:disabled:text-surface-500 disabled:cursor-not-allowed text-white rounded-xl transition-colors"
-        >
-          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" 
-              d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
-          </svg>
-        </button>
+      <div v-if="escalations.isWindowOpen" class="flex flex-col gap-2">
+        <!-- Image Preview -->
+        <div v-if="imagePreviewUrl" class="relative inline-block">
+          <img 
+            :src="imagePreviewUrl" 
+            class="max-h-32 rounded-lg border border-surface-200 dark:border-surface-600"
+            alt="Preview"
+          />
+          <button
+            @click="removeImage"
+            class="absolute -top-2 -right-2 w-6 h-6 bg-red-500 hover:bg-red-600 text-white rounded-full flex items-center justify-center shadow-lg transition-colors"
+          >
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+
+        <!-- Input Row -->
+        <div class="flex gap-2">
+          <!-- Hidden file input -->
+          <input
+            ref="fileInput"
+            type="file"
+            accept="image/*"
+            @change="handleImageSelect"
+            class="hidden"
+          />
+          
+          <!-- Attachment button -->
+          <button
+            @click="openFileSelector"
+            :disabled="escalations.sending"
+            class="px-3 py-2 bg-surface-100 dark:bg-surface-700 hover:bg-surface-200 dark:hover:bg-surface-600 disabled:opacity-50 text-surface-600 dark:text-surface-300 rounded-xl transition-colors"
+          >
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" />
+            </svg>
+          </button>
+
+          <input
+            v-model="messageInput"
+            @keyup.enter="handleSend"
+            type="text"
+            :placeholder="selectedImage ? 'Add a caption (optional)...' : 'Type a message...'"
+            class="flex-1 px-3 py-2 bg-surface-50 dark:bg-surface-700 border border-surface-200 dark:border-surface-600 rounded-xl text-[15px] text-surface-900 dark:text-white placeholder-surface-400 focus:outline-none focus:ring-2 focus:ring-accent-500 focus:border-transparent"
+          />
+          <button
+            @click="handleSend"
+            :disabled="escalations.sending || (!messageInput.trim() && !selectedImage)"
+            class="px-3 py-2 bg-primary-600 hover:bg-primary-700 disabled:bg-surface-100 dark:disabled:bg-surface-700 disabled:text-surface-400 dark:disabled:text-surface-500 disabled:cursor-not-allowed text-white rounded-xl transition-colors"
+          >
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" 
+                d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
+            </svg>
+          </button>
+        </div>
       </div>
       <div v-else class="flex flex-col gap-2">
         <button
