@@ -10,6 +10,7 @@ import type { Session, SessionStore, SessionKey, ConversationState } from '@para
 interface SessionRow {
   id: string;
   contact_id: string;
+  state_machine_id: string;
   channel_type: string;
   channel_id: string;
   channel_user_id: string;
@@ -29,6 +30,7 @@ function rowToSession(row: SessionRow): Session {
   return {
     id: row.id,
     contactId: row.contact_id,
+    stateMachineId: row.state_machine_id,
     channelType: row.channel_type as Session['channelType'],
     channelId: row.channel_id,
     channelUserId: row.channel_user_id,
@@ -84,7 +86,7 @@ export function createSupabaseSessionStore(
       return rowToSession(data as SessionRow);
     },
     
-    async create(key: SessionKey, contactId: string): Promise<Session> {
+    async create(key: SessionKey, contactId: string, stateMachineId: string): Promise<Session> {
       const { data, error } = await supabase
         .schema(schemaName)
         .from(sessionsTable)
@@ -93,6 +95,7 @@ export function createSupabaseSessionStore(
           channel_type: key.channelType,
           channel_id: key.channelId,
           channel_user_id: key.channelUserId,
+          state_machine_id: stateMachineId,
           current_state: 'initial',
           context: {},
           status: 'active',

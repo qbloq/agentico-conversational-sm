@@ -45,6 +45,7 @@ export type {
   SessionStore,
   MessageStore,
   StateMachineStore,
+  StateEntryMessageConfig,
   MessageBufferStore,
   EscalationStore,
   KnowledgeStore,

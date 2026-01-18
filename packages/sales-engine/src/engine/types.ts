@@ -91,6 +91,9 @@ export interface Session {
   id: string;
   contactId: string;
   
+  // State machine reference
+  stateMachineId: string;
+  
   // Channel info
   channelType: ChannelType;
   channelId: string;
@@ -365,7 +368,7 @@ export interface ContactStore {
 export interface SessionStore {
   findByKey(key: SessionKey): Promise<Session | null>;
   findById(id: string): Promise<Session | null>;
-  create(key: SessionKey, contactId: string): Promise<Session>;
+  create(key: SessionKey, contactId: string, stateMachineId: string): Promise<Session>;
   update(id: string, updates: Partial<Session>): Promise<Session>;
 }
 
@@ -383,6 +386,23 @@ export interface KnowledgeStore {
 export interface StateMachineStore {
   findByName(name: string, version?: string): Promise<Record<ConversationState, any> | null>;
   findActive(name: string): Promise<Record<ConversationState, any> | null>;
+  
+  // Get the ID of a state machine by name
+  getStateMachineId(name: string): Promise<string | null>;
+  
+  // Fetch state entry message configuration from database
+  getStateEntryMessages(
+    stateMachineId: string,
+    state: ConversationState
+  ): Promise<StateEntryMessageConfig | null>;
+}
+
+export interface StateEntryMessageConfig {
+  id: string;
+  state: ConversationState;
+  responses: BotResponse[];
+  sessionUpdates?: Partial<Session>;
+  description?: string;
 }
 
 export interface EscalationStore {
@@ -507,6 +527,9 @@ export interface ClientConfig {
   clientId: string;
   schemaName: string;
   storageBucket: string;
+  
+  // State machine configuration
+  stateMachineName: string;
   
   // Channel credentials
   channels: {

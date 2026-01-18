@@ -107,8 +107,8 @@ serve(async (req: Request) => {
       llm: { provider: 'gemini', model: 'gemini-3-flash-preview' },
       escalation: { enabled: false },
       business: {
-        name: 'Premium Academy',
-        description: 'Academia de trading y crecimiento y desarrollo personal.',
+        name: 'Tag Markets',
+        description: 'Broker de trading enfocado en copy trading.',
         language: 'es',
         timezone: 'America/New_York',
       },

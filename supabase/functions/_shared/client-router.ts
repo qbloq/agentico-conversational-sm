@@ -2,7 +2,7 @@
  * Client Router
  * 
  * Routes incoming webhook requests to the correct client schema
- * based on channel_id lookup in public.channel_mappings.
+ * based on channel_id lookup in public.client_configs.
  */
 
 import type { SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2';
@@ -22,33 +22,33 @@ export async function routeByChannelId(
   channelType: ChannelType,
   channelId: string
 ): Promise<ClientRouteResult | null> {
-  // 1. Look up in channel_mappings
-  const { data: mapping, error } = await supabase
-    .from('channel_mappings')
-    .select('client_id, schema_name')
+  // 1. Look up in client_configs (which now includes channel mapping)
+  const { data: clientConfig, error } = await supabase
+    .from('client_configs')
+    .select('*')
     .eq('channel_type', channelType)
     .eq('channel_id', channelId)
     .eq('is_active', true)
     .single();
   
-  if (error || !mapping) {
-    console.error(`[DEBUG] No client mapping found for ${channelType}:${channelId}`, error);
+  if (error || !clientConfig) {
+    console.error(`[DEBUG] No client config found for ${channelType}:${channelId}`, error);
     return null;
   }
   
-  console.log(`[DEBUG] Found mapping: client=${mapping.client_id}, schema=${mapping.schema_name}`);
+  console.log(`[DEBUG] Found config: client=${clientConfig.client_id}, schema=${clientConfig.schema_name}`);
   
-  // 2. Load client configuration from Vault or config file
-  const config = await loadClientConfig(supabase, mapping.client_id);
+  // 2. Load secrets and build complete config
+  const config = await loadClientConfig(supabase, clientConfig.client_id);
   
   if (!config) {
-    console.error(`No config found for client: ${mapping.client_id}`);
+    console.error(`Failed to load complete config for client: ${clientConfig.client_id}`);
     return null;
   }
   
   return {
-    clientId: mapping.client_id,
-    schemaName: mapping.schema_name,
+    clientId: clientConfig.client_id,
+    schemaName: clientConfig.schema_name,
     config,
   };
 }
@@ -100,6 +100,7 @@ async function loadClientConfig(
     clientId: clientConfig.client_id,
     schemaName: clientConfig.schema_name,
     storageBucket: clientConfig.storage_bucket,
+    stateMachineName: clientConfig.state_machine_name,
     channels,
     ...clientConfig.config, // Spread JSONB config (business, llm, debounce, escalation, knowledgeBase)
   };
@@ -154,6 +155,7 @@ export async function getAllClientConfigs(
       clientId: clientConfig.client_id,
       schemaName: clientConfig.schema_name,
       storageBucket: clientConfig.storage_bucket,
+      stateMachineName: clientConfig.state_machine_name,
       channels,
       ...clientConfig.config, // Spread JSONB config
     };

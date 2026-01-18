@@ -21,7 +21,7 @@ dotenv.config();
 // Configuration
 const WEBHOOK_URL = 'http://127.0.0.1:54321/functions/v1/webhook-whatsapp';
 const MOCK_SERVER_PORT = 3000;
-const MOCK_PHONE_ID = '123456789';
+const MOCK_PHONE_ID = '1234567890';
 const MOCK_APP_SECRET = 'mock_app_secret'; // From .env
 const USER_PHONE = '5215555555555';
 const CLIENT_SCHEMA = 'client_tag_markets';

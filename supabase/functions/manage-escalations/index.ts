@@ -342,12 +342,22 @@ async function resolveEscalation(
     .map(m => `${m.direction === 'inbound' ? 'User' : 'Agent'}: ${m.content}`)
     .join('\n');
 
-  // 2. Get State Machine Config
+  // 2. Get client config to determine state machine name
+  const { data: clientConfig } = await supabase
+    .from('client_configs')
+    .select('state_machine_name')
+    .eq('schema_name', agent.clientSchema)
+    .eq('is_active', true)
+    .single();
+
+  const stateMachineName = clientConfig?.state_machine_name;
+
+  // 3. Get State Machine Config
   const { data: sm } = await supabase
     .schema(agent.clientSchema)
     .from('state_machines')
     .select('states')
-    .eq('name', 'default_sales_flow')
+    .eq('name', stateMachineName)
     .eq('is_active', true)
     .single();
 
@@ -356,7 +366,7 @@ async function resolveEscalation(
 
   if (sm && sm.states) {
     try {
-      // 3. Call Gemini to decide next state
+      // 4. Call Gemini to decide next state
       const llmProvider = createGeminiProvider({
         apiKey: Deno.env.get('GOOGLE_API_KEY') || '',
         model: 'gemini-2.5-flash',

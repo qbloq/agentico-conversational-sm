@@ -1,6 +1,6 @@
 
 import type { SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2';
-import type { StateMachineStore, ConversationState, StateConfig } from '@parallelo/sales-engine';
+import type { StateMachineStore, ConversationState, StateConfig, StateEntryMessageConfig, BotResponse } from '@parallelo/sales-engine';
 
 interface StateMachineRow {
   id: string;
@@ -64,6 +64,63 @@ export function createSupabaseStateMachineStore(
       }
 
       return (data as StateMachineRow).states;
+    },
+
+    async getStateMachineId(name: string): Promise<string | null> {
+      const { data, error } = await supabase
+        .schema(schemaName)
+        .from(table)
+        .select('id')
+        .eq('name', name)
+        .eq('is_active', true)
+        .maybeSingle();
+
+      if (error) {
+        console.error('Error fetching state machine ID:', error);
+        return null;
+      }
+      
+      if (!data) {
+        return null;
+      }
+
+      return data.id;
+    },
+
+    async getStateEntryMessages(
+      stateMachineId: string,
+      state: ConversationState
+    ): Promise<StateEntryMessageConfig | null> {
+      const { data, error } = await supabase
+        .schema(schemaName)
+        .from('state_entry_messages')
+        .select('*')
+        .eq('state_machine_id', stateMachineId)
+        .eq('state', state)
+        .eq('is_active', true)
+        .maybeSingle();
+        
+      if (error) {
+        console.error('Error fetching state entry messages:', error);
+        return null;
+      }
+      
+      if (!data) {
+        return null;
+      }
+      
+      const config: StateEntryMessageConfig = {
+        id: data.id,
+        state: data.state as ConversationState,
+        responses: data.responses as BotResponse[],
+        description: data.description
+      };
+      
+      if (data.session_updates) {
+        config.sessionUpdates = data.session_updates;
+      }
+      
+      return config;
     }
   };
 }

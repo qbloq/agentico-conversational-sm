@@ -19,7 +19,7 @@ import type {
   MessageType,
 } from './types.js';
 
-import { generatePitch12xResponses } from '../flows/pitch-12x.js';
+import { substituteTemplateVariables } from './template-utils.js';
 import { StateMachine } from '../state/machine.js';
 import type { StructuredLLMResponse, LLMResponse } from '../llm/types.js';
 import { calculateCost } from '../llm/pricing.js';
@@ -118,7 +118,16 @@ export function createConversationEngine(): ConversationEngine {
       // 2. Get or create session
       let session = await sessionStore.findByKey(sessionKey);
       if (!session) {
-        session = await sessionStore.create(sessionKey, contact.id);
+        // Fetch state machine ID before creating session
+        const stateMachineId = await deps.stateMachineStore?.getStateMachineId(
+          clientConfig.stateMachineName
+        );
+        
+        if (!stateMachineId) {
+          throw new Error(`State machine '${clientConfig.stateMachineName}' not found`);
+        }
+        
+        session = await sessionStore.create(sessionKey, contact.id, stateMachineId);
       }
 
       // 3. Check for System Commands (Hidden)
@@ -174,22 +183,6 @@ export function createConversationEngine(): ConversationEngine {
         }
       }
       
-      // 3b. Check for Flow A Locking (Time-based)
-      // If we are in pitching_12x and recently sent the burst, ignore input
-      /*if (session.currentState === 'pitching_12x' && session.context?.pitchComplete) {
-        const lastMessageTime = session.lastMessageAt ? new Date(session.lastMessageAt).getTime() : 0;
-        const timeSinceLast = new Date().getTime() - lastMessageTime;
-        // Lock for 12 seconds after burst starts (8s burst + 4s buffer)
-        if (timeSinceLast < 12000) {
-          console.log(`[Flow A] Input ignored during active burst sequence (${Math.round((12000 - timeSinceLast)/1000)}s remaining)`);
-          return {
-            sessionId: session.id,
-            responses: [],
-            // No updates, just ignore
-          };
-        }
-      }*/
-      
       // 4. Save incoming message
       console.log(`[DEBUG] Saving incoming message: ${message.content?.slice(0, 50)}...`);
       await messageStore.save(session.id, {
@@ -210,7 +203,7 @@ export function createConversationEngine(): ConversationEngine {
       let smConfig = undefined;
       if (deps.stateMachineStore) {
         try {
-          const loadedConfig = await deps.stateMachineStore.findActive('default_sales_flow');
+          const loadedConfig = await deps.stateMachineStore.findActive(clientConfig.stateMachineName);
           if (loadedConfig) {
             smConfig = loadedConfig;
           }
@@ -432,7 +425,9 @@ console.log(llmResponse.usage)
               context: { ...session.context, ...sessionUpdates.context }
             },
             messageStore,
-            session.id
+            session.id,
+            deps,
+            contact
           );
 
           if (entryResponse) {
@@ -808,70 +803,61 @@ async function getStateEntryResponse(
   state: ConversationState, 
   session: Session,
   messageStore: EngineDependencies['messageStore'],
-  sessionId: string
+  sessionId: string,
+  deps: EngineDependencies,
+  contact?: Contact
 ): Promise<EngineOutput | null> {
-  let output: EngineOutput | null = null;
-  
-  switch (state) {
-    case 'pitching_12x':
-      output = generatePitch12xResponses(session);
-      break;
+  // Try to fetch from database first
+  if (deps.stateMachineStore) {
+    try {
+      const stateMachineId = await deps.stateMachineStore.getStateMachineId(
+        deps.clientConfig.stateMachineName
+      );
       
-    case 'closing':
-      output = generateClosingResponse(session);
-      break;
-      
-    // Add other state entry handlers here
-    
-    default:
-      return null;
-  }
-  
-  // Save all outbound messages from the burst sequence
-  if (output) {
-    for (const response of output.responses) {
-      await messageStore.save(sessionId, {
-        direction: 'outbound',
-        type: response.type as MessageType,
-        content: response.content,
-      });
+      if (stateMachineId) {
+        const entry = await deps.stateMachineStore.getStateEntryMessages(
+          stateMachineId,
+          state
+        );
+        
+        if (entry) {
+          console.log(`[State Entry] Using database responses for state: ${state}`);
+          
+          // Substitute template variables in all responses
+          const responses = entry.responses.map(r => ({
+            ...r,
+            content: substituteTemplateVariables(r.content, session, contact),
+            templateButtonParams: r.templateButtonParams?.map(p => 
+              substituteTemplateVariables(p, session, contact)
+            )
+          }));
+          
+          // Save all outbound messages
+          for (const response of responses) {
+            await messageStore.save(sessionId, {
+              direction: 'outbound',
+              type: response.type as MessageType,
+              content: response.content,
+            });
+          }
+          
+          return {
+            sessionId: session.id,
+            responses,
+            sessionUpdates: {
+              lastMessageAt: new Date(),
+              ...entry.sessionUpdates
+            }
+          };
+        }
+      }
+    } catch (error) {
+      console.error('[State Entry] Database fetch failed, falling back to hardcoded:', error);
     }
   }
   
-  return output;
+  // No database entry found
+  return null;
 }
 
-function generateClosingResponse(session: Session): EngineOutput {
-  const registrationLink = `https://h.parallelo.ai/register?sessionId=${session.id}`;
-  
-  return {
-    sessionId: session.id,
-    responses: [
-      {
-        type: 'text',
-        content: `Excelente, lo primero es hacer el registro. 🚀\n\nEstaré aquí contigo durante todo el proceso. Si tienes alguna duda al llenar el formulario o realizar el depósito, solo pregúntame.`,
-        delayMs: 1000
-      },
-      /*{
-        type: 'text',
-        content: `Una vez que hayas completado el registro, pásame tu correo electrónico para verificar que todo esté en orden.\n\n${registrationLink}`,
-        delayMs: 1000
-      }*/
-      {
-        type: 'template',
-        templateName: 'registro_x12',
-        templateButtonParams: [session.id],
-        templateHeaderImage: 'https://tournament.tagmarkets.com/assets/logo-tag-BYchnq3N.png',
-        content: `Una vez que hayas completado el registro, pásame tu correo electrónico para verificar que todo esté en orden.\n\n${registrationLink}`,
-        delayMs: 1000
-      }
-    ],
-    sessionUpdates: {
-      lastMessageAt: new Date(),
-      context: {
-        ...session.context,
-        registrationStatus: 'pending',
-      }
-    }
-  };
-}
+

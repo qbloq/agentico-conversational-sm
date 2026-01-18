@@ -371,6 +371,7 @@ async function findOrCreateSession(
       current_state: 'initial',
       context: { ...context, source: 'ghl_opportunity' },
       status: 'active',
+      state_machine_id: '3a580494-3ebe-47f6-acb7-6904354dbf57',
       is_escalated: false,
     })
     .select('id')
