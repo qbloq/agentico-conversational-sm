@@ -61,6 +61,8 @@ serve(async (req: Request) => {
     // Check if it's multipart/form-data (image upload)
     const isFormData = contentType.toLowerCase().includes('multipart/form-data');
     
+    let replyToMessageId: string | undefined | null;
+
     if (isFormData) {
       // Handle image upload
       console.log('Parsing as FormData...');
@@ -69,12 +71,14 @@ serve(async (req: Request) => {
         escalationId = formData.get('escalationId') as string;
         imageFile = formData.get('image') as File;
         caption = formData.get('caption') as string | undefined;
+        replyToMessageId = formData.get('replyToMessageId') as string | undefined;
         
         console.log('Received image upload:', {
           escalationId,
           imageFileName: imageFile?.name,
           imageSize: imageFile?.size,
-          caption
+          caption,
+          replyToMessageId
         });
       } catch (formError) {
         console.error('FormData parse error:', formError);
@@ -92,6 +96,7 @@ serve(async (req: Request) => {
         message = body.message;
         templateName = body.templateName;
         languageCode = body.languageCode;
+        replyToMessageId = body.replyToMessageId;
       } catch (jsonError) {
         console.error('JSON parse error:', jsonError);
         console.error('Content-Type was:', contentType);
@@ -229,6 +234,21 @@ serve(async (req: Request) => {
       }
     }
 
+    // Resolve platform_message_id if replying to a message
+    let platformReplyToId: string | undefined;
+    if (replyToMessageId) {
+      const { data: repliedMsg } = await supabase
+        .schema(agent.clientSchema)
+        .from('messages')
+        .select('platform_message_id')
+        .eq('id', replyToMessageId)
+        .single();
+      
+      if (repliedMsg?.platform_message_id) {
+        platformReplyToId = repliedMsg.platform_message_id;
+      }
+    }
+
     // Save message to DB
     const { data: savedMessage, error: msgError } = await supabase
       .schema(agent.clientSchema)
@@ -240,6 +260,7 @@ serve(async (req: Request) => {
         content: imageFile ? (caption || null) : (message || (templateName ? `Template: ${templateName}` : null)),
         media_url: mediaUrl,
         sent_by_agent_id: agent.sub, // Proper FK to human_agents table
+        reply_to_message_id: replyToMessageId,
       })
       .select()
       .single();
@@ -260,7 +281,8 @@ serve(async (req: Request) => {
       agent.clientSchema,
       templateName,
       languageCode,
-      mediaUrl                     // Pass media URL for image messages
+      mediaUrl,                     // Pass media URL for image messages
+      platformReplyToId             // Pass platform ID for replies
     );
 
     if (!sent) {
@@ -337,7 +359,8 @@ async function sendWhatsAppMessage(
   clientSchema: string,
   templateName?: string,
   languageCode: string = 'es_CO',
-  mediaUrl?: string
+  mediaUrl?: string,
+  replyToMessageId?: string
 ): Promise<boolean> {
   // Get access token based on client (for now use env var)
   const accessToken = Deno.env.get('TAG_WHATSAPP_ACCESS_TOKEN');
@@ -374,6 +397,12 @@ async function sendWhatsAppMessage(
     } else {
       body.type = 'text';
       body.text = { body: text };
+    }
+
+    if (replyToMessageId) {
+      body.context = {
+        message_id: replyToMessageId
+      };
     }
 
     const response = await fetch(url, {

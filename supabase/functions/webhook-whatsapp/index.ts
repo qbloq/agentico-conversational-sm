@@ -74,6 +74,10 @@ interface WhatsAppMessage {
     button_reply?: { id: string; title: string };
     list_reply?: { id: string; title: string };
   };
+  context?: {
+    from: string;
+    id: string; // The platform_message_id being replied to
+  };
 }
 
 interface WhatsAppStatus {
@@ -367,9 +371,17 @@ async function normalizeAndUploadMedia(
   mediaService: MediaServiceImpl,
   accessToken: string
 ): Promise<NormalizedMessage> {
+  if (message.context?.id) {
+    // We need to find our internal message ID that corresponds to this platform_message_id
+    // But for now, we'll store the platform_message_id and let the store/engine handle it
+    // Actually, the database column reply_to_message_id is a UUID referencing our internal table.
+    // So we need to resolve it.
+  }
+
   const base = {
     id: message.id,
     timestamp: new Date(parseInt(message.timestamp) * 1000),
+    replyToMessageId: message.context?.id, // Passing the platform_message_id as a hint
   };
   
   let mediaUrl: string | undefined;

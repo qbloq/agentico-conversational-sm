@@ -137,6 +137,7 @@ export interface Message {
   type: string;
   content: string | null;
   media_url?: string | null;
+  reply_to_message_id?: string | null;
   created_at: string;
   sent_by_agent_id?: string | null; // FK to human_agents - indicates message sent by human agent
 }
@@ -194,24 +195,29 @@ export async function resolveEscalation(
 
 export async function sendMessage(
   escalationId: string,
-  message: string
+  message: string,
+  replyToMessageId?: string
 ): Promise<{ success: boolean; messageId: string }> {
   return request('/send-human-message', {
     method: 'POST',
-    body: JSON.stringify({ escalationId, message }),
+    body: JSON.stringify({ escalationId, message, replyToMessageId }),
   });
 }
 
 export async function sendImageMessage(
   escalationId: string,
   imageFile: File,
-  caption?: string
+  caption?: string,
+  replyToMessageId?: string
 ): Promise<{ success: boolean; messageId: string }> {
   const formData = new FormData();
   formData.append('escalationId', escalationId);
   formData.append('image', imageFile);
   if (caption) {
     formData.append('caption', caption);
+  }
+  if (replyToMessageId) {
+    formData.append('replyToMessageId', replyToMessageId);
   }
 
   const token = getToken();
@@ -239,11 +245,12 @@ export async function sendImageMessage(
 export async function sendTemplateMessage(
   escalationId: string,
   templateName: string,
-  languageCode: string = 'es_CO'
+  languageCode: string = 'es_CO',
+  replyToMessageId?: string
 ): Promise<{ success: boolean; messageId: string }> {
   return request('/send-human-message', {
     method: 'POST',
-    body: JSON.stringify({ escalationId, templateName, languageCode }),
+    body: JSON.stringify({ escalationId, templateName, languageCode, replyToMessageId }),
   });
 }
 

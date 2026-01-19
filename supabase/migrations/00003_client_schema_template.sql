@@ -169,6 +169,9 @@ CREATE TABLE IF NOT EXISTS client_template.messages (
   platform_message_id TEXT,              -- WhatsApp/Meta message ID
   delivery_status TEXT CHECK (delivery_status IN ('sent', 'delivered', 'read', 'failed')),
   
+  -- Reply context
+  reply_to_message_id UUID REFERENCES client_template.messages(id),
+
   -- Timestamps
   created_at TIMESTAMPTZ DEFAULT NOW(),
   delivered_at TIMESTAMPTZ,

@@ -175,6 +175,7 @@ export interface NormalizedMessage {
   transcription?: string;
   imageAnalysis?: ImageAnalysis;
   interactivePayload?: InteractivePayload;
+  replyToMessageId?: string;
 }
 
 export interface ImageAnalysis {
@@ -206,6 +207,7 @@ export interface Message {
   imageAnalysis?: ImageAnalysis;
   platformMessageId?: string;
   deliveryStatus?: 'sent' | 'delivered' | 'read' | 'failed';
+  replyToMessageId?: string;
   createdAt: Date;
   deliveredAt?: Date;
   readAt?: Date;

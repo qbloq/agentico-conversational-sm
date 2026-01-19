@@ -548,7 +548,7 @@ async function getSession(agent: AgentPayload, sessionId: string): Promise<Respo
   const { data: messages, error: msgError } = await supabase
     .schema(agent.clientSchema)
     .from('messages')
-    .select('id, session_id, direction, type, content, media_url, created_at, sent_by_agent_id')
+    .select('id, session_id, direction, type, content, media_url, created_at, sent_by_agent_id, reply_to_message_id')
     .eq('session_id', sessionId)
     .order('created_at', { ascending: true });
 
