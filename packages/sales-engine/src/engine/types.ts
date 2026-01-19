@@ -302,6 +302,7 @@ export interface EngineDependencies {
   stateMachineStore?: StateMachineStore;
   messageBufferStore?: MessageBufferStore;
   escalationStore?: EscalationStore;
+  followupStore?: FollowupStore;
   
   // AI services
   llmProvider: LLMProvider;
@@ -403,6 +404,26 @@ export interface StateEntryMessageConfig {
   responses: BotResponse[];
   sessionUpdates?: Partial<Session>;
   description?: string;
+}
+
+export interface FollowupStore {
+  /**
+   * Schedule the next follow-up in the sequence for a state
+   * @param sessionId The session ID
+   * @param state The current state (to lookup its sequence config)
+   * @param currentIndex The index of the last SENT follow-up in the sequence. 
+   *                     Pass -1 to schedule the first one (index 0).
+   */
+  scheduleNext(
+    sessionId: string,
+    state: ConversationState,
+    currentIndex: number
+  ): Promise<void>;
+
+  /**
+   * Cancel all pending follow-ups for a session
+   */
+  cancelPending(sessionId: string): Promise<void>;
 }
 
 export interface EscalationStore {

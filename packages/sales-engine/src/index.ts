@@ -48,6 +48,7 @@ export type {
   StateEntryMessageConfig,
   MessageBufferStore,
   EscalationStore,
+  FollowupStore,
   KnowledgeStore,
   KnowledgeEntry,
   PendingMessage,

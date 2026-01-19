@@ -230,6 +230,7 @@ CREATE TABLE IF NOT EXISTS client_template.followup_queue (
   
   -- Status
   status TEXT CHECK (status IN ('pending', 'sent', 'cancelled', 'failed')) DEFAULT 'pending',
+  sequence_index INTEGER DEFAULT 0,
   sent_at TIMESTAMPTZ,
   error_message TEXT,
   

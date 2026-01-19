@@ -18,6 +18,7 @@ import {
   createSupabaseStateMachineStore,
   createSupabaseMessageBufferStore,
   createSupabaseEscalationStore,
+  createSupabaseFollowupStore,
 } from '../_shared/adapters/index.ts';
 import { createConversationEngine } from '../_shared/sales-engine.bundle.ts';
 import { createGeminiProvider, createGeminiEmbeddingProvider } from '../_shared/sales-engine-llm.bundle.ts';
@@ -215,6 +216,7 @@ async function processMessage(
   const exampleStore = createSupabaseExampleStore(supabase);
   const stateMachineStore = createSupabaseStateMachineStore(supabase, schemaName);
   const escalationStore = createSupabaseEscalationStore(supabase, schemaName);
+  const followupStore = createSupabaseFollowupStore(supabase, schemaName);
   
   // Create LLM provider
   const llmProvider = createGeminiProvider({
@@ -322,11 +324,22 @@ async function processMessage(
       llmProvider,
       embeddingProvider,
       mediaService,
-      notificationService,
       llmLogger,
       clientConfig,
+      followupStore,
     },
   });
+
+  // After processing, if we have a sessionId, we can manage follow-ups
+  if (result.sessionId) {
+    // 1. Cancel any pending follow-ups because user just responded
+    await followupStore.cancelPending(result.sessionId);
+
+    // 2. Schedule the FIRST follow-up in the sequence for the NEW current state
+    // We pass -1 as currentIndex to indicate we want to start from the beginning (index 0)
+    const nextState = result.sessionUpdates?.currentState || result.responses[0]?.metadata?.state || 'initial';
+    await followupStore.scheduleNext(result.sessionId, nextState as any, -1);
+  }
   
   // Send responses
   for (const response of result.responses) {

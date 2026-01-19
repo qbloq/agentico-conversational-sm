@@ -10,7 +10,11 @@ import { createSupabaseClient } from '../_shared/supabase.ts';
 import {
   createSupabaseSessionStore,
   createSupabaseMessageStore,
+  createSupabaseFollowupStore,
+  createSupabaseLLMLogger,
 } from '../_shared/adapters/index.ts';
+import { createConversationEngine } from '../_shared/sales-engine.bundle.ts';
+import { createGeminiProvider } from '../_shared/sales-engine-llm.bundle.ts';
 
 interface ChannelMapping {
   client_id: string;
@@ -26,6 +30,7 @@ interface FollowupItem {
   followup_type: 'short_term' | 'daily' | 'custom';
   template_name?: string;
   template_params?: any;
+  sequence_index: number;
   status: string;
 }
 
@@ -70,7 +75,7 @@ async function processClientSchema(
 ) {
   console.log(`Checking schema: ${schemaName}`);
   
-  // Get pending items due now
+  // 1. Get pending items due now
   const now = new Date().toISOString();
   const { data: pendingItems, error: fetchError } = await supabase
     .schema(schemaName)
@@ -91,59 +96,84 @@ async function processClientSchema(
   
   console.log(`Found ${pendingItems.length} pending items in ${schemaName}`);
   
+  // 2. Initialize stores and engine
   const sessionStore = createSupabaseSessionStore(supabase, schemaName);
   const messageStore = createSupabaseMessageStore(supabase, schemaName);
-  
-  // Process each item
+  const followupStore = createSupabaseFollowupStore(supabase, schemaName);
+  const engine = createConversationEngine();
+
+  // 3. Process each item
   for (const item of pendingItems) {
     try {
-      // Get session to know where to send
+      // 3.1 Get session to know where to send and current state
       const session = await sessionStore.findById(item.session_id);
       if (!session) {
         await markFailed(supabase, schemaName, item.id, 'Session not found');
         continue;
       }
+
+      // 3.2 Load client config (needed for engine and channel credentials)
+      const { data: settings } = await supabase
+        .schema(schemaName)
+        .from('settings')
+        .select('config')
+        .single();
       
-      // Find config for this channel
-      const mapping = allMappings.find(
-        m => m.schema_name === schemaName && 
-             m.channel_type === session.channelType && 
-             m.channel_id === session.channelId
-      );
-      
-      if (!mapping) {
-        await markFailed(supabase, schemaName, item.id, 'Channel config not found');
+      const clientConfig = settings?.config;
+      if (!clientConfig) {
+        await markFailed(supabase, schemaName, item.id, 'Client config not found');
         continue;
       }
+
+      // 3.3 Create LLM provider
+      const llmProvider = createGeminiProvider({
+        apiKey: Deno.env.get('GOOGLE_API_KEY') || '',
+        model: clientConfig.llm.model,
+      });
+
+      // 3.4 Generate Follow-up Content using LLM
+      console.log(`[Follow-up] Generating content for session ${session.id} (State: ${session.currentState}, Seq Index: ${item.sequence_index})`);
+      const responses = await engine.generateFollowup(session.id, {
+        sessionStore,
+        messageStore,
+        llmProvider,
+        clientConfig,
+      } as any);
+
+      // 3.5 Send Message(s)
+      const accessToken = clientConfig.channels.whatsapp?.accessToken || Deno.env.get('WHATSAPP_ACCESS_TOKEN');
       
-      // Get credentials (this would ideally come from a secure config store/vault)
-      // For MVP, we assume env vars or config table. 
-      // Here we'll try to get it from a hypothetical config function or env
-      const accessToken = Deno.env.get('WHATSAPP_ACCESS_TOKEN'); // Fallback/Global
-      // In real multi-tenant, we'd fetch specific credentials based on client_id
-      
-      if (!accessToken) {
-        await markFailed(supabase, schemaName, item.id, 'Missing credentials');
-        continue;
+      for (const response of responses) {
+        if (session.channelType === 'whatsapp') {
+          // Find the correct phone_number_id for this channel
+          const mapping = allMappings.find(
+            m => m.schema_name === schemaName && 
+                 m.channel_type === session.channelType && 
+                 m.channel_id === session.channelId
+          );
+
+          if (!mapping) {
+            console.error(`[Follow-up] Mapping not found for session ${session.id}`);
+            continue;
+          }
+
+          await sendWhatsAppMessage(
+            mapping.channel_id,
+            session.channelUserId,
+            response.content,
+            accessToken
+          );
+        }
+
+        // Save to message history
+        await messageStore.save(session.id, {
+          direction: 'outbound',
+          type: 'text',
+          content: response.content,
+        });
       }
-      
-      // Generate Content
-      const content = generateFollowupContent(item, session);
-      
-      // Send Message
-      if (session.channelType === 'whatsapp') {
-        await sendWhatsAppMessage(
-          session.channelId,
-          session.channelUserId,
-          content,
-          accessToken
-        );
-      } else {
-        // TODO: Implement other channels
-        console.log(`Skipping non-whatsapp channel: ${session.channelType}`);
-      }
-      
-      // Update Queue Status
+
+      // 3.6 Update Queue Status for CURRENT item
       await supabase
         .schema(schemaName)
         .from('followup_queue')
@@ -152,24 +182,9 @@ async function processClientSchema(
           sent_at: new Date().toISOString(),
         })
         .eq('id', item.id);
-        
-      // Save to message history
-      await messageStore.save(session.id, {
-        direction: 'outbound',
-        type: 'text',
-        content: content, // Already plain text from generateFollowupContent
-      });
-      
-      // Update Session State if needed
-      // If we are sending a follow-up, we might want to move state to 'follow_up'
-      // ONLY if the session is currently 'completed' or 'disqualified' or 'follow_up'
-      // If the user is active in another state, we might just be sending a nudge
-      if (['completed', 'disqualified', 'follow_up'].includes(session.currentState)) {
-         await sessionStore.update(session.id, {
-           currentState: 'follow_up',
-           lastMessageAt: new Date(),
-         });
-      }
+
+      // 3.7 Schedule NEXT follow-up in the sequence
+      await followupStore.scheduleNext(session.id, session.currentState, item.sequence_index);
       
     } catch (err) {
       console.error(`Failed to process item ${item.id}:`, err);

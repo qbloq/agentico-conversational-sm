@@ -31,6 +31,12 @@ export interface StateConfig {
   
   /** Max messages before suggesting transition (soft limit for LLM) */
   maxMessages?: number;
+
+  /** 
+   * Follow-up sequence intervals (e.g., ['15m', '30m', '2h', '1d', '1w']) 
+   * If user doesn't respond, we send a follow-up at each interval.
+   */
+  followupSequence?: string[];
 }
 
 /**
@@ -83,6 +89,7 @@ export const STATE_CONFIGS: Record<ConversationState, StateConfig> = {
       escalated: 'User requests human agent.',
     },
     maxMessages: 2,
+    followupSequence: ['30m', '4h', '24h'],
   },
   
   // ===========================================================================
@@ -106,6 +113,7 @@ export const STATE_CONFIGS: Record<ConversationState, StateConfig> = {
       escalated: 'User requests human help.',
     },
     maxMessages: 6,
+    followupSequence: ['15m', '1h', '4h', '24h'],
   },
   
   // ===========================================================================
@@ -191,6 +199,7 @@ export const STATE_CONFIGS: Record<ConversationState, StateConfig> = {
       escalated: 'User has issues registering that require human.',
     },
     maxMessages: 5,
+    followupSequence: ['15m', '1h', '4h', '24h'],
   },
   
   post_registration: {
@@ -209,6 +218,7 @@ export const STATE_CONFIGS: Record<ConversationState, StateConfig> = {
       escalated: 'User requests human help.',
     },
     maxMessages: 3,
+    followupSequence: ['30m', '1h', '4h', '24h'],
   },
   
   // ===========================================================================

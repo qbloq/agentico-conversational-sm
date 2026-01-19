@@ -24,7 +24,7 @@ import { StateMachine } from '../state/machine.js';
 import type { StructuredLLMResponse, LLMResponse } from '../llm/types.js';
 import { calculateCost } from '../llm/pricing.js';
 
-import { buildSystemPromptWithoutKB } from '../prompts/templates.js';
+import { buildSystemPromptWithoutKB, buildFollowupPrompt } from '../prompts/templates.js';
 import { zodToJsonSchema } from 'zod-to-json-schema';
 import { ConversationResponseSchema } from '../llm/schemas.js';
 
@@ -64,6 +64,14 @@ export interface ConversationEngine {
    * Kept for backwards compatibility, simulation, and testing
    */
   processMessage(input: EngineInput): Promise<EngineOutput>;
+
+  /**
+   * Generate a follow-up message when user hasn't responded
+   */
+  generateFollowup(
+    sessionId: string,
+    deps: EngineDependencies
+  ): Promise<BotResponse[]>;
 }
 
 /**
@@ -616,6 +624,72 @@ console.log(llmResponse.usage)
         
         // Re-throw so caller knows it failed
         throw error;
+      }
+    },
+
+    async generateFollowup(
+      sessionId: string,
+      deps: EngineDependencies
+    ): Promise<BotResponse[]> {
+      const { 
+        sessionStore, 
+        messageStore, 
+        llmProvider, 
+        clientConfig 
+      } = deps;
+
+      console.log(`[Follow-up] Generating follow-up for session ${sessionId}...`);
+
+      // 1. Get Session
+      const session = await sessionStore.findById(sessionId);
+      if (!session) {
+        throw new Error(`Session ${sessionId} not found`);
+      }
+
+      // 2. Get Recent Messages (for history context)
+      const history = await messageStore.getRecent(sessionId, 10);
+      const formattedHistory = formatConversationHistory(history);
+
+      // 3. Setup State Machine
+      const machine = StateMachine.fromSession(session);
+      const transitionContext = machine.buildTransitionContext();
+
+      // 4. Build Prompt
+      const prompt = buildFollowupPrompt({
+        config: clientConfig,
+        transitionContext,
+        sessionContext: session.context as Record<string, unknown>,
+        examples: [] // Not used in mockup/followup prompt yet
+      });
+
+      // 5. Call LLM
+      try {
+        const response = await llmProvider.generateResponse({
+          systemPrompt: prompt,
+          messages: formattedHistory,
+          temperature: 0.7,
+        });
+
+        const structuredResponse = parseStructuredResponse(response.content);
+        if (!structuredResponse || !structuredResponse.responses) {
+          throw new Error('Invalid LLM response for follow-up');
+        }
+
+        return structuredResponse.responses.map((content: string) => ({
+          type: 'text',
+          content
+        }));
+      } catch (error) {
+        console.error('[Follow-up] LLM generation failed:', error);
+        // Fallback
+        const fallbackMsg = clientConfig.business.language === 'es' 
+          ? '¡Hola! 👋 Seguimos aquí para ayudarte. ¿Tienes alguna duda?'
+          : 'Hi! 👋 We are still here to help. Any questions?';
+        
+        return [{
+          type: 'text',
+          content: fallbackMsg
+        }];
       }
     },
   };

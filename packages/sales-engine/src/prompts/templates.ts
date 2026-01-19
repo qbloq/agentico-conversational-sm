@@ -299,3 +299,51 @@ You MUST respond with a JSON object:
 \`\`\`
 `;
 }
+
+/**
+ * Prompt to generate a follow-up message when the user hasn't responded
+ */
+export function buildFollowupPrompt({
+  config,
+  transitionContext,
+  sessionContext
+}: SystemPromptWithoutKBParams): string {
+  // Format session context for prompt
+  const userContextSection = sessionContext && Object.keys(sessionContext).length > 0
+    ? `# User Context
+${Object.entries(sessionContext).map(([key, value]) => {
+  if (value === undefined || value === null) return '';
+  return `- ${key}: ${value}`;
+}).filter(Boolean).join('\n')}`
+    : '';
+
+  return `# Role
+You are a sales representative for ${config.business.name}. ${config.business.description}
+
+# Context
+The user has not responded to our last message. Your goal is to send a gentle and helpful follow-up message to re-engage them.
+
+${userContextSection}
+
+${transitionContext}
+
+# Language
+Always respond in ${config.business.language}.
+
+# Instructions
+- Be very brief (1-2 short messages).
+- Do not be pushy.
+- Reference the current objective if appropriate.
+- Ask if they need more information or if they are still interested.
+- Don't use emojis.
+
+# Response Format
+Your response MUST be a valid JSON object:
+{
+  "responses": [
+    "Short follow-up message 1",
+    "Optional short message 2"
+  ]
+}
+`;
+}
