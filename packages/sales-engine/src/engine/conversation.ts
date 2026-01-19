@@ -107,6 +107,10 @@ export function createConversationEngine(): ConversationEngine {
           console.error('Image analysis failed:', error);
           message.content = message.content || '[Image analysis failed]';
         }
+      } else if (message.type === 'video' && message.mediaUrl) {
+        // Videos are stored but not analyzed (can add video analysis later if needed)
+        console.log(`[Media] Video message received: ${message.mediaUrl}`);
+        message.content = message.content || '[Video message]';
       }
 
       // 1. Get or create contact
@@ -614,37 +618,71 @@ console.log(llmResponse.usage)
       
       console.log(`[Debounce] Processing ${pending.length} buffered messages for ${sessionKeyHash.slice(0, 8)}...`);
       
-      // 3. Sort by receivedAt and merge content
+      // 3. Sort by receivedAt
       const sorted = pending.sort((a, b) => 
         a.receivedAt.getTime() - b.receivedAt.getTime()
       );
       
-      const mergedContent = sorted
-        .map(p => p.message.content || p.message.transcription || '')
-        .filter(Boolean)
-        .join('\n');
-      
-      // 4. Use the latest message for metadata, but merged content
-      const latestMessage = sorted[sorted.length - 1];
-      const mergedMessage: NormalizedMessage = {
-        ...latestMessage.message,
-        content: mergedContent,
-      };
+      // 4. Check if any message contains media
+      const hasMediaMessages = sorted.some(p => p.message.mediaUrl);
       
       try {
-        // 5. Process the merged message through existing engine logic
-        const result = await this.processMessage({
-          sessionKey: sorted[0].sessionKey,
-          message: mergedMessage,
-          deps,
-        });
-        
-        // 6. Success! Delete processed messages from buffer
-        await messageBufferStore.deleteByIds(pending.map(p => p.id));
-        
-        console.log(`[Debounce] Successfully processed and cleaned up ${pending.length} messages`);
-        
-        return result;
+        if (hasMediaMessages) {
+          // Process media messages individually to preserve image analysis
+          console.log(`[Debounce] Found media in buffered messages, processing individually`);
+          
+          const allResponses: BotResponse[] = [];
+          let lastResult: EngineOutput | null = null;
+          
+          for (const pendingMsg of sorted) {
+            const result = await this.processMessage({
+              sessionKey: pendingMsg.sessionKey,
+              message: pendingMsg.message,
+              deps,
+            });
+            
+            allResponses.push(...result.responses);
+            lastResult = result;
+          }
+          
+          // Success! Delete processed messages from buffer
+          await messageBufferStore.deleteByIds(pending.map(p => p.id));
+          
+          console.log(`[Debounce] Successfully processed ${sorted.length} messages (with media) individually`);
+          
+          return {
+            ...lastResult!,
+            responses: allResponses,
+          };
+        } else {
+          // Text-only messages: merge content as before
+          console.log(`[Debounce] Text-only messages, merging content`);
+          
+          const mergedContent = sorted
+            .map(p => p.message.content || p.message.transcription || '')
+            .filter(Boolean)
+            .join('\n');
+          
+          const latestMessage = sorted[sorted.length - 1];
+          const mergedMessage: NormalizedMessage = {
+            ...latestMessage.message,
+            content: mergedContent,
+          };
+          
+          // Process the merged message through existing engine logic
+          const result = await this.processMessage({
+            sessionKey: sorted[0].sessionKey,
+            message: mergedMessage,
+            deps,
+          });
+          
+          // Success! Delete processed messages from buffer
+          await messageBufferStore.deleteByIds(pending.map(p => p.id));
+          
+          console.log(`[Debounce] Successfully processed and cleaned up ${pending.length} merged messages`);
+          
+          return result;
+        }
         
       } catch (error) {
         // Processing failed - mark for retry, don't delete
@@ -805,7 +843,8 @@ function formatMessageForLLM(m: {
   content?: string | null; 
   type?: string; 
   transcription?: string; 
-  imageAnalysis?: any 
+  imageAnalysis?: any;
+  mediaUrl?: string;
 }): string {
   let text = m.content || '';
   
@@ -814,6 +853,9 @@ function formatMessageForLLM(m: {
     text = text ? `${text}${meta}` : meta;
   } else if (m.type === 'image' && m.imageAnalysis?.description) {
     const meta = `\n[SISTEMA: El usuario envió una imagen. Descripción: ${m.imageAnalysis.description}]`;
+    text = text ? `${text}${meta}` : meta;
+  } else if (m.type === 'video' && m.mediaUrl) {
+    const meta = `\n[SISTEMA: El usuario envió un video.]`;
     text = text ? `${text}${meta}` : meta;
   }
   

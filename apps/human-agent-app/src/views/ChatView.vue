@@ -226,6 +226,7 @@ function getRepliedMessageText(id: string) {
   const msg = escalations.messages.find(m => m.id === id);
   if (!msg) return 'Mensaje original';
   if (msg.type === 'image') return '🖼️ Imagen';
+  if (msg.type === 'video') return '🎥 Video';
   return msg.content || 'Mensaje';
 }
 
@@ -379,6 +380,16 @@ const formatDateLabel = (date: Date) => {
                   alt="Message image"
                 />
               </a>
+            </div>
+            <div v-if="msg.type === 'video' && msg.media_url" class="mb-2 -mx-2">
+              <video 
+                :src="msg.media_url" 
+                controls
+                class="max-w-full max-h-72 w-auto rounded-lg shadow-sm border border-surface-100 dark:border-white/10"
+                preload="metadata"
+              >
+                Your browser does not support video playback.
+              </video>
             </div>
             <p v-if="msg.content" 
               :class="[
