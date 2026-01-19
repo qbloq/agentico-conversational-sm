@@ -65,10 +65,11 @@ interface WhatsAppMessage {
   from: string;
   id: string;
   timestamp: string;
-  type: 'text' | 'image' | 'audio' | 'interactive' | 'button';
+  type: 'text' | 'image' | 'audio' | 'video' | 'interactive' | 'button';
   text?: { body: string };
   image?: { id: string; mime_type: string; sha256: string; caption?: string };
   audio?: { id: string; mime_type: string };
+  video?: { id: string; mime_type: string; sha256: string; caption?: string };
   interactive?: {
     type: 'button_reply' | 'list_reply';
     button_reply?: { id: string; title: string };
@@ -206,6 +207,7 @@ async function processMessage(
   contact?: WhatsAppContact
 ): Promise<void> {
   console.log(`Processing message from ${message.from}: ${message.type}`);
+  console.log('[DEBUG] Raw WhatsApp message:', JSON.stringify(message, null, 2));
   console.log(clientConfig);
   // Create conversation engine
   const engine = createConversationEngine();
@@ -389,6 +391,7 @@ async function normalizeAndUploadMedia(
 
   if (message.type === 'image') mediaId = message.image?.id;
   if (message.type === 'audio') mediaId = message.audio?.id;
+  if (message.type === 'video') mediaId = message.video?.id;
 
   if (mediaId) {
     try {
@@ -408,9 +411,13 @@ async function normalizeAndUploadMedia(
         // 3. Upload to Supabase (public bucket)
         // Path: year/month/day/message_id.ext
         const date = new Date();
-        const ext = message.type === 'audio' ? 'ogg' : 'jpg'; // Simplified extension logic
+        const ext = message.type === 'audio' ? 'ogg' 
+          : message.type === 'video' ? 'mp4' 
+          : 'jpg'; // Simplified extension logic
         const path = `${date.getFullYear()}/${date.getMonth() + 1}/${date.getDate()}/${message.id}.${ext}`;
-        const mimeType = message.type === 'audio' ? (message.audio?.mime_type || 'audio/ogg') : (message.image?.mime_type || 'image/jpeg');
+        const mimeType = message.type === 'audio' ? (message.audio?.mime_type || 'audio/ogg')
+          : message.type === 'video' ? (message.video?.mime_type || 'video/mp4')
+          : (message.image?.mime_type || 'image/jpeg');
 
         const uploaded = await mediaService.upload(fileBuffer, path, mimeType);
         mediaUrl = uploaded.url;
@@ -441,6 +448,14 @@ async function normalizeAndUploadMedia(
       return {
         ...base,
         type: 'audio',
+        mediaUrl,
+      };
+    
+    case 'video':
+      return {
+        ...base,
+        type: 'video',
+        content: message.video?.caption,
         mediaUrl,
       };
     
