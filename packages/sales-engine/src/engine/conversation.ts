@@ -459,6 +459,45 @@ console.log(llmResponse.usage)
         if (Object.keys(contactUpdates).length > 0) {
           await contactStore.update(contact.id, contactUpdates);
         }
+
+        // Handle Deposit Detection
+        if (structuredResponse.extractedData.deposit) {
+          console.log(`[Deposit] Detected deposit from contact ${contact.id} in session ${session.id}`);
+          
+          const amount = typeof structuredResponse.extractedData.depositAmount === 'number' 
+            ? structuredResponse.extractedData.depositAmount 
+            : parseFloat(String(structuredResponse.extractedData.depositAmount || '0'));
+
+          if (deps.depositStore) {
+            try {
+              await deps.depositStore.create({
+                sessionId: session.id,
+                contactId: contact.id,
+                amount: amount,
+                currency: 'USD', // Default or extracted if we add it to schema
+                aiReasoning: structuredResponse.transition?.reason || 'Extracted from conversation',
+              });
+              console.log(`[Deposit] Event recorded successfully`);
+            } catch (err) {
+              console.error('[Deposit] Failed to record deposit event:', err);
+            }
+          }
+
+          // Update contact status
+          const depositContactUpdates: Partial<Contact> = {
+            depositConfirmed: true,
+            hasRegistered: true, // If they deposited, they must have registered
+            lifetimeValue: (contact.lifetimeValue || 0) + amount,
+          };
+          
+          await contactStore.update(contact.id, depositContactUpdates);
+          
+          // Merge with session updates so they are returned in engine output
+          sessionUpdates.context = {
+            ...sessionUpdates.context,
+            depositConfirmed: true,
+          };
+        }
       }
       
       // 14. Create bot responses

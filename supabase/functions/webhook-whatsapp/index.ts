@@ -18,6 +18,7 @@ import {
   createSupabaseStateMachineStore,
   createSupabaseMessageBufferStore,
   createSupabaseEscalationStore,
+  createSupabaseDepositStore,
 } from '../_shared/adapters/index.ts';
 import { createConversationEngine } from '../_shared/sales-engine.bundle.ts';
 import { createGeminiProvider, createGeminiEmbeddingProvider } from '../_shared/sales-engine-llm.bundle.ts';
@@ -84,8 +85,6 @@ interface WhatsAppStatus {
 
 serve(async (req: Request) => {
   const url = new URL(req.url);
-  console.log('Request method:', req.method);
-  console.log('Request URL:', req.url);
   // Handle webhook verification (GET request from Meta)
   if (req.method === 'GET') {
     return handleVerification(url);
@@ -126,11 +125,11 @@ async function handleIncomingMessage(req: Request): Promise<Response> {
     // Verify signature
     const signature = req.headers.get('x-hub-signature-256') || '';
     const body = await req.text();
-    console.log(`[DEBUG] Received webhook body: ${body.slice(0, 500)}...`);
+    // console.log(`[DEBUG] Received webhook body: ${body.slice(0, 500)}...`);
     
     // Parse payload
     const payload: WhatsAppWebhookPayload = JSON.parse(body);
-    console.log(`[DEBUG] Payload object: ${payload.object}`);
+    // console.log(`[DEBUG] Payload object: ${payload.object}`);
     
     // Validate it's a WhatsApp message
     if (payload.object !== 'whatsapp_business_account') {
@@ -150,9 +149,9 @@ async function handleIncomingMessage(req: Request): Promise<Response> {
         
         // Route to client
         const supabase = createSupabaseClient();
-        console.log(`[DEBUG] Routing for phone_number_id: ${phoneNumberId}`);
+        // console.log(`[DEBUG] Routing for phone_number_id: ${phoneNumberId}`);
         const route = await routeByChannelId(supabase, 'whatsapp', phoneNumberId);
-        console.log(`[DEBUG] Route result: ${route ? `Found (${route.clientId})` : 'NOT FOUND'}`);
+        // console.log(`[DEBUG] Route result: ${route ? `Found (${route.clientId})` : 'NOT FOUND'}`);
         
         if (!route) {
           console.error(`No client found for phone_number_id: ${phoneNumberId}`);
@@ -215,6 +214,7 @@ async function processMessage(
   const exampleStore = createSupabaseExampleStore(supabase);
   const stateMachineStore = createSupabaseStateMachineStore(supabase, schemaName);
   const escalationStore = createSupabaseEscalationStore(supabase, schemaName);
+  const depositStore = createSupabaseDepositStore(supabase, schemaName);
   
   // Create LLM provider
   const llmProvider = createGeminiProvider({
@@ -283,6 +283,7 @@ async function processMessage(
         stateMachineStore,
         messageBufferStore,
         escalationStore,
+        depositStore,
         llmProvider,
         embeddingProvider,
         mediaService,
@@ -319,6 +320,7 @@ async function processMessage(
       exampleStore,
       stateMachineStore,
       escalationStore,
+      depositStore,
       llmProvider,
       embeddingProvider,
       mediaService,

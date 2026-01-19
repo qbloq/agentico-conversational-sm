@@ -302,6 +302,7 @@ export interface EngineDependencies {
   stateMachineStore?: StateMachineStore;
   messageBufferStore?: MessageBufferStore;
   escalationStore?: EscalationStore;
+  depositStore?: DepositStore;
   
   // AI services
   llmProvider: LLMProvider;
@@ -412,6 +413,16 @@ export interface EscalationStore {
     aiSummary?: string;
     aiConfidence?: number;
     priority?: 'low' | 'medium' | 'high' | 'urgent';
+  }): Promise<{ id: string }>;
+}
+
+export interface DepositStore {
+  create(data: {
+    sessionId: string;
+    contactId: string;
+    amount: number;
+    currency?: string;
+    aiReasoning?: string;
   }): Promise<{ id: string }>;
 }
 
