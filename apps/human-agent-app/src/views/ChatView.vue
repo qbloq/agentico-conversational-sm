@@ -227,6 +227,7 @@ function getRepliedMessageText(id: string) {
   if (!msg) return 'Mensaje original';
   if (msg.type === 'image') return '🖼️ Imagen';
   if (msg.type === 'video') return '🎥 Video';
+  if (msg.type === 'sticker') return '🎨 Sticker';
   return msg.content || 'Mensaje';
 }
 
@@ -391,7 +392,14 @@ const formatDateLabel = (date: Date) => {
                 Your browser does not support video playback.
               </video>
             </div>
-            <p v-if="msg.content" 
+            <div v-if="msg.type === 'sticker' && msg.media_url" class="mb-2 -mx-2">
+              <img 
+                :src="msg.media_url" 
+                class="max-w-[200px] max-h-[200px] w-auto object-contain"
+                alt="Sticker"
+              />
+            </div>
+            <p v-if="msg.content && msg.type !== 'sticker'" 
               :class="[
                 'text-[15px] leading-snug whitespace-pre-wrap break-words',
                 msg.direction === 'inbound' ? 'text-surface-900 dark:text-white' : 'text-white'

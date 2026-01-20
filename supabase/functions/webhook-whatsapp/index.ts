@@ -65,11 +65,12 @@ interface WhatsAppMessage {
   from: string;
   id: string;
   timestamp: string;
-  type: 'text' | 'image' | 'audio' | 'video' | 'interactive' | 'button';
+  type: 'text' | 'image' | 'audio' | 'video' | 'sticker' | 'interactive' | 'button';
   text?: { body: string };
   image?: { id: string; mime_type: string; sha256: string; caption?: string };
   audio?: { id: string; mime_type: string };
   video?: { id: string; mime_type: string; sha256: string; caption?: string };
+  sticker?: { id: string; mime_type: string; sha256: string; animated?: boolean };
   interactive?: {
     type: 'button_reply' | 'list_reply';
     button_reply?: { id: string; title: string };
@@ -392,6 +393,7 @@ async function normalizeAndUploadMedia(
   if (message.type === 'image') mediaId = message.image?.id;
   if (message.type === 'audio') mediaId = message.audio?.id;
   if (message.type === 'video') mediaId = message.video?.id;
+  if (message.type === 'sticker') mediaId = message.sticker?.id;
 
   if (mediaId) {
     try {
@@ -412,11 +414,13 @@ async function normalizeAndUploadMedia(
         // Path: year/month/day/message_id.ext
         const date = new Date();
         const ext = message.type === 'audio' ? 'ogg' 
-          : message.type === 'video' ? 'mp4' 
+          : message.type === 'video' ? 'mp4'
+          : message.type === 'sticker' ? 'webp'
           : 'jpg'; // Simplified extension logic
         const path = `${date.getFullYear()}/${date.getMonth() + 1}/${date.getDate()}/${message.id}.${ext}`;
         const mimeType = message.type === 'audio' ? (message.audio?.mime_type || 'audio/ogg')
           : message.type === 'video' ? (message.video?.mime_type || 'video/mp4')
+          : message.type === 'sticker' ? (message.sticker?.mime_type || 'image/webp')
           : (message.image?.mime_type || 'image/jpeg');
 
         const uploaded = await mediaService.upload(fileBuffer, path, mimeType);
@@ -456,6 +460,13 @@ async function normalizeAndUploadMedia(
         ...base,
         type: 'video',
         content: message.video?.caption,
+        mediaUrl,
+      };
+    
+    case 'sticker':
+      return {
+        ...base,
+        type: 'sticker',
         mediaUrl,
       };
     

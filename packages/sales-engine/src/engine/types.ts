@@ -160,7 +160,7 @@ export interface Contact {
 // Message Types
 // =============================================================================
 
-export type MessageType = 'text' | 'image' | 'audio' | 'video' | 'template' | 'interactive';
+export type MessageType = 'text' | 'image' | 'audio' | 'video' | 'sticker' | 'template' | 'interactive';
 export type MessageDirection = 'inbound' | 'outbound';
 
 /**

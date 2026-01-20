@@ -111,6 +111,10 @@ export function createConversationEngine(): ConversationEngine {
         // Videos are stored but not analyzed (can add video analysis later if needed)
         console.log(`[Media] Video message received: ${message.mediaUrl}`);
         message.content = message.content || '[Video message]';
+      } else if (message.type === 'sticker' && message.mediaUrl) {
+        // Stickers are stored but not analyzed
+        console.log(`[Media] Sticker message received: ${message.mediaUrl}`);
+        message.content = '[Sticker]';
       }
 
       // 1. Get or create contact
@@ -856,6 +860,9 @@ function formatMessageForLLM(m: {
     text = text ? `${text}${meta}` : meta;
   } else if (m.type === 'video' && m.mediaUrl) {
     const meta = `\n[SISTEMA: El usuario envió un video.]`;
+    text = text ? `${text}${meta}` : meta;
+  } else if (m.type === 'sticker' && m.mediaUrl) {
+    const meta = `\n[SISTEMA: El usuario envió un sticker.]`;
     text = text ? `${text}${meta}` : meta;
   }
   
