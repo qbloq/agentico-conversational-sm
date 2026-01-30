@@ -124,12 +124,16 @@ export function createConversationEngine(): ConversationEngine {
       );
       
       // 2. Get or create session
+      console.log(`[DEBUG] Getting session for key: ${JSON.stringify(sessionKey)}`);  
       let session = await sessionStore.findByKey(sessionKey);
+      console.log(`[DEBUG] Found session: ${JSON.stringify(session)}`);  
       if (!session) {
         // Fetch state machine ID before creating session
+        console.log(`[DEBUG] State machine name: ${clientConfig.stateMachineName}`);  
         const stateMachineId = await deps.stateMachineStore?.getStateMachineId(
           clientConfig.stateMachineName
         );
+        console.log(`[DEBUG] State machine ID: ${stateMachineId}`);  
         
         if (!stateMachineId) {
           throw new Error(`State machine '${clientConfig.stateMachineName}' not found`);

@@ -131,7 +131,7 @@ async function handleIncomingMessage(req: Request): Promise<Response> {
     // Verify signature
     const signature = req.headers.get('x-hub-signature-256') || '';
     const body = await req.text();
-    // console.log(`[DEBUG] Received webhook body: ${body.slice(0, 500)}...`);
+    console.log(`[DEBUG] Received webhook body: ${JSON.stringify(body, null, 2)}`);
     
     // Parse payload
     const payload: WhatsAppWebhookPayload = JSON.parse(body);
@@ -160,7 +160,8 @@ async function handleIncomingMessage(req: Request): Promise<Response> {
         // console.log(`[DEBUG] Route result: ${route ? `Found (${route.clientId})` : 'NOT FOUND'}`);
         
         if (!route) {
-          console.error(`No client found for phone_number_id: ${phoneNumberId}`);
+          console.error(`No client found for phone_number_id: ${phoneNumberId}. Dispatching to Premium Academy...`);
+          await dispatchToPremiumAcademy(req.headers, body);
           continue;
         }
         
@@ -207,9 +208,9 @@ async function processMessage(
   message: WhatsAppMessage,
   contact?: WhatsAppContact
 ): Promise<void> {
-  console.log(`Processing message from ${message.from}: ${message.type}`);
-  console.log('[DEBUG] Raw WhatsApp message:', JSON.stringify(message, null, 2));
-  console.log(clientConfig);
+  // console.log(`Processing message from ${message.from}: ${message.type}`);
+  // console.log('[DEBUG] Raw WhatsApp message:', JSON.stringify(message, null, 2));
+  // console.log(clientConfig);
   // Create conversation engine
   const engine = createConversationEngine();
 
@@ -272,7 +273,7 @@ async function processMessage(
   
   if (debounceEnabled && !isCommandMessage) {
     // Debounce flow: buffer the message, worker will process later
-    const messageBufferStore = createSupabaseMessageBufferStore(supabase, schemaName);
+    const messageBufferStore = createSupabaseMessageBufferStore(supabase, schemaName, phoneNumberId);
     
     const ingestResult = await engine.ingestMessage({
       sessionKey: {
@@ -611,3 +612,33 @@ async function sendWhatsAppTemplate(
     console.log(`Template sent successfully`);
   }
 }
+
+/**
+ * Dispatch request to Premium Academy service
+ */
+async function dispatchToPremiumAcademy(headers: Headers, body: string): Promise<void> {
+  const targetUrl = Deno.env.get('DISPATCH_TO_PREMIUM_ACADEMY_URL');
+  
+  if (!targetUrl) {
+    console.warn('[Webhook WhatsApp] DISPATCH_TO_PREMIUM_ACADEMY_URL not configured, skipping dispatch');
+    return;
+  }
+
+  try {
+    console.log('[Webhook WhatsApp] Dispatching unmatched request to:', targetUrl);
+
+    const response = await fetch(targetUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': headers.get('Content-Type') || 'application/json',
+        'x-hub-signature-256': headers.get('x-hub-signature-256') || '',
+      },
+      body: body,
+    });
+
+    console.log(`[Webhook WhatsApp] Dispatch target responded: ${response.status}`);
+  } catch (error) {
+    console.error('[Webhook WhatsApp] Error dispatching to Premium Academy:', error);
+  }
+}
+
