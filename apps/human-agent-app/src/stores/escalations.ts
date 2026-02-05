@@ -11,6 +11,8 @@ import {
   resolveEscalation,
   sendMessage,
   sendTemplateMessage,
+  sendImageMessage,
+  sendVideoMessage,
   listTemplates,
   type Escalation,
   type EscalationDetail,
@@ -184,7 +186,6 @@ export const useEscalationsStore = defineStore('escalations', () => {
     error.value = null;
 
     try {
-      const { sendImageMessage } = await import('@/api/client');
       const result = await sendImageMessage(
         currentEscalation.value.id, 
         imageFile, 
@@ -219,6 +220,53 @@ export const useEscalationsStore = defineStore('escalations', () => {
       return true;
     } catch (e) {
       error.value = e instanceof Error ? e.message : 'Failed to send image';
+      return false;
+    } finally {
+      sending.value = false;
+    }
+  }
+
+  async function sendVideo(videoFile: File, caption?: string): Promise<boolean> {
+    if (!currentEscalation.value) return false;
+
+    sending.value = true;
+    error.value = null;
+
+    try {
+      const result = await sendVideoMessage(
+        currentEscalation.value.id, 
+        videoFile, 
+        caption,
+        replyingTo.value?.id
+      );
+      
+      // Use the media URL returned by the server if available, otherwise temp URL
+      const mediaUrl = result.mediaUrl || URL.createObjectURL(videoFile);
+      
+      // Add to local messages (optimistic update)
+      messages.value.push({
+        id: result.messageId,
+        session_id: currentEscalation.value.session.id,
+        direction: 'outbound',
+        type: 'video',
+        content: caption || null,
+        media_url: mediaUrl,
+        reply_to_message_id: replyingTo.value?.id,
+        created_at: new Date().toISOString(),
+        sent_by_agent_id: 'current-agent',
+      });
+
+      // Clear replying to state
+      clearReplyingTo();
+
+      // Update status
+      if (currentEscalation.value.status === 'assigned') {
+        currentEscalation.value.status = 'in_progress';
+      }
+
+      return true;
+    } catch (e) {
+      error.value = e instanceof Error ? e.message : 'Failed to send video';
       return false;
     } finally {
       sending.value = false;
@@ -384,6 +432,7 @@ export const useEscalationsStore = defineStore('escalations', () => {
     resolve,
     send,
     sendImage,
+    sendVideo,
     fetchTemplates,
     sendTemplate,
     clearCurrent,

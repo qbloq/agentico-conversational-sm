@@ -16,10 +16,11 @@ const showTemplatePicker = ref(false);
 const currentTime = ref(Date.now());
 let timer: number | null = null;
 
-// Image upload
-const selectedImage = ref<File | null>(null);
-const imagePreviewUrl = ref<string | null>(null);
+// Media upload
+const selectedFile = ref<File | null>(null);
+const mediaPreviewUrl = ref<string | null>(null);
 const fileInput = ref<HTMLInputElement | null>(null);
+const isVideoSelected = ref(false);
 
 // Long-press and Context Menu
 const showContextMenu = ref(false);
@@ -67,13 +68,18 @@ function scrollToBottom() {
 }
 
 async function handleSend() {
-  // Send image if selected
-  if (selectedImage.value) {
+  // Send media if selected
+  if (selectedFile.value) {
     const caption = messageInput.value.trim() || undefined;
     messageInput.value = '';
     
-    await escalations.sendImage(selectedImage.value, caption);
-    removeImage();
+    if (isVideoSelected.value) {
+      await escalations.sendVideo(selectedFile.value, caption);
+    } else {
+      await escalations.sendImage(selectedFile.value, caption);
+    }
+    
+    removeMedia();
     scrollToBottom();
     return;
   }
@@ -88,25 +94,32 @@ async function handleSend() {
   scrollToBottom();
 }
 
-function handleImageSelect(event: Event) {
+function handleFileSelect(event: Event) {
   const target = event.target as HTMLInputElement;
   const file = target.files?.[0];
   
-  if (file && file.type.startsWith('image/')) {
-    selectedImage.value = file;
-    imagePreviewUrl.value = URL.createObjectURL(file);
+  if (file) {
+    const isImage = file.type.startsWith('image/');
+    const isVideo = file.type.startsWith('video/');
+    
+    if (isImage || isVideo) {
+      selectedFile.value = file;
+      mediaPreviewUrl.value = URL.createObjectURL(file);
+      isVideoSelected.value = isVideo;
+    }
   }
   
   // Reset input so same file can be selected again
   if (target) target.value = '';
 }
 
-function removeImage() {
-  if (imagePreviewUrl.value) {
-    URL.revokeObjectURL(imagePreviewUrl.value);
+function removeMedia() {
+  if (mediaPreviewUrl.value) {
+    URL.revokeObjectURL(mediaPreviewUrl.value);
   }
-  selectedImage.value = null;
-  imagePreviewUrl.value = null;
+  selectedFile.value = null;
+  mediaPreviewUrl.value = null;
+  isVideoSelected.value = false;
 }
 
 function openFileSelector() {
@@ -444,15 +457,22 @@ const formatDateLabel = (date: Date) => {
 
       <div class="px-3 py-2">
         <div v-if="escalations.isWindowOpen" class="flex flex-col gap-2">
-          <!-- Image Preview -->
-          <div v-if="imagePreviewUrl" class="relative inline-block">
+          <!-- Media Preview -->
+          <div v-if="mediaPreviewUrl" class="relative inline-block">
+            <video 
+              v-if="isVideoSelected"
+              :src="mediaPreviewUrl" 
+              class="max-h-32 rounded-lg border border-surface-200 dark:border-surface-600"
+              controls
+            />
             <img 
-              :src="imagePreviewUrl" 
+              v-else
+              :src="mediaPreviewUrl" 
               class="max-h-32 rounded-lg border border-surface-200 dark:border-surface-600"
               alt="Preview"
             />
             <button
-              @click="removeImage"
+              @click="removeMedia"
               class="absolute -top-2 -right-2 w-6 h-6 bg-red-500 hover:bg-red-600 text-white rounded-full flex items-center justify-center shadow-lg transition-colors"
             >
               <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -466,8 +486,8 @@ const formatDateLabel = (date: Date) => {
             <input
               ref="fileInput"
               type="file"
-              accept="image/*"
-              @change="handleImageSelect"
+              accept="image/*,video/*"
+              @change="handleFileSelect"
               class="hidden"
             />
             
@@ -485,13 +505,13 @@ const formatDateLabel = (date: Date) => {
               v-model="messageInput"
               @keyup.enter="handleSend"
               type="text"
-              :placeholder="selectedImage ? 'Add a caption (optional)...' : 'Type a message...'"
+              :placeholder="selectedFile ? 'Add a caption (optional)...' : 'Type a message...'"
               class="flex-1 px-3 py-2 bg-surface-50 dark:bg-surface-700 border border-surface-200 dark:border-surface-600 rounded-xl text-[15px] text-surface-900 dark:text-white placeholder-surface-400 focus:outline-none focus:ring-2 focus:ring-accent-500 focus:border-transparent"
             />
             
             <button
               @click="handleSend"
-              :disabled="escalations.sending || (!messageInput.trim() && !selectedImage)"
+              :disabled="escalations.sending || (!messageInput.trim() && !selectedFile)"
               class="px-3 py-2 bg-primary-600 hover:bg-primary-700 disabled:bg-surface-100 dark:disabled:bg-surface-700 disabled:text-surface-400 dark:disabled:text-surface-500 disabled:cursor-not-allowed text-white rounded-xl transition-colors"
             >
               <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">

@@ -242,6 +242,44 @@ export async function sendImageMessage(
   return data;
 }
 
+export async function sendVideoMessage(
+  escalationId: string,
+  videoFile: File,
+  caption?: string,
+  replyToMessageId?: string
+): Promise<{ success: boolean; messageId: string; mediaUrl: string }> {
+  const formData = new FormData();
+  formData.append('escalationId', escalationId);
+  formData.append('video', videoFile);
+  if (caption) {
+    formData.append('caption', caption);
+  }
+  if (replyToMessageId) {
+    formData.append('replyToMessageId', replyToMessageId);
+  }
+
+  const token = getToken();
+  
+  const response = await fetch(`${API_BASE_URL}/send-human-message`, {
+    method: 'POST',
+    headers: {
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+    body: formData,
+  });
+
+  const data = await response.json();
+
+  if (!response.ok) {
+    if (response.status === 401 && onUnauthorizedCallback) {
+      onUnauthorizedCallback();
+    }
+    throw new Error(data.error || 'Request failed');
+  }
+
+  return data;
+}
+
 export async function sendTemplateMessage(
   escalationId: string,
   templateName: string,

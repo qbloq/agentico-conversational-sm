@@ -53,6 +53,7 @@ serve(async (req: Request) => {
     let templateName: string | undefined;
     let languageCode: string | undefined;
     let imageFile: File | undefined;
+    let videoFile: File | undefined;
     let caption: string | undefined;
 
     const contentType = req.headers.get('content-type') || '';
@@ -70,13 +71,14 @@ serve(async (req: Request) => {
         const formData = await req.formData();
         escalationId = formData.get('escalationId') as string;
         imageFile = formData.get('image') as File;
+        videoFile = formData.get('video') as File;
         caption = formData.get('caption') as string | undefined;
         replyToMessageId = formData.get('replyToMessageId') as string | undefined;
         
-        console.log('Received image upload:', {
+        console.log('Received upload:', {
           escalationId,
           imageFileName: imageFile?.name,
-          imageSize: imageFile?.size,
+          videoFileName: videoFile?.name,
           caption,
           replyToMessageId
         });
@@ -107,9 +109,9 @@ serve(async (req: Request) => {
       }
     }
 
-    if (!escalationId || (!message && !templateName && !imageFile)) {
+    if (!escalationId || (!message && !templateName && !imageFile && !videoFile)) {
       return new Response(
-        JSON.stringify({ error: 'escalationId and either message, templateName, or image are required' }),
+        JSON.stringify({ error: 'escalationId and either message, templateName, image, or video are required' }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
@@ -174,20 +176,23 @@ serve(async (req: Request) => {
 
     const session = escalation.session;
 
-    // Handle image upload if present
+    // Handle image/video upload if present
     let mediaUrl: string | undefined;
-    if (imageFile) {
+    const mediaFile = imageFile || videoFile;
+    const isVideo = !!videoFile;
+
+    if (mediaFile) {
       try {
-        console.log('Processing image upload...');
-        console.log('Image details:', {
-          name: imageFile.name,
-          type: imageFile.type,
-          size: imageFile.size
+        console.log(`Processing ${isVideo ? 'video' : 'image'} upload...`);
+        console.log('Media details:', {
+          name: mediaFile.name,
+          type: mediaFile.type,
+          size: mediaFile.size
         });
         
         // Upload to Supabase Storage
         const date = new Date();
-        const ext = imageFile.name.split('.').pop() || 'jpg';
+        const ext = mediaFile.name.split('.').pop() || (isVideo ? 'mp4' : 'jpg');
         const path = `${agent.clientSchema}/${date.getFullYear()}/${date.getMonth() + 1}/${date.getDate()}/${crypto.randomUUID()}.${ext}`;
         
         console.log('Uploading to path:', path);
@@ -195,17 +200,17 @@ serve(async (req: Request) => {
         const { data: uploadData, error: uploadError } = await supabase
           .storage
           .from('media-tag-markets') // Using existing bucket
-          .upload(path, await imageFile.arrayBuffer(), {
-            contentType: imageFile.type,
+          .upload(path, await mediaFile.arrayBuffer(), {
+            contentType: mediaFile.type,
             upsert: false,
           });
 
         if (uploadError) {
-          console.error('Failed to upload image:', uploadError);
+          console.error(`Failed to upload ${isVideo ? 'video' : 'image'}:`, uploadError);
           console.error('Upload error details:', JSON.stringify(uploadError));
           return new Response(
             JSON.stringify({ 
-              error: 'Failed to upload image', 
+              error: `Failed to upload ${isVideo ? 'video' : 'image'}`, 
               details: uploadError.message 
             }),
             { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
@@ -220,13 +225,13 @@ serve(async (req: Request) => {
           .getPublicUrl(path);
         
         mediaUrl = urlData.publicUrl;
-        console.log('Image uploaded to:', mediaUrl);
+        console.log('Media uploaded to:', mediaUrl);
       } catch (error) {
-        console.error('Image upload error:', error);
+        console.error('Media upload error:', error);
         console.error('Error details:', error instanceof Error ? error.message : String(error));
         return new Response(
           JSON.stringify({ 
-            error: 'Failed to process image',
+            error: 'Failed to process media',
             details: error instanceof Error ? error.message : 'Unknown error'
           }),
           { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
@@ -256,8 +261,8 @@ serve(async (req: Request) => {
       .insert({
         session_id: session.id,
         direction: 'outbound',
-        type: imageFile ? 'image' : (templateName ? 'template' : 'text'),
-        content: imageFile ? (caption || null) : (message || (templateName ? `Template: ${templateName}` : null)),
+        type: videoFile ? 'video' : (imageFile ? 'image' : (templateName ? 'template' : 'text')),
+        content: (imageFile || videoFile) ? (caption || null) : (message || (templateName ? `Template: ${templateName}` : null)),
         media_url: mediaUrl,
         sent_by_agent_id: agent.sub, // Proper FK to human_agents table
         reply_to_message_id: replyToMessageId,
@@ -281,8 +286,9 @@ serve(async (req: Request) => {
       agent.clientSchema,
       templateName,
       languageCode,
-      mediaUrl,                     // Pass media URL for image messages
-      platformReplyToId             // Pass platform ID for replies
+      mediaUrl,                     // Pass media URL for image/video messages
+      platformReplyToId,            // Pass platform ID for replies
+      videoFile ? 'video' : (imageFile ? 'image' : undefined)
     );
 
     if (!sent) {
@@ -309,6 +315,7 @@ serve(async (req: Request) => {
       JSON.stringify({ 
         success: true, 
         messageId: savedMessage.id,
+        mediaUrl,
       }),
       { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
@@ -360,7 +367,8 @@ async function sendWhatsAppMessage(
   templateName?: string,
   languageCode: string = 'es_CO',
   mediaUrl?: string,
-  replyToMessageId?: string
+  replyToMessageId?: string,
+  mediaType?: 'image' | 'video'
 ): Promise<boolean> {
   // Get access token based on client (for now use env var)
   const accessToken = Deno.env.get('TAG_WHATSAPP_ACCESS_TOKEN');
@@ -386,13 +394,14 @@ async function sendWhatsAppMessage(
         language: { code: languageCode },
       };
     } else if (mediaUrl) {
-      // Send image with optional caption
-      body.type = 'image';
-      body.image = {
+      // Send image or video with optional caption
+      const type = mediaType || 'image';
+      body.type = type;
+      body[type] = {
         link: mediaUrl,
       };
       if (text) {
-        body.image.caption = text;
+        body[type].caption = text;
       }
     } else {
       body.type = 'text';
@@ -420,7 +429,7 @@ async function sendWhatsAppMessage(
       return false;
     }
 
-    console.log(`Message sent to ${to} by agent (${mediaUrl ? 'image' : templateName ? 'template' : 'text'})`);
+    console.log(`Message sent to ${to} by agent (${mediaType || (templateName ? 'template' : 'text')})`);
     return true;
   } catch (error) {
     console.error('Failed to send WhatsApp message:', error);
