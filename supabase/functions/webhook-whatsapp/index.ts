@@ -18,11 +18,8 @@ import {
   createSupabaseStateMachineStore,
   createSupabaseMessageBufferStore,
   createSupabaseEscalationStore,
-<<<<<<< HEAD
   createSupabaseFollowupStore,
-=======
   createSupabaseDepositStore,
->>>>>>> main
 } from '../_shared/adapters/index.ts';
 import { createConversationEngine } from '../_shared/sales-engine.bundle.ts';
 import { createGeminiProvider, createGeminiEmbeddingProvider } from '../_shared/sales-engine-llm.bundle.ts';
@@ -226,11 +223,8 @@ async function processMessage(
   const exampleStore = createSupabaseExampleStore(supabase);
   const stateMachineStore = createSupabaseStateMachineStore(supabase, schemaName);
   const escalationStore = createSupabaseEscalationStore(supabase, schemaName);
-<<<<<<< HEAD
   const followupStore = createSupabaseFollowupStore(supabase, schemaName);
-=======
   const depositStore = createSupabaseDepositStore(supabase, schemaName);
->>>>>>> main
   
   // Create LLM provider
   const llmProvider = createGeminiProvider({
