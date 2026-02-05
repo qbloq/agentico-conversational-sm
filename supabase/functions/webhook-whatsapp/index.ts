@@ -18,7 +18,11 @@ import {
   createSupabaseStateMachineStore,
   createSupabaseMessageBufferStore,
   createSupabaseEscalationStore,
+<<<<<<< HEAD
   createSupabaseFollowupStore,
+=======
+  createSupabaseDepositStore,
+>>>>>>> main
 } from '../_shared/adapters/index.ts';
 import { createConversationEngine } from '../_shared/sales-engine.bundle.ts';
 import { createGeminiProvider, createGeminiEmbeddingProvider } from '../_shared/sales-engine-llm.bundle.ts';
@@ -65,14 +69,20 @@ interface WhatsAppMessage {
   from: string;
   id: string;
   timestamp: string;
-  type: 'text' | 'image' | 'audio' | 'interactive' | 'button';
+  type: 'text' | 'image' | 'audio' | 'video' | 'sticker' | 'interactive' | 'button';
   text?: { body: string };
   image?: { id: string; mime_type: string; sha256: string; caption?: string };
   audio?: { id: string; mime_type: string };
+  video?: { id: string; mime_type: string; sha256: string; caption?: string };
+  sticker?: { id: string; mime_type: string; sha256: string; animated?: boolean };
   interactive?: {
     type: 'button_reply' | 'list_reply';
     button_reply?: { id: string; title: string };
     list_reply?: { id: string; title: string };
+  };
+  context?: {
+    from: string;
+    id: string; // The platform_message_id being replied to
   };
 }
 
@@ -85,8 +95,6 @@ interface WhatsAppStatus {
 
 serve(async (req: Request) => {
   const url = new URL(req.url);
-  console.log('Request method:', req.method);
-  console.log('Request URL:', req.url);
   // Handle webhook verification (GET request from Meta)
   if (req.method === 'GET') {
     return handleVerification(url);
@@ -127,11 +135,11 @@ async function handleIncomingMessage(req: Request): Promise<Response> {
     // Verify signature
     const signature = req.headers.get('x-hub-signature-256') || '';
     const body = await req.text();
-    console.log(`[DEBUG] Received webhook body: ${body.slice(0, 500)}...`);
+    console.log(`[DEBUG] Received webhook body: ${JSON.stringify(body, null, 2)}`);
     
     // Parse payload
     const payload: WhatsAppWebhookPayload = JSON.parse(body);
-    console.log(`[DEBUG] Payload object: ${payload.object}`);
+    // console.log(`[DEBUG] Payload object: ${payload.object}`);
     
     // Validate it's a WhatsApp message
     if (payload.object !== 'whatsapp_business_account') {
@@ -151,12 +159,13 @@ async function handleIncomingMessage(req: Request): Promise<Response> {
         
         // Route to client
         const supabase = createSupabaseClient();
-        console.log(`[DEBUG] Routing for phone_number_id: ${phoneNumberId}`);
+        // console.log(`[DEBUG] Routing for phone_number_id: ${phoneNumberId}`);
         const route = await routeByChannelId(supabase, 'whatsapp', phoneNumberId);
-        console.log(`[DEBUG] Route result: ${route ? `Found (${route.clientId})` : 'NOT FOUND'}`);
+        // console.log(`[DEBUG] Route result: ${route ? `Found (${route.clientId})` : 'NOT FOUND'}`);
         
         if (!route) {
-          console.error(`No client found for phone_number_id: ${phoneNumberId}`);
+          console.error(`No client found for phone_number_id: ${phoneNumberId}. Dispatching to Premium Academy...`);
+          await dispatchToPremiumAcademy(req.headers, body);
           continue;
         }
         
@@ -203,8 +212,9 @@ async function processMessage(
   message: WhatsAppMessage,
   contact?: WhatsAppContact
 ): Promise<void> {
-  console.log(`Processing message from ${message.from}: ${message.type}`);
-  console.log(clientConfig);
+  // console.log(`Processing message from ${message.from}: ${message.type}`);
+  // console.log('[DEBUG] Raw WhatsApp message:', JSON.stringify(message, null, 2));
+  // console.log(clientConfig);
   // Create conversation engine
   const engine = createConversationEngine();
 
@@ -216,7 +226,11 @@ async function processMessage(
   const exampleStore = createSupabaseExampleStore(supabase);
   const stateMachineStore = createSupabaseStateMachineStore(supabase, schemaName);
   const escalationStore = createSupabaseEscalationStore(supabase, schemaName);
+<<<<<<< HEAD
   const followupStore = createSupabaseFollowupStore(supabase, schemaName);
+=======
+  const depositStore = createSupabaseDepositStore(supabase, schemaName);
+>>>>>>> main
   
   // Create LLM provider
   const llmProvider = createGeminiProvider({
@@ -267,7 +281,7 @@ async function processMessage(
   
   if (debounceEnabled && !isCommandMessage) {
     // Debounce flow: buffer the message, worker will process later
-    const messageBufferStore = createSupabaseMessageBufferStore(supabase, schemaName);
+    const messageBufferStore = createSupabaseMessageBufferStore(supabase, schemaName, phoneNumberId);
     
     const ingestResult = await engine.ingestMessage({
       sessionKey: {
@@ -285,6 +299,7 @@ async function processMessage(
         stateMachineStore,
         messageBufferStore,
         escalationStore,
+        depositStore,
         llmProvider,
         embeddingProvider,
         mediaService,
@@ -321,6 +336,7 @@ async function processMessage(
       exampleStore,
       stateMachineStore,
       escalationStore,
+      depositStore,
       llmProvider,
       embeddingProvider,
       mediaService,
@@ -378,9 +394,17 @@ async function normalizeAndUploadMedia(
   mediaService: MediaServiceImpl,
   accessToken: string
 ): Promise<NormalizedMessage> {
+  if (message.context?.id) {
+    // We need to find our internal message ID that corresponds to this platform_message_id
+    // But for now, we'll store the platform_message_id and let the store/engine handle it
+    // Actually, the database column reply_to_message_id is a UUID referencing our internal table.
+    // So we need to resolve it.
+  }
+
   const base = {
     id: message.id,
     timestamp: new Date(parseInt(message.timestamp) * 1000),
+    replyToMessageId: message.context?.id, // Passing the platform_message_id as a hint
   };
   
   let mediaUrl: string | undefined;
@@ -388,6 +412,8 @@ async function normalizeAndUploadMedia(
 
   if (message.type === 'image') mediaId = message.image?.id;
   if (message.type === 'audio') mediaId = message.audio?.id;
+  if (message.type === 'video') mediaId = message.video?.id;
+  if (message.type === 'sticker') mediaId = message.sticker?.id;
 
   if (mediaId) {
     try {
@@ -407,9 +433,15 @@ async function normalizeAndUploadMedia(
         // 3. Upload to Supabase (public bucket)
         // Path: year/month/day/message_id.ext
         const date = new Date();
-        const ext = message.type === 'audio' ? 'ogg' : 'jpg'; // Simplified extension logic
+        const ext = message.type === 'audio' ? 'ogg' 
+          : message.type === 'video' ? 'mp4'
+          : message.type === 'sticker' ? 'webp'
+          : 'jpg'; // Simplified extension logic
         const path = `${date.getFullYear()}/${date.getMonth() + 1}/${date.getDate()}/${message.id}.${ext}`;
-        const mimeType = message.type === 'audio' ? (message.audio?.mime_type || 'audio/ogg') : (message.image?.mime_type || 'image/jpeg');
+        const mimeType = message.type === 'audio' ? (message.audio?.mime_type || 'audio/ogg')
+          : message.type === 'video' ? (message.video?.mime_type || 'video/mp4')
+          : message.type === 'sticker' ? (message.sticker?.mime_type || 'image/webp')
+          : (message.image?.mime_type || 'image/jpeg');
 
         const uploaded = await mediaService.upload(fileBuffer, path, mimeType);
         mediaUrl = uploaded.url;
@@ -440,6 +472,21 @@ async function normalizeAndUploadMedia(
       return {
         ...base,
         type: 'audio',
+        mediaUrl,
+      };
+    
+    case 'video':
+      return {
+        ...base,
+        type: 'video',
+        content: message.video?.caption,
+        mediaUrl,
+      };
+    
+    case 'sticker':
+      return {
+        ...base,
+        type: 'sticker',
         mediaUrl,
       };
     
@@ -584,3 +631,33 @@ async function sendWhatsAppTemplate(
     console.log(`Template sent successfully`);
   }
 }
+
+/**
+ * Dispatch request to Premium Academy service
+ */
+async function dispatchToPremiumAcademy(headers: Headers, body: string): Promise<void> {
+  const targetUrl = Deno.env.get('DISPATCH_TO_PREMIUM_ACADEMY_URL');
+  
+  if (!targetUrl) {
+    console.warn('[Webhook WhatsApp] DISPATCH_TO_PREMIUM_ACADEMY_URL not configured, skipping dispatch');
+    return;
+  }
+
+  try {
+    console.log('[Webhook WhatsApp] Dispatching unmatched request to:', targetUrl);
+
+    const response = await fetch(targetUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': headers.get('Content-Type') || 'application/json',
+        'x-hub-signature-256': headers.get('x-hub-signature-256') || '',
+      },
+      body: body,
+    });
+
+    console.log(`[Webhook WhatsApp] Dispatch target responded: ${response.status}`);
+  } catch (error) {
+    console.error('[Webhook WhatsApp] Error dispatching to Premium Academy:', error);
+  }
+}
+

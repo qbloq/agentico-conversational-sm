@@ -160,7 +160,7 @@ export interface Contact {
 // Message Types
 // =============================================================================
 
-export type MessageType = 'text' | 'image' | 'audio' | 'template' | 'interactive';
+export type MessageType = 'text' | 'image' | 'audio' | 'video' | 'sticker' | 'template' | 'interactive';
 export type MessageDirection = 'inbound' | 'outbound';
 
 /**
@@ -175,6 +175,7 @@ export interface NormalizedMessage {
   transcription?: string;
   imageAnalysis?: ImageAnalysis;
   interactivePayload?: InteractivePayload;
+  replyToMessageId?: string;
 }
 
 export interface ImageAnalysis {
@@ -206,6 +207,7 @@ export interface Message {
   imageAnalysis?: ImageAnalysis;
   platformMessageId?: string;
   deliveryStatus?: 'sent' | 'delivered' | 'read' | 'failed';
+  replyToMessageId?: string;
   createdAt: Date;
   deliveredAt?: Date;
   readAt?: Date;
@@ -303,6 +305,7 @@ export interface EngineDependencies {
   messageBufferStore?: MessageBufferStore;
   escalationStore?: EscalationStore;
   followupStore?: FollowupStore;
+  depositStore?: DepositStore;
   
   // AI services
   llmProvider: LLMProvider;
@@ -433,6 +436,16 @@ export interface EscalationStore {
     aiSummary?: string;
     aiConfidence?: number;
     priority?: 'low' | 'medium' | 'high' | 'urgent';
+  }): Promise<{ id: string }>;
+}
+
+export interface DepositStore {
+  create(data: {
+    sessionId: string;
+    contactId: string;
+    amount: number;
+    currency?: string;
+    aiReasoning?: string;
   }): Promise<{ id: string }>;
 }
 

@@ -115,6 +115,14 @@ export function createConversationEngine(): ConversationEngine {
           console.error('Image analysis failed:', error);
           message.content = message.content || '[Image analysis failed]';
         }
+      } else if (message.type === 'video' && message.mediaUrl) {
+        // Videos are stored but not analyzed (can add video analysis later if needed)
+        console.log(`[Media] Video message received: ${message.mediaUrl}`);
+        message.content = message.content || '[Video message]';
+      } else if (message.type === 'sticker' && message.mediaUrl) {
+        // Stickers are stored but not analyzed
+        console.log(`[Media] Sticker message received: ${message.mediaUrl}`);
+        message.content = '[Sticker]';
       }
 
       // 1. Get or create contact
@@ -124,12 +132,16 @@ export function createConversationEngine(): ConversationEngine {
       );
       
       // 2. Get or create session
+      console.log(`[DEBUG] Getting session for key: ${JSON.stringify(sessionKey)}`);  
       let session = await sessionStore.findByKey(sessionKey);
+      console.log(`[DEBUG] Found session: ${JSON.stringify(session)}`);  
       if (!session) {
         // Fetch state machine ID before creating session
+        console.log(`[DEBUG] State machine name: ${clientConfig.stateMachineName}`);  
         const stateMachineId = await deps.stateMachineStore?.getStateMachineId(
           clientConfig.stateMachineName
         );
+        console.log(`[DEBUG] State machine ID: ${stateMachineId}`);  
         
         if (!stateMachineId) {
           throw new Error(`State machine '${clientConfig.stateMachineName}' not found`);
@@ -467,6 +479,45 @@ console.log(llmResponse.usage)
         if (Object.keys(contactUpdates).length > 0) {
           await contactStore.update(contact.id, contactUpdates);
         }
+
+        // Handle Deposit Detection
+        if (structuredResponse.extractedData.deposit) {
+          console.log(`[Deposit] Detected deposit from contact ${contact.id} in session ${session.id}`);
+          
+          const amount = typeof structuredResponse.extractedData.depositAmount === 'number' 
+            ? structuredResponse.extractedData.depositAmount 
+            : parseFloat(String(structuredResponse.extractedData.depositAmount || '0'));
+
+          if (deps.depositStore) {
+            try {
+              await deps.depositStore.create({
+                sessionId: session.id,
+                contactId: contact.id,
+                amount: amount,
+                currency: 'USD', // Default or extracted if we add it to schema
+                aiReasoning: structuredResponse.transition?.reason || 'Extracted from conversation',
+              });
+              console.log(`[Deposit] Event recorded successfully`);
+            } catch (err) {
+              console.error('[Deposit] Failed to record deposit event:', err);
+            }
+          }
+
+          // Update contact status
+          const depositContactUpdates: Partial<Contact> = {
+            depositConfirmed: true,
+            hasRegistered: true, // If they deposited, they must have registered
+            lifetimeValue: (contact.lifetimeValue || 0) + amount,
+          };
+          
+          await contactStore.update(contact.id, depositContactUpdates);
+          
+          // Merge with session updates so they are returned in engine output
+          sessionUpdates.context = {
+            ...sessionUpdates.context,
+            depositConfirmed: true,
+          };
+        }
       }
       
       // 14. Create bot responses
@@ -583,37 +634,71 @@ console.log(llmResponse.usage)
       
       console.log(`[Debounce] Processing ${pending.length} buffered messages for ${sessionKeyHash.slice(0, 8)}...`);
       
-      // 3. Sort by receivedAt and merge content
+      // 3. Sort by receivedAt
       const sorted = pending.sort((a, b) => 
         a.receivedAt.getTime() - b.receivedAt.getTime()
       );
       
-      const mergedContent = sorted
-        .map(p => p.message.content || p.message.transcription || '')
-        .filter(Boolean)
-        .join('\n');
-      
-      // 4. Use the latest message for metadata, but merged content
-      const latestMessage = sorted[sorted.length - 1];
-      const mergedMessage: NormalizedMessage = {
-        ...latestMessage.message,
-        content: mergedContent,
-      };
+      // 4. Check if any message contains media
+      const hasMediaMessages = sorted.some(p => p.message.mediaUrl);
       
       try {
-        // 5. Process the merged message through existing engine logic
-        const result = await this.processMessage({
-          sessionKey: sorted[0].sessionKey,
-          message: mergedMessage,
-          deps,
-        });
-        
-        // 6. Success! Delete processed messages from buffer
-        await messageBufferStore.deleteByIds(pending.map(p => p.id));
-        
-        console.log(`[Debounce] Successfully processed and cleaned up ${pending.length} messages`);
-        
-        return result;
+        if (hasMediaMessages) {
+          // Process media messages individually to preserve image analysis
+          console.log(`[Debounce] Found media in buffered messages, processing individually`);
+          
+          const allResponses: BotResponse[] = [];
+          let lastResult: EngineOutput | null = null;
+          
+          for (const pendingMsg of sorted) {
+            const result = await this.processMessage({
+              sessionKey: pendingMsg.sessionKey,
+              message: pendingMsg.message,
+              deps,
+            });
+            
+            allResponses.push(...result.responses);
+            lastResult = result;
+          }
+          
+          // Success! Delete processed messages from buffer
+          await messageBufferStore.deleteByIds(pending.map(p => p.id));
+          
+          console.log(`[Debounce] Successfully processed ${sorted.length} messages (with media) individually`);
+          
+          return {
+            ...lastResult!,
+            responses: allResponses,
+          };
+        } else {
+          // Text-only messages: merge content as before
+          console.log(`[Debounce] Text-only messages, merging content`);
+          
+          const mergedContent = sorted
+            .map(p => p.message.content || p.message.transcription || '')
+            .filter(Boolean)
+            .join('\n');
+          
+          const latestMessage = sorted[sorted.length - 1];
+          const mergedMessage: NormalizedMessage = {
+            ...latestMessage.message,
+            content: mergedContent,
+          };
+          
+          // Process the merged message through existing engine logic
+          const result = await this.processMessage({
+            sessionKey: sorted[0].sessionKey,
+            message: mergedMessage,
+            deps,
+          });
+          
+          // Success! Delete processed messages from buffer
+          await messageBufferStore.deleteByIds(pending.map(p => p.id));
+          
+          console.log(`[Debounce] Successfully processed and cleaned up ${pending.length} merged messages`);
+          
+          return result;
+        }
         
       } catch (error) {
         // Processing failed - mark for retry, don't delete
@@ -840,7 +925,8 @@ function formatMessageForLLM(m: {
   content?: string | null; 
   type?: string; 
   transcription?: string; 
-  imageAnalysis?: any 
+  imageAnalysis?: any;
+  mediaUrl?: string;
 }): string {
   let text = m.content || '';
   
@@ -849,6 +935,12 @@ function formatMessageForLLM(m: {
     text = text ? `${text}${meta}` : meta;
   } else if (m.type === 'image' && m.imageAnalysis?.description) {
     const meta = `\n[SISTEMA: El usuario envió una imagen. Descripción: ${m.imageAnalysis.description}]`;
+    text = text ? `${text}${meta}` : meta;
+  } else if (m.type === 'video' && m.mediaUrl) {
+    const meta = `\n[SISTEMA: El usuario envió un video.]`;
+    text = text ? `${text}${meta}` : meta;
+  } else if (m.type === 'sticker' && m.mediaUrl) {
+    const meta = `\n[SISTEMA: El usuario envió un sticker.]`;
     text = text ? `${text}${meta}` : meta;
   }
   

@@ -61,6 +61,28 @@ serve(async (req: Request) => {
         console.log('No assigned agent for message notification, skipping.');
         return new Response(JSON.stringify({ success: true, message: 'No assigned agent' }), { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
       }
+    } else if (type === 'new_deposit') {
+      // Broadcast to ALL agents (or could be targeted if assigned)
+      notificationTitle = '💰 New Deposit Detected';
+      
+      // Try to get contact name for better notification
+      const { data: contact } = await supabase
+        .from('contacts')
+        .select('full_name, phone')
+        .eq('id', record.contact_id)
+        .single();
+      
+      const userName = contact?.full_name || contact?.phone || 'A user';
+      notificationBody = `${userName} just deposited ${record.amount} ${record.currency || 'USD'}.`;
+      
+      data = {
+        type: 'deposit',
+        id: record.id,
+        sessionId: record.session_id,
+        amount: record.amount,
+        currency: record.currency,
+        schema: schema,
+      };
     } else if (type === 'test_trigger') {
       console.log('Handling test_trigger');
       notificationTitle = 'Test Notification';

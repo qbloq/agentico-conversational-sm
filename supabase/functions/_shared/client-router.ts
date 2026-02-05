@@ -115,7 +115,7 @@ async function loadClientConfig(
  */
 export async function getAllClientConfigs(
   supabase: SupabaseClient
-): Promise<Array<{ clientId: string; schemaName: string; config: ClientConfig }>> {
+): Promise<Array<{ clientId: string; schemaName: string; channelId: string; config: ClientConfig }>> {
   // 1. Load all active client configs
   const { data: clientConfigs, error: configError } = await supabase
     .from('client_configs')
@@ -137,7 +137,7 @@ export async function getAllClientConfigs(
   }
   
   // 3. Build result array
-  const results: Array<{ clientId: string; schemaName: string; config: ClientConfig }> = [];
+  const results: Array<{ clientId: string; schemaName: string; channelId: string; config: ClientConfig }> = [];
   
   for (const clientConfig of clientConfigs) {
     // Build channels object from secrets for this client
@@ -163,10 +163,11 @@ export async function getAllClientConfigs(
     results.push({
       clientId: clientConfig.client_id,
       schemaName: clientConfig.schema_name,
+      channelId: clientConfig.channel_id,
       config,
     });
   }
-  
+  console.log("[getAllClientConfigs] Results: ", JSON.stringify(results));
   console.log(`[getAllClientConfigs] Loaded ${results.length} client(s)`);
   return results;
 }

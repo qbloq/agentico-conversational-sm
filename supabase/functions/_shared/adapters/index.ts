@@ -14,4 +14,5 @@ export { createSupabaseStateMachineStore } from './state-machine-store.ts';
 export { createSupabaseMessageBufferStore } from './message-buffer-store.ts';
 export { createSupabaseEscalationStore } from './escalation-store.ts';
 export { createSupabaseFollowupStore } from './followup-store.ts';
+export { createSupabaseDepositStore } from './deposit-store.ts';
 export type { LLMLogger, LLMLogEntry } from './llm-logger.ts';

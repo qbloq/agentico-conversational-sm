@@ -19,6 +19,7 @@ interface MessageRow {
   image_analysis: ImageAnalysis | null;
   platform_message_id: string | null;
   delivery_status: string | null;
+  reply_to_message_id: string | null;
   created_at: string;
   delivered_at: string | null;
   read_at: string | null;
@@ -37,6 +38,7 @@ function rowToMessage(row: MessageRow): Message {
     imageAnalysis: row.image_analysis ?? undefined,
     platformMessageId: row.platform_message_id ?? undefined,
     deliveryStatus: row.delivery_status as Message['deliveryStatus'],
+    replyToMessageId: row.reply_to_message_id ?? undefined,
     createdAt: new Date(row.created_at),
     deliveredAt: row.delivered_at ? new Date(row.delivered_at) : undefined,
     readAt: row.read_at ? new Date(row.read_at) : undefined,
@@ -71,6 +73,27 @@ export function createSupabaseMessageStore(
       sessionId: string,
       message: Omit<Message, 'id' | 'sessionId' | 'createdAt'>
     ): Promise<Message> {
+      let resolvedReplyToId = message.replyToMessageId;
+
+      // If replyToMessageId is provided and doesn't look like a UUID, 
+      // it might be a platform_message_id (e.g. from WhatsApp webhook)
+      const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+      if (resolvedReplyToId && !uuidRegex.test(resolvedReplyToId)) {
+        const { data: repliedMsg } = await supabase
+          .schema(schemaName)
+          .from(tableName)
+          .select('id')
+          .eq('platform_message_id', resolvedReplyToId)
+          .maybeSingle();
+        
+        if (repliedMsg) {
+          resolvedReplyToId = repliedMsg.id;
+        } else {
+          // If not found, we can't store the FK, so set to null to avoid DB error
+          resolvedReplyToId = undefined;
+        }
+      }
+
       const { data, error } = await supabase
         .schema(schemaName)
         .from(tableName)
@@ -85,6 +108,7 @@ export function createSupabaseMessageStore(
           image_analysis: message.imageAnalysis,
           platform_message_id: message.platformMessageId,
           delivery_status: message.deliveryStatus,
+          reply_to_message_id: resolvedReplyToId,
         })
         .select()
         .single();

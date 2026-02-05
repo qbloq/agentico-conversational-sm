@@ -76,7 +76,8 @@ function hashSessionKey(key: SessionKey): string {
 
 export function createSupabaseMessageBufferStore(
   supabase: SupabaseClient,
-  schemaName: string
+  schemaName: string,
+  channelId?: string
 ): MessageBufferStore {
   const table = () => supabase.schema(schemaName).from('pending_messages');
   
@@ -116,12 +117,18 @@ export function createSupabaseMessageBufferStore(
     },
     
     async getMatureSessions(): Promise<string[]> {
-      const { data, error } = await table()
+      let query = table()
         .select('session_key_hash')
         .lte('scheduled_process_at', new Date().toISOString())
         .is('processing_started_at', null) // Not already being processed
-        .lt('retry_count', MAX_RETRIES)     // Not exceeded max retries
-        .order('scheduled_process_at');
+        .lt('retry_count', MAX_RETRIES);    // Not exceeded max retries
+      
+      // Filter by channel_id if provided (for multi-tenancy)
+      if (channelId) {
+        query = query.eq('channel_id', channelId);
+      }
+      
+      const { data, error } = await query.order('scheduled_process_at');
       
       if (error) {
         console.error(`[MessageBuffer] Failed to get mature sessions: ${error.message}`);
@@ -136,11 +143,17 @@ export function createSupabaseMessageBufferStore(
     async claimSession(sessionKeyHash: string): Promise<boolean> {
       // Try to claim by setting processing_started_at
       // Only succeeds if not already claimed
-      const { data, error } = await table()
+      let query = table()
         .update({ processing_started_at: new Date().toISOString() })
         .eq('session_key_hash', sessionKeyHash)
-        .is('processing_started_at', null)
-        .select('id');
+        .is('processing_started_at', null);
+      
+      // Filter by channel_id if provided (for multi-tenancy)
+      if (channelId) {
+        query = query.eq('channel_id', channelId);
+      }
+      
+      const { data, error } = await query.select('id');
       
       if (error) {
         console.error(`[MessageBuffer] Failed to claim session: ${error.message}`);
@@ -152,10 +165,16 @@ export function createSupabaseMessageBufferStore(
     },
     
     async getBySession(sessionKeyHash: string): Promise<PendingMessage[]> {
-      const { data, error } = await table()
+      let query = table()
         .select('*')
-        .eq('session_key_hash', sessionKeyHash)
-        .order('received_at', { ascending: true });
+        .eq('session_key_hash', sessionKeyHash);
+      
+      // Filter by channel_id if provided (for multi-tenancy)
+      if (channelId) {
+        query = query.eq('channel_id', channelId);
+      }
+      
+      const { data, error } = await query.order('received_at', { ascending: true });
       
       if (error) {
         console.error(`[MessageBuffer] Failed to get messages: ${error.message}`);
@@ -177,7 +196,7 @@ export function createSupabaseMessageBufferStore(
     
     async markForRetry(sessionKeyHash: string, errorMessage: string): Promise<void> {
       // Clear the processing lock, increment retry count, store error
-      const { error } = await table()
+      let query = table()
         .update({ 
           processing_started_at: null,
           retry_count: supabase.rpc('increment_retry_count'), // If RPC exists
@@ -185,31 +204,56 @@ export function createSupabaseMessageBufferStore(
         })
         .eq('session_key_hash', sessionKeyHash);
       
+      // Filter by channel_id if provided (for multi-tenancy)
+      if (channelId) {
+        query = query.eq('channel_id', channelId);
+      }
+      
+      const { error } = await query;
+      
       // Fallback if RPC doesn't exist: manual increment
       if (error) {
         // Get current retry count and increment manually
-        const { data } = await table()
+        let selectQuery = table()
           .select('id, retry_count')
           .eq('session_key_hash', sessionKeyHash)
-          .limit(1)
-          .single();
+          .limit(1);
+        
+        if (channelId) {
+          selectQuery = selectQuery.eq('channel_id', channelId);
+        }
+        
+        const { data } = await selectQuery.single();
         
         if (data) {
-          await table()
+          let updateQuery = table()
             .update({ 
               processing_started_at: null,
               retry_count: (data.retry_count || 0) + 1,
               last_error: errorMessage,
             })
             .eq('session_key_hash', sessionKeyHash);
+          
+          if (channelId) {
+            updateQuery = updateQuery.eq('channel_id', channelId);
+          }
+          
+          await updateQuery;
         }
       }
     },
     
     async hasPendingMessages(): Promise<boolean> {
-      const { count, error } = await table()
+      let query = table()
         .select('*', { count: 'exact', head: true })
         .lt('retry_count', MAX_RETRIES);
+      
+      // Filter by channel_id if provided (for multi-tenancy)
+      if (channelId) {
+        query = query.eq('channel_id', channelId);
+      }
+      
+      const { count, error } = await query;
       
       if (error) {
         console.error(`[MessageBuffer] Failed to check pending: ${error.message}`);

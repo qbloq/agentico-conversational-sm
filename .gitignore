@@ -38,3 +38,4 @@ supabase/.temp/
 supabase/functions/.env
 scripts/data/wati/
 scripts/data/batch_output/
+scripts/data/

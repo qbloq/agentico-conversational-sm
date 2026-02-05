@@ -16,10 +16,17 @@ const showTemplatePicker = ref(false);
 const currentTime = ref(Date.now());
 let timer: number | null = null;
 
-// Image upload
-const selectedImage = ref<File | null>(null);
-const imagePreviewUrl = ref<string | null>(null);
+// Media upload
+const selectedFile = ref<File | null>(null);
+const mediaPreviewUrl = ref<string | null>(null);
 const fileInput = ref<HTMLInputElement | null>(null);
+const isVideoSelected = ref(false);
+
+// Long-press and Context Menu
+const showContextMenu = ref(false);
+const selectedMessage = ref<any>(null);
+const menuStyle = ref({ top: '0px', left: '0px' });
+let longPressTimer: number | null = null;
 
 const escalationId = computed(() => route.params.escalationId as string);
 
@@ -61,13 +68,18 @@ function scrollToBottom() {
 }
 
 async function handleSend() {
-  // Send image if selected
-  if (selectedImage.value) {
+  // Send media if selected
+  if (selectedFile.value) {
     const caption = messageInput.value.trim() || undefined;
     messageInput.value = '';
     
-    await escalations.sendImage(selectedImage.value, caption);
-    removeImage();
+    if (isVideoSelected.value) {
+      await escalations.sendVideo(selectedFile.value, caption);
+    } else {
+      await escalations.sendImage(selectedFile.value, caption);
+    }
+    
+    removeMedia();
     scrollToBottom();
     return;
   }
@@ -82,25 +94,32 @@ async function handleSend() {
   scrollToBottom();
 }
 
-function handleImageSelect(event: Event) {
+function handleFileSelect(event: Event) {
   const target = event.target as HTMLInputElement;
   const file = target.files?.[0];
   
-  if (file && file.type.startsWith('image/')) {
-    selectedImage.value = file;
-    imagePreviewUrl.value = URL.createObjectURL(file);
+  if (file) {
+    const isImage = file.type.startsWith('image/');
+    const isVideo = file.type.startsWith('video/');
+    
+    if (isImage || isVideo) {
+      selectedFile.value = file;
+      mediaPreviewUrl.value = URL.createObjectURL(file);
+      isVideoSelected.value = isVideo;
+    }
   }
   
   // Reset input so same file can be selected again
   if (target) target.value = '';
 }
 
-function removeImage() {
-  if (imagePreviewUrl.value) {
-    URL.revokeObjectURL(imagePreviewUrl.value);
+function removeMedia() {
+  if (mediaPreviewUrl.value) {
+    URL.revokeObjectURL(mediaPreviewUrl.value);
   }
-  selectedImage.value = null;
-  imagePreviewUrl.value = null;
+  selectedFile.value = null;
+  mediaPreviewUrl.value = null;
+  isVideoSelected.value = false;
 }
 
 function openFileSelector() {
@@ -144,6 +163,97 @@ const formatTime = (date: string) => {
 const isHumanMessage = (msg: { sent_by_agent_id?: string | null }) => {
   return !!msg.sent_by_agent_id;
 };
+
+// Long-press handlers
+function handleTouchStart(msg: any, event: TouchEvent) {
+  selectedMessage.value = msg;
+  longPressTimer = window.setTimeout(() => {
+    openContextMenu(event.touches[0].clientX, event.touches[0].clientY);
+  }, 500);
+}
+
+function handleTouchEnd() {
+  if (longPressTimer) clearTimeout(longPressTimer);
+}
+
+function handleMouseDown(msg: any, event: MouseEvent) {
+  if (event.button !== 0) return; // Only left click
+  selectedMessage.value = msg;
+  longPressTimer = window.setTimeout(() => {
+    openContextMenu(event.clientX, event.clientY);
+  }, 500);
+}
+
+function handleMouseUp() {
+  if (longPressTimer) clearTimeout(longPressTimer);
+}
+
+function openContextMenu(x: number, y: number) {
+  showContextMenu.value = true;
+  // Position menu near the click but keep it within bounds
+  const menuWidth = 160;
+  const menuHeight = 100;
+  
+  let top = y;
+  let left = x;
+  
+  if (x + menuWidth > window.innerWidth) left = window.innerWidth - menuWidth - 20;
+  if (y + menuHeight > window.innerHeight) top = window.innerHeight - menuHeight - 20;
+  
+  menuStyle.value = {
+    top: `${top}px`,
+    left: `${left}px`
+  };
+  
+  // Vibrate if available
+  if ('vibrate' in navigator) {
+    navigator.vibrate(50);
+  }
+}
+
+function closeContextMenu() {
+  showContextMenu.value = false;
+}
+
+function handleReplyAction() {
+  if (selectedMessage.value) {
+    escalations.setReplyingTo(selectedMessage.value);
+  }
+  closeContextMenu();
+}
+
+function handleCopyAction() {
+  if (selectedMessage.value?.content) {
+    navigator.clipboard.writeText(selectedMessage.value.content);
+  }
+  closeContextMenu();
+}
+
+function getRepliedMessageSender(id: string) {
+  const msg = escalations.messages.find(m => m.id === id);
+  if (!msg) return 'Mensaje';
+  return msg.direction === 'outbound' ? 'Tú' : (escalations.currentEscalation?.session.contact?.full_name || 'Cliente');
+}
+
+function getRepliedMessageText(id: string) {
+  const msg = escalations.messages.find(m => m.id === id);
+  if (!msg) return 'Mensaje original';
+  if (msg.type === 'image') return '🖼️ Imagen';
+  if (msg.type === 'video') return '🎥 Video';
+  if (msg.type === 'sticker') return '🎨 Sticker';
+  return msg.content || 'Mensaje';
+}
+
+function scrollToMessage(id: string) {
+  const el = document.getElementById(`msg-${id}`);
+  if (el) {
+    el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    el.classList.add('highlight-message');
+    setTimeout(() => {
+      el.classList.remove('highlight-message');
+    }, 2000);
+  }
+}
 
 // Group messages by date for daily separators
 const messagesGroupedByDate = computed(() => {
@@ -252,15 +362,30 @@ const formatDateLabel = (date: Date) => {
           <div
             v-for="msg in group.messages"
             :key="msg.id"
+            :id="`msg-${msg.id}`"
             :class="[
-              'max-w-[85%] rounded-xl px-2.5 py-1',
+              'max-w-[85%] rounded-xl px-2.5 py-1 message-bubble transition-all duration-300',
               msg.direction === 'inbound' 
                 ? 'bg-white dark:bg-surface-800 border border-surface-100 dark:border-surface-700 shadow-sm mr-auto rounded-bl-md' 
                 : isHumanMessage(msg)
-                  ? 'bg-accent-600 ml-auto rounded-br-md'
-                  : 'bg-primary-600 ml-auto rounded-br-md'
+                  ? 'bg-accent-600 ml-auto rounded-br-md text-white'
+                  : 'bg-primary-600 ml-auto rounded-br-md text-white'
             ]"
+            @touchstart="handleTouchStart(msg, $event)"
+            @touchend="handleTouchEnd"
+            @mousedown="handleMouseDown(msg, $event)"
+            @mouseup="handleMouseUp"
+            @contextmenu.prevent
           >
+            <!-- Reply Context -->
+            <div v-if="msg.reply_to_message_id" class="reply-context-bubble mb-1" @click="scrollToMessage(msg.reply_to_message_id)">
+              <div class="reply-bar"></div>
+              <div class="reply-content">
+                <div class="reply-sender text-[11px] font-bold">{{ getRepliedMessageSender(msg.reply_to_message_id) }}</div>
+                <div class="reply-text text-xs opacity-80 truncate">{{ getRepliedMessageText(msg.reply_to_message_id) }}</div>
+              </div>
+            </div>
+
             <div v-if="msg.type === 'image' && msg.media_url" class="mb-2 -mx-2">
               <a :href="msg.media_url" target="_blank">
                 <img 
@@ -270,7 +395,24 @@ const formatDateLabel = (date: Date) => {
                 />
               </a>
             </div>
-            <p v-if="msg.content" 
+            <div v-if="msg.type === 'video' && msg.media_url" class="mb-2 -mx-2">
+              <video 
+                :src="msg.media_url" 
+                controls
+                class="max-w-full max-h-72 w-auto rounded-lg shadow-sm border border-surface-100 dark:border-white/10"
+                preload="metadata"
+              >
+                Your browser does not support video playback.
+              </video>
+            </div>
+            <div v-if="msg.type === 'sticker' && msg.media_url" class="mb-2 -mx-2">
+              <img 
+                :src="msg.media_url" 
+                class="max-w-[200px] max-h-[200px] w-auto object-contain"
+                alt="Sticker"
+              />
+            </div>
+            <p v-if="msg.content && msg.type !== 'sticker'" 
               :class="[
                 'text-[15px] leading-snug whitespace-pre-wrap break-words',
                 msg.direction === 'inbound' ? 'text-surface-900 dark:text-white' : 'text-white'
@@ -279,7 +421,7 @@ const formatDateLabel = (date: Date) => {
               {{ msg.content }}
             </p>
             <div class="flex items-center justify-end gap-1 mt-0.5">
-              <span v-if="isHumanMessage(msg)" class="text-[10px] text-white/70">You</span>
+              <span v-if="isHumanMessage(msg)" class="text-[10px] opacity-70">You</span>
               <span 
                 class="text-[10px]"
                 :class="msg.direction === 'inbound' ? 'text-surface-400 dark:text-white/40' : 'text-white/60'"
@@ -292,79 +434,134 @@ const formatDateLabel = (date: Date) => {
       </template>
     </div>
 
-    <!-- Compose -->
-    <div class="flex-shrink-0 px-3 py-2 pb-[calc(8px+2px)] bg-white dark:bg-surface-800 border-t border-surface-100 dark:border-surface-700 safe-bottom">
-      <div v-if="escalations.isWindowOpen" class="flex flex-col gap-2">
-        <!-- Image Preview -->
-        <div v-if="imagePreviewUrl" class="relative inline-block">
-          <img 
-            :src="imagePreviewUrl" 
-            class="max-h-32 rounded-lg border border-surface-200 dark:border-surface-600"
-            alt="Preview"
-          />
-          <button
-            @click="removeImage"
-            class="absolute -top-2 -right-2 w-6 h-6 bg-red-500 hover:bg-red-600 text-white rounded-full flex items-center justify-center shadow-lg transition-colors"
-          >
-            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
-            </svg>
-          </button>
+    <!-- Compose Area -->
+    <div class="flex-shrink-0 bg-white dark:bg-surface-800 border-t border-surface-100 dark:border-surface-700 safe-bottom">
+      
+      <!-- Reply Preview Bar -->
+      <div v-if="escalations.replyingTo" class="px-4 py-2 bg-surface-50 dark:bg-surface-900 border-b border-surface-100 dark:border-surface-700 flex items-center gap-3 animate-slide-up">
+        <div class="reply-bar w-1 self-stretch bg-accent-500 rounded-full"></div>
+        <div class="flex-1 min-w-0">
+          <div class="text-[11px] font-bold text-accent-500">
+            Replying to {{ getRepliedMessageSender(escalations.replyingTo.id) }}
+          </div>
+          <div class="text-xs text-surface-500 dark:text-surface-400 truncate">
+            {{ getRepliedMessageText(escalations.replyingTo.id) }}
+          </div>
         </div>
-
-        <!-- Input Row -->
-        <div class="flex gap-2">
-          <!-- Hidden file input -->
-          <input
-            ref="fileInput"
-            type="file"
-            accept="image/*"
-            @change="handleImageSelect"
-            class="hidden"
-          />
-          
-          <!-- Attachment button -->
-          <button
-            @click="openFileSelector"
-            :disabled="escalations.sending"
-            class="px-3 py-2 bg-surface-100 dark:bg-surface-700 hover:bg-surface-200 dark:hover:bg-surface-600 disabled:opacity-50 text-surface-600 dark:text-surface-300 rounded-xl transition-colors"
-          >
-            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" />
-            </svg>
-          </button>
-
-          <input
-            v-model="messageInput"
-            @keyup.enter="handleSend"
-            type="text"
-            :placeholder="selectedImage ? 'Add a caption (optional)...' : 'Type a message...'"
-            class="flex-1 px-3 py-2 bg-surface-50 dark:bg-surface-700 border border-surface-200 dark:border-surface-600 rounded-xl text-[15px] text-surface-900 dark:text-white placeholder-surface-400 focus:outline-none focus:ring-2 focus:ring-accent-500 focus:border-transparent"
-          />
-          <button
-            @click="handleSend"
-            :disabled="escalations.sending || (!messageInput.trim() && !selectedImage)"
-            class="px-3 py-2 bg-primary-600 hover:bg-primary-700 disabled:bg-surface-100 dark:disabled:bg-surface-700 disabled:text-surface-400 dark:disabled:text-surface-500 disabled:cursor-not-allowed text-white rounded-xl transition-colors"
-          >
-            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" 
-                d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
-            </svg>
-          </button>
-        </div>
-      </div>
-      <div v-else class="flex flex-col gap-2">
-        <button
-          @click="showTemplatePicker = true"
-          class="w-full py-2.5 bg-white dark:bg-surface-800 border-2 border-accent-600 text-accent-600 hover:bg-accent-50 dark:hover:bg-accent-900/10 font-medium rounded-xl transition-colors flex items-center justify-center gap-2"
-        >
+        <button @click="escalations.clearReplyingTo()" class="text-surface-400 hover:text-red-500">
           <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
           </svg>
-          Send WhatsApp Template to Resume
         </button>
       </div>
+
+      <div class="px-3 py-2">
+        <div v-if="escalations.isWindowOpen" class="flex flex-col gap-2">
+          <!-- Media Preview -->
+          <div v-if="mediaPreviewUrl" class="relative inline-block">
+            <video 
+              v-if="isVideoSelected"
+              :src="mediaPreviewUrl" 
+              class="max-h-32 rounded-lg border border-surface-200 dark:border-surface-600"
+              controls
+            />
+            <img 
+              v-else
+              :src="mediaPreviewUrl" 
+              class="max-h-32 rounded-lg border border-surface-200 dark:border-surface-600"
+              alt="Preview"
+            />
+            <button
+              @click="removeMedia"
+              class="absolute -top-2 -right-2 w-6 h-6 bg-red-500 hover:bg-red-600 text-white rounded-full flex items-center justify-center shadow-lg transition-colors"
+            >
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
+
+          <!-- Input Row -->
+          <div class="flex gap-2">
+            <input
+              ref="fileInput"
+              type="file"
+              accept="image/*,video/*"
+              @change="handleFileSelect"
+              class="hidden"
+            />
+            
+            <button
+              @click="openFileSelector"
+              :disabled="escalations.sending"
+              class="px-3 py-2 bg-surface-100 dark:bg-surface-700 hover:bg-surface-200 dark:hover:bg-surface-600 disabled:opacity-50 text-surface-600 dark:text-surface-300 rounded-xl transition-colors"
+            >
+              <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" />
+              </svg>
+            </button>
+
+            <input
+              v-model="messageInput"
+              @keyup.enter="handleSend"
+              type="text"
+              :placeholder="selectedFile ? 'Add a caption (optional)...' : 'Type a message...'"
+              class="flex-1 px-3 py-2 bg-surface-50 dark:bg-surface-700 border border-surface-200 dark:border-surface-600 rounded-xl text-[15px] text-surface-900 dark:text-white placeholder-surface-400 focus:outline-none focus:ring-2 focus:ring-accent-500 focus:border-transparent"
+            />
+            
+            <button
+              @click="handleSend"
+              :disabled="escalations.sending || (!messageInput.trim() && !selectedFile)"
+              class="px-3 py-2 bg-primary-600 hover:bg-primary-700 disabled:bg-surface-100 dark:disabled:bg-surface-700 disabled:text-surface-400 dark:disabled:text-surface-500 disabled:cursor-not-allowed text-white rounded-xl transition-colors"
+            >
+              <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
+              </svg>
+            </button>
+          </div>
+        </div>
+        <div v-else class="flex flex-col gap-2">
+          <button
+            @click="showTemplatePicker = true"
+            class="w-full py-2.5 bg-white dark:bg-surface-800 border-2 border-accent-600 text-accent-600 hover:bg-accent-50 dark:hover:bg-accent-900/10 font-medium rounded-xl transition-colors flex items-center justify-center gap-2"
+          >
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+            </svg>
+            Send Template to Resume
+          </button>
+        </div>
+      </div>
     </div>
+
+    <!-- Context Menu Overlay -->
+    <Teleport to="body">
+      <div v-if="showContextMenu" class="fixed inset-0 z-[100] bg-black/5" @click="closeContextMenu">
+        <div 
+          class="absolute bg-white dark:bg-surface-800 border border-surface-100 dark:border-surface-700 shadow-xl rounded-xl py-1 min-w-[140px] animate-scale-in"
+          :style="menuStyle"
+        >
+          <button 
+            @click="handleReplyAction"
+            class="w-full px-4 py-2.5 flex items-center gap-3 text-sm text-surface-700 dark:text-surface-200 hover:bg-surface-50 dark:hover:bg-surface-700 transition-colors"
+          >
+            <svg class="w-4 h-4 text-accent-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h10a8 8 0 018 8v2M3 10l5 5m-5-5l5-5" />
+            </svg>
+            Responder
+          </button>
+          <button 
+            @click="handleCopyAction"
+            class="w-full px-4 py-2.5 flex items-center gap-3 text-sm text-surface-700 dark:text-surface-200 hover:bg-surface-50 dark:hover:bg-surface-700 transition-colors border-t border-surface-50 dark:border-surface-700/50"
+          >
+            <svg class="w-4 h-4 text-surface-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7v8a2 2 0 002 2h6M8 7V5a2 2 0 012-2h4.586a1 1 0 01.707.293l4.414 4.414a1 1 0 01.293.707V15a2 2 0 01-2 2h-2M8 7H6a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2v-2" />
+            </svg>
+            Copiar
+          </button>
+        </div>
+      </div>
+    </Teleport>
 
     <!-- Resolve Modal -->
     <Teleport to="body">
@@ -375,32 +572,15 @@ const formatDateLabel = (date: Date) => {
       >
         <div class="w-full max-w-lg bg-white dark:bg-surface-800 rounded-2xl p-6 space-y-4 animate-slide-up">
           <h2 class="text-xl font-semibold text-surface-900 dark:text-white">Resolve Escalation</h2>
-          
-          <div>
-            <label class="block text-sm font-medium text-surface-600 dark:text-surface-300 mb-2">
-              Resolution Notes (optional)
-            </label>
-            <textarea
-              v-model="resolveNotes"
-              rows="3"
-              placeholder="What was the resolution?"
-              class="w-full px-4 py-3 bg-surface-50 dark:bg-surface-700 border border-surface-200 dark:border-surface-600 rounded-xl text-surface-900 dark:text-white placeholder-surface-400 focus:outline-none focus:ring-2 focus:ring-primary-500 resize-none"
-            ></textarea>
-          </div>
-          
+          <textarea
+            v-model="resolveNotes"
+            rows="3"
+            placeholder="Resolution notes..."
+            class="w-full px-4 py-3 bg-surface-50 dark:bg-surface-700 border border-surface-200 dark:border-surface-600 rounded-xl text-surface-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-primary-500 shrink-0"
+          ></textarea>
           <div class="flex gap-3">
-            <button
-              @click="showResolveModal = false"
-              class="flex-1 py-3 bg-surface-100 dark:bg-surface-700 hover:bg-surface-200 dark:hover:bg-surface-600 text-surface-900 dark:text-white font-medium rounded-xl transition-colors"
-            >
-              Cancel
-            </button>
-            <button
-              @click="handleResolve"
-              class="flex-1 py-3 bg-green-600 hover:bg-green-700 text-white font-medium rounded-xl transition-colors"
-            >
-              Confirm
-            </button>
+            <button @click="showResolveModal = false" class="flex-1 py-3 bg-surface-100 dark:bg-surface-700 text-surface-900 dark:text-white font-medium rounded-xl">Cancel</button>
+            <button @click="handleResolve" class="flex-1 py-3 bg-green-600 text-white font-medium rounded-xl border-none">Confirm</button>
           </div>
         </div>
       </div>
@@ -410,7 +590,7 @@ const formatDateLabel = (date: Date) => {
     <Teleport to="body">
       <div 
         v-if="showTemplatePicker"
-        class="fixed inset-0 bg-black/60 flex items-end justify-center z-50"
+        class="fixed inset-0 bg-black/60 flex items-end justify-center z-[80]"
         @click.self="showTemplatePicker = false"
       >
         <TemplatePicker 
@@ -425,15 +605,55 @@ const formatDateLabel = (date: Date) => {
 
 <style scoped>
 @keyframes slide-up {
-  from {
-    transform: translateY(100%);
-  }
-  to {
-    transform: translateY(0);
-  }
+  from { transform: translateY(100%); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
 }
 
-.animate-slide-up {
-  animation: slide-up 0.3s ease-out;
+@keyframes scale-in {
+  from { transform: scale(0.9); opacity: 0; }
+  to { transform: scale(1); opacity: 1; }
 }
+
+@keyframes flash {
+  0% { background-color: transparent; }
+  50% { background-color: rgba(var(--color-primary-500), 0.2); }
+  100% { background-color: transparent; }
+}
+
+.animate-slide-up { animation: slide-up 0.25s cubic-bezier(0.16, 1, 0.3, 1); }
+.animate-scale-in { animation: scale-in 0.15s cubic-bezier(0.34, 1.56, 0.64, 1); transform-origin: top left; }
+
+.highlight-message {
+  animation: flash 1s ease-in-out 2;
+  border-color: rgba(var(--color-primary-500), 0.5) !important;
+}
+
+.message-bubble {
+  user-select: none;
+  -webkit-touch-callout: none;
+}
+
+.reply-context-bubble {
+  background: rgba(0,0,0,0.05);
+  border-radius: 6px;
+  overflow: hidden;
+  display: flex;
+  cursor: pointer;
+}
+
+.dark .reply-context-bubble { background: rgba(255,255,255,0.05); }
+
+.reply-bar {
+  width: 3px;
+  background: #25d366; /* WhatsApp Green */
+}
+
+.reply-content {
+  padding: 4px 8px;
+  flex: 1;
+  min-width: 0;
+}
+
+.sent .reply-context-bubble { background: rgba(255,255,255,0.15); }
+.sent .reply-bar { background: #fff; }
 </style>

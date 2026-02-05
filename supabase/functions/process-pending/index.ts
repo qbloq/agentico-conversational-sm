@@ -20,6 +20,7 @@ import {
   createSupabaseStateMachineStore,
   createSupabaseMessageBufferStore,
   createSupabaseEscalationStore,
+  createSupabaseDepositStore,
 } from '../_shared/adapters/index.ts';
 import { createConversationEngine } from '../_shared/sales-engine.bundle.ts';
 import { createGeminiProvider, createGeminiEmbeddingProvider } from '../_shared/sales-engine-llm.bundle.ts';
@@ -52,6 +53,7 @@ serve(async (req: Request) => {
     
     for (const client of clients) {
       const schemaName = client.schemaName;
+      const channelId = client.channelId;
       const clientConfig = client.config;
       
       // Skip if debounce not enabled for this client
@@ -60,9 +62,9 @@ serve(async (req: Request) => {
         continue;
       }
       
-      console.log(`[ProcessPending] Checking ${client.clientId} (${schemaName})`);
+      console.log(`[ProcessPending] Checking ${client.clientId} (${schemaName}, channel: ${channelId})`);
       
-      const messageBufferStore = createSupabaseMessageBufferStore(supabase, schemaName);
+      const messageBufferStore = createSupabaseMessageBufferStore(supabase, schemaName, channelId);
       
       // Get mature sessions
       const matureSessions = await messageBufferStore.getMatureSessions();
@@ -86,7 +88,7 @@ serve(async (req: Request) => {
           console.log(`[ProcessPending] Found ${pendingBeforeProcess.length} messages for ${sessionKey.channelUserId}`);
           
           // Build full dependencies
-          const deps = buildDependencies(supabase, schemaName, clientConfig, messageBufferStore);
+          const deps = buildDependencies(supabase, schemaName, channelId, clientConfig, messageBufferStore);
           
           // Process pending messages (this will delete them after success)
           const result = await engine.processPendingMessages(sessionKeyHash, deps);
@@ -146,6 +148,7 @@ serve(async (req: Request) => {
 function buildDependencies(
   supabase: ReturnType<typeof createSupabaseClient>,
   schemaName: string,
+  channelId: string,
   clientConfig: any,
   messageBufferStore: ReturnType<typeof createSupabaseMessageBufferStore>
 ) {
@@ -156,6 +159,7 @@ function buildDependencies(
   const exampleStore = createSupabaseExampleStore(supabase);
   const stateMachineStore = createSupabaseStateMachineStore(supabase, schemaName);
   const escalationStore = createSupabaseEscalationStore(supabase, schemaName);
+  const depositStore = createSupabaseDepositStore(supabase, schemaName);
   const llmLogger = createSupabaseLLMLogger(supabase);
   
   const llmProvider = createGeminiProvider({
@@ -194,6 +198,7 @@ function buildDependencies(
     stateMachineStore,
     messageBufferStore,
     escalationStore,
+    depositStore,
     llmProvider,
     embeddingProvider,
     mediaService,
@@ -361,12 +366,12 @@ async function sendWhatsAppTemplate(
  */
 async function checkForPendingWork(
   supabase: ReturnType<typeof createSupabaseClient>,
-  clients: Array<{ clientId: string; schemaName: string; config: any }>
+  clients: Array<{ clientId: string; schemaName: string; channelId: string; config: any }>
 ): Promise<boolean> {
   for (const client of clients) {
     if (!client.config?.debounce?.enabled) continue;
     
-    const messageBufferStore = createSupabaseMessageBufferStore(supabase, client.schemaName);
+    const messageBufferStore = createSupabaseMessageBufferStore(supabase, client.schemaName, client.channelId);
     const hasPending = await messageBufferStore.hasPendingMessages();
     if (hasPending) return true;
   }

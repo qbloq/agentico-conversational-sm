@@ -210,7 +210,24 @@ const formatDateLabel = (date: Date) => {
                 />
               </a>
             </div>
-            <p v-if="msg.content" 
+            <div v-if="msg.type === 'video' && msg.media_url" class="mb-2 -mx-2">
+              <video 
+                :src="msg.media_url" 
+                controls
+                class="max-w-full max-h-72 w-auto rounded-lg shadow-sm border border-surface-200 dark:border-white/10"
+                preload="metadata"
+              >
+                Your browser does not support video playback.
+              </video>
+            </div>
+            <div v-if="msg.type === 'sticker' && msg.media_url" class="mb-2 -mx-2">
+              <img 
+                :src="msg.media_url" 
+                class="max-w-[200px] max-h-[200px] w-auto object-contain"
+                alt="Sticker"
+              />
+            </div>
+            <p v-if="msg.content && msg.type !== 'sticker'" 
               :class="[
                 'text-[15px] leading-snug whitespace-pre-wrap break-words font-medium',
                 msg.direction === 'inbound' ? 'text-surface-900 dark:text-white' : 'text-white'

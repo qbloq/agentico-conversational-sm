@@ -11,6 +11,8 @@ import {
   resolveEscalation,
   sendMessage,
   sendTemplateMessage,
+  sendImageMessage,
+  sendVideoMessage,
   listTemplates,
   type Escalation,
   type EscalationDetail,
@@ -29,6 +31,7 @@ export const useEscalationsStore = defineStore('escalations', () => {
   const error = ref<string | null>(null);
   const sending = ref(false);
   const loadingTemplates = ref(false);
+  const replyingTo = ref<Message | null>(null);
   
   // Realtime
   let messageChannel: RealtimeChannel | null = null;
@@ -141,7 +144,11 @@ export const useEscalationsStore = defineStore('escalations', () => {
     error.value = null;
 
     try {
-      const result = await sendMessage(currentEscalation.value.id, message);
+      const result = await sendMessage(
+        currentEscalation.value.id, 
+        message, 
+        replyingTo.value?.id
+      );
       
       // Add to local messages (optimistic update)
       messages.value.push({
@@ -150,9 +157,13 @@ export const useEscalationsStore = defineStore('escalations', () => {
         direction: 'outbound',
         type: 'text',
         content: message,
+        reply_to_message_id: replyingTo.value?.id,
         created_at: new Date().toISOString(),
         sent_by_agent_id: 'current-agent',
       });
+
+      // Clear replying to state
+      clearReplyingTo();
 
       // Update status
       if (currentEscalation.value.status === 'assigned') {
@@ -175,8 +186,12 @@ export const useEscalationsStore = defineStore('escalations', () => {
     error.value = null;
 
     try {
-      const { sendImageMessage } = await import('@/api/client');
-      const result = await sendImageMessage(currentEscalation.value.id, imageFile, caption);
+      const result = await sendImageMessage(
+        currentEscalation.value.id, 
+        imageFile, 
+        caption,
+        replyingTo.value?.id
+      );
       
       // Create temporary URL for preview
       const tempUrl = URL.createObjectURL(imageFile);
@@ -189,9 +204,13 @@ export const useEscalationsStore = defineStore('escalations', () => {
         type: 'image',
         content: caption || null,
         media_url: tempUrl, // Temporary URL for immediate display
+        reply_to_message_id: replyingTo.value?.id,
         created_at: new Date().toISOString(),
         sent_by_agent_id: 'current-agent',
       });
+
+      // Clear replying to state
+      clearReplyingTo();
 
       // Update status
       if (currentEscalation.value.status === 'assigned') {
@@ -201,6 +220,53 @@ export const useEscalationsStore = defineStore('escalations', () => {
       return true;
     } catch (e) {
       error.value = e instanceof Error ? e.message : 'Failed to send image';
+      return false;
+    } finally {
+      sending.value = false;
+    }
+  }
+
+  async function sendVideo(videoFile: File, caption?: string): Promise<boolean> {
+    if (!currentEscalation.value) return false;
+
+    sending.value = true;
+    error.value = null;
+
+    try {
+      const result = await sendVideoMessage(
+        currentEscalation.value.id, 
+        videoFile, 
+        caption,
+        replyingTo.value?.id
+      );
+      
+      // Use the media URL returned by the server if available, otherwise temp URL
+      const mediaUrl = result.mediaUrl || URL.createObjectURL(videoFile);
+      
+      // Add to local messages (optimistic update)
+      messages.value.push({
+        id: result.messageId,
+        session_id: currentEscalation.value.session.id,
+        direction: 'outbound',
+        type: 'video',
+        content: caption || null,
+        media_url: mediaUrl,
+        reply_to_message_id: replyingTo.value?.id,
+        created_at: new Date().toISOString(),
+        sent_by_agent_id: 'current-agent',
+      });
+
+      // Clear replying to state
+      clearReplyingTo();
+
+      // Update status
+      if (currentEscalation.value.status === 'assigned') {
+        currentEscalation.value.status = 'in_progress';
+      }
+
+      return true;
+    } catch (e) {
+      error.value = e instanceof Error ? e.message : 'Failed to send video';
       return false;
     } finally {
       sending.value = false;
@@ -226,7 +292,12 @@ export const useEscalationsStore = defineStore('escalations', () => {
     error.value = null;
 
     try {
-      const result = await sendTemplateMessage(currentEscalation.value.id, templateName);
+      const result = await sendTemplateMessage(
+        currentEscalation.value.id, 
+        templateName, 
+        undefined, 
+        replyingTo.value?.id
+      );
       
       // Add to local messages (optimistic update)
       messages.value.push({
@@ -235,9 +306,13 @@ export const useEscalationsStore = defineStore('escalations', () => {
         direction: 'outbound',
         type: 'template',
         content: `Sent WhatsApp template: ${templateName}`,
+        reply_to_message_id: replyingTo.value?.id,
         created_at: new Date().toISOString(),
         sent_by_agent_id: 'current-agent',
       });
+
+      // Clear replying to state
+      clearReplyingTo();
 
       // Update status
       if (currentEscalation.value.status === 'assigned') {
@@ -292,6 +367,7 @@ export const useEscalationsStore = defineStore('escalations', () => {
               type: newMsg.type,
               content: newMsg.content,
               media_url: newMsg.media_url,
+              reply_to_message_id: newMsg.reply_to_message_id,
               created_at: newMsg.created_at,
               sent_by_agent_id: newMsg.sent_by_agent_id,
             });
@@ -320,6 +396,15 @@ export const useEscalationsStore = defineStore('escalations', () => {
     unsubscribeFromMessages();
     currentEscalation.value = null;
     messages.value = [];
+    replyingTo.value = null;
+  }
+
+  function setReplyingTo(message: Message) {
+    replyingTo.value = message;
+  }
+
+  function clearReplyingTo() {
+    replyingTo.value = null;
   }
 
   return {
@@ -333,6 +418,7 @@ export const useEscalationsStore = defineStore('escalations', () => {
     sending,
     loadingTemplates,
     realtimeConnected,
+    replyingTo,
     // Computed
     openCount,
     sortedEscalations,
@@ -346,11 +432,13 @@ export const useEscalationsStore = defineStore('escalations', () => {
     resolve,
     send,
     sendImage,
+    sendVideo,
     fetchTemplates,
     sendTemplate,
     clearCurrent,
     subscribeToMessages,
     unsubscribeFromMessages,
+    setReplyingTo,
+    clearReplyingTo,
   };
 });
-
