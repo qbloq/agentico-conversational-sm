@@ -35,11 +35,80 @@ import { WhatsAppNotificationService } from '../_shared/sales-engine-escalation.
 
 const MAX_RUNTIME_MS = 25000; // 25s max (Edge Function limit is 30s)
 const SELF_INVOKE_DELAY_MS = 3000; // 3 second loop
+const LOCK_TTL_MS = 35000; // Lock expires after 35s (slightly longer than MAX_RUNTIME)
+const WORKER_LOCK_ID = 'process-pending';
+
+/**
+ * Try to acquire a worker lock. Returns true if acquired.
+ * Uses an upsert with a TTL check — if the existing lock is expired, it gets overwritten.
+ */
+async function tryAcquireLock(supabase: ReturnType<typeof createSupabaseClient>): Promise<boolean> {
+  const now = new Date();
+  const expiresAt = new Date(now.getTime() + LOCK_TTL_MS);
+  
+  // Try to insert or update only if expired
+  const { data, error } = await supabase
+    .from('worker_locks')
+    .upsert(
+      { id: WORKER_LOCK_ID, locked_at: now.toISOString(), expires_at: expiresAt.toISOString() },
+      { onConflict: 'id', ignoreDuplicates: false }
+    )
+    .select('id');
+  
+  if (error) {
+    // If upsert fails, check if it's because lock is held
+    // Fallback: check if existing lock is expired
+    const { data: existing } = await supabase
+      .from('worker_locks')
+      .select('expires_at')
+      .eq('id', WORKER_LOCK_ID)
+      .single();
+    
+    if (existing && new Date(existing.expires_at) > now) {
+      return false; // Lock is held and not expired
+    }
+    
+    // Lock is expired, force-update it
+    const { error: updateError } = await supabase
+      .from('worker_locks')
+      .update({ locked_at: now.toISOString(), expires_at: expiresAt.toISOString() })
+      .eq('id', WORKER_LOCK_ID)
+      .lt('expires_at', now.toISOString());
+    
+    return !updateError;
+  }
+  
+  return (data?.length || 0) > 0;
+}
+
+async function releaseLock(supabase: ReturnType<typeof createSupabaseClient>): Promise<void> {
+  await supabase
+    .from('worker_locks')
+    .delete()
+    .eq('id', WORKER_LOCK_ID);
+}
 
 serve(async (req: Request) => {
   const startTime = Date.now();
   const supabase = createSupabaseClient();
   const engine = createConversationEngine();
+  
+  // Parse source to track invocation origin
+  let source = 'unknown';
+  try {
+    const body = await req.clone().json();
+    source = body?.source || 'cron';
+  } catch { source = 'cron'; }
+  
+  // Single-instance guard: try to acquire lock
+  const acquired = await tryAcquireLock(supabase);
+  
+  if (!acquired) {
+    console.log(`[ProcessPending] Another instance is running, skipping (source: ${source})`);
+    return new Response(JSON.stringify({ ok: true, skipped: true, reason: 'lock_held' }), {
+      headers: { 'Content-Type': 'application/json' },
+    });
+  }
   
   // Stats for logging
   let sessionsProcessed = 0;
@@ -49,6 +118,13 @@ serve(async (req: Request) => {
   try {
     // Get all client configs from database
     const clients = await getAllClientConfigs(supabase);
+    
+    // Run cleanup on each invocation to prevent dead-letter/zombie accumulation
+    for (const client of clients) {
+      if (!client.config?.debounce?.enabled) continue;
+      const bufStore = createSupabaseMessageBufferStore(supabase, client.schemaName, client.channelId);
+      await bufStore.cleanupStaleMessages();
+    }
     
     console.log(`[ProcessPending] Processing ${clients.length} clients`);
     
@@ -133,9 +209,13 @@ serve(async (req: Request) => {
     errors++;
   }
   
+  // Release worker lock
+  await releaseLock(supabase);
+  
   // Log stats
   console.log(JSON.stringify({
     type: 'debounce_worker_stats',
+    source,
     sessionsProcessed,
     messagesProcessed,
     errors,
@@ -144,6 +224,7 @@ serve(async (req: Request) => {
   
   return new Response(JSON.stringify({ 
     ok: true, 
+    source,
     sessionsProcessed, 
     messagesProcessed,
     errors,

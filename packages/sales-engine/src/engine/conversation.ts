@@ -149,6 +149,25 @@ export function createConversationEngine(): ConversationEngine {
       console.log(`[DEBUG] Getting session for key: ${JSON.stringify(sessionKey)}`);  
       let session = await sessionStore.findByKey(sessionKey);
       console.log(`[DEBUG] Found session: ${JSON.stringify(session)}`);  
+
+      // 2a. Check for System Commands EARLY (before state machine loading)
+      const inputForSystem = message.content || message.transcription || '';
+      if (inputForSystem.toLowerCase() === '/reset') {
+        if (session) {
+          console.log(`[System Command] Resetting data for contact: ${session.contactId}`);
+          await contactStore.delete(session.contactId);
+        } else {
+          console.log(`[System Command] /reset received but no existing session found`);
+        }
+        return {
+          sessionId: session?.id || '',
+          responses: [{
+            type: 'text',
+            content: '🔄 [SYSTEM] User data reset successfully. All history cleared.',
+          }],
+        };
+      }
+
       if (!session) {
         // Fetch state machine ID before creating session
         console.log(`[DEBUG] State machine name: ${clientConfig.stateMachineName}`);  
@@ -182,21 +201,6 @@ export function createConversationEngine(): ConversationEngine {
       }
 
       const stateMachine = StateMachine.fromSession(session, smConfig);
-
-      // 3. Check for System Commands (Hidden)
-      const inputForSystem = message.content || message.transcription || '';
-      if (inputForSystem.toLowerCase() === '/reset') {
-        console.log(`[System Command] Resetting data for contact: ${session.contactId}`);
-        await contactStore.delete(session.contactId);
-          return {
-            sessionId: session.id,
-            responses: [{
-              type: 'text',
-              content: '🔄 [SYSTEM] User data reset successfully. All history cleared.',
-            }],
-            stateConfig: stateMachine.getConfig(),
-          };
-      }
 
       let resumeUpdates: Partial<Session> = {};
 

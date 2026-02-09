@@ -188,6 +188,8 @@ function startChat() {
   console.log('\n💬 WhatsApp Simulator Started');
   console.log('---------------------------');
   console.log(`Sending to: ${WEBHOOK_URL}`);
+  console.log(`Phone ID:   ${MOCK_PHONE_ID}`);
+  console.log(`User Phone: ${USER_PHONE}`);
   console.log('Commands:');
   console.log('  /reset  - Reset user data');
   console.log('  /flush  - Trigger process-pending worker (for debounce testing)');

@@ -125,7 +125,31 @@ Used to personalize messages using existing data points.
 }
 ```
 
-## 6. Verification & Quality Assurance
+## 6. Management API Details
+The `manage-followup-configs` Edge Function (`supabase/functions/manage-followup-configs/index.ts`) provides full CRUD:
+
+| Method | Params | Description |
+|--------|--------|-------------|
+| `GET` | `?clientId=X` | List all configs for a client |
+| `GET` | `?clientId=X&name=Y` | Fetch a single config by name |
+| `POST` | `?clientId=X` + JSON body | Upsert (create or update) a config |
+| `DELETE` | `?clientId=X&name=Y` | Delete a config by name |
+
+**POST body schema:**
+```json
+{
+  "name": "string (PK, snake_case)",
+  "type": "text | template",
+  "content": "string (message body or WA template name)",
+  "variables_config": [
+    { "key": "string", "type": "literal | llm | context", "value?": "string", "prompt?": "string", "field?": "string" }
+  ]
+}
+```
+
+**Note on Auth**: This endpoint currently uses `clientId` query param for schema resolution (via `resolveSchema`). It does **not** enforce agent JWT auth — it relies on the Supabase service role key. For the Human Agent App, the `clientId` is derived from the agent's `clientSchema` stored in localStorage.
+
+## 7. Verification & Quality Assurance
 The system has been verified through a multi-layered testing approach:
 
 *   **Automated Logic Verification**: 
@@ -133,10 +157,17 @@ The system has been verified through a multi-layered testing approach:
     - `followup.test.ts`: Integration-style mocks ensuring the Conversation Engine correctly identifies and generates follow-ups in a multi-tenant setup.
 *   **Multi-tenant Isolation**: Verified that the registry can be targeted via the `schema` parameter in both workers and management APIs.
 
-## 7. Migration & Deployment
+## 8. Migration & Deployment
 The final schema is unified in **[`00036_followup_system_v3.sql`](file:///home/santiago/Projects/Parallelo/conversational-sales-engine/supabase/migrations/00036_followup_system_v3.sql)**.
 - **Critical Fix**: Added `sequence_index` to the `followup_queue` table definition to correctly track position in multi-message sequences.
 - **Global Rollout**: The migration uses a `DO` block to automatically apply the registry and queue tables to all active client schemas listed in `public.client_configs`.
 
+## 9. Observations & Improvement Notes (BMad Master Review)
+1.  **Variable Type Completeness**: The `context` variable type resolves flat fields from `session.context` but does **not** support nested dot-notation (e.g., `context.service_name`). The `process-followups` worker uses `session.context[v.field]` which only resolves top-level keys. The review doc example `"field": "context.service_name"` would fail at runtime — this should be documented or fixed with a nested resolver.
+2.  **24h Template Fallback**: The fallback template name is read from `WHATSAPP_TPL_ESCALATION_01` env var with a hardcoded default `followup_standard`. This should ideally be configurable per-client in `client_configs`.
+3.  **Error Handling in Management API**: All errors return HTTP 500 regardless of cause. Validation errors (missing fields, invalid type) should return 400.
+4.  **No Auth on Management Endpoint**: The `manage-followup-configs` function has no JWT verification. For the Human Agent App integration, the `clientId` is passed as a query param derived from the agent's stored schema, which is acceptable for internal use but should be hardened for production.
+5.  **Sequence Chaining Robustness**: If a follow-up is sent but the next scheduling fails (e.g., DB error in `scheduleNext`), the sequence silently stops. Consider adding a retry mechanism or dead-letter tracking.
+
 ---
-*Last updated: 2026-02-06 by Antigravity (Advanced AI Engineer).*
+*Last updated: 2026-02-09 by BMad Master (Technical Review & UI Integration).*

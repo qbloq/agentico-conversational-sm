@@ -73,6 +73,58 @@ export function createSupabaseFollowupStore(
         console.error(`[Follow-up] Failed to cancel follow-ups:`, error);
         // Don't throw here to avoid blocking inbound message processing
       }
+    },
+
+    async claim(followupId: string): Promise<boolean> {
+      const { data, error } = await supabase
+        .schema(schemaName)
+        .from(table)
+        .update({ processing_started_at: new Date().toISOString() })
+        .eq('id', followupId)
+        .eq('status', 'pending')
+        .is('processing_started_at', null)
+        .select('id');
+
+      if (error) {
+        console.error(`[Follow-up] Failed to claim item ${followupId}:`, error);
+        return false;
+      }
+
+      return (data?.length || 0) > 0;
+    },
+
+    async markFailed(followupId: string, error: string): Promise<void> {
+      // In a real scenario, we might want to use an RPC for atomic increment,
+      // but for now we'll do a simple update or just set it to failed if we don't have retry_count yet
+      await supabase
+        .schema(schemaName)
+        .from(table)
+        .update({
+          status: 'failed',
+          last_error: error,
+          processing_started_at: null,
+          // Note: we'll handle retry increment in the worker logic if needed,
+          // or just mark as failed and let the worker decide based on retry_count
+        })
+        .eq('id', followupId);
+    },
+
+    async cleanupStaleLocks(): Promise<number> {
+      const threshold = new Date(Date.now() - 5 * 60 * 1000).toISOString(); // 5 minutes
+      const { data, error } = await supabase
+        .schema(schemaName)
+        .from(table)
+        .update({ processing_started_at: null })
+        .not('processing_started_at', 'is', null)
+        .lt('processing_started_at', threshold)
+        .select('id');
+
+      if (error) {
+        console.error(`[Follow-up] Failed to cleanup stale locks:`, error);
+        return 0;
+      }
+
+      return data?.length || 0;
     }
   };
 }

@@ -244,8 +244,14 @@ export function createSupabaseMessageBufferStore(
     },
     
     async hasPendingMessages(): Promise<boolean> {
+      // Must match getMatureSessions() logic exactly:
+      // - scheduled_process_at <= now (mature)
+      // - processing_started_at IS NULL (not already claimed)
+      // - retry_count < MAX_RETRIES (not dead-lettered)
       let query = table()
         .select('*', { count: 'exact', head: true })
+        .lte('scheduled_process_at', new Date().toISOString())
+        .is('processing_started_at', null)
         .lt('retry_count', MAX_RETRIES);
       
       // Filter by channel_id if provided (for multi-tenancy)
@@ -261,6 +267,47 @@ export function createSupabaseMessageBufferStore(
       }
       
       return (count || 0) > 0;
+    },
+
+    async cleanupStaleMessages(): Promise<{ deadLettered: number; zombies: number }> {
+      let deadLettered = 0;
+      let zombies = 0;
+
+      // 1. Delete dead-lettered messages (retry_count >= MAX_RETRIES)
+      {
+        let query = table()
+          .delete()
+          .gte('retry_count', MAX_RETRIES);
+        if (channelId) query = query.eq('channel_id', channelId);
+        const { data, error } = await query.select('id');
+        if (error) {
+          console.error(`[MessageBuffer] Failed to clean dead-lettered: ${error.message}`);
+        } else {
+          deadLettered = data?.length || 0;
+        }
+      }
+
+      // 2. Release zombie messages (processing_started_at set but older than 5 minutes)
+      const zombieThreshold = new Date(Date.now() - 5 * 60 * 1000).toISOString();
+      {
+        let query = table()
+          .update({ processing_started_at: null })
+          .not('processing_started_at', 'is', null)
+          .lt('processing_started_at', zombieThreshold);
+        if (channelId) query = query.eq('channel_id', channelId);
+        const { data, error } = await query.select('id');
+        if (error) {
+          console.error(`[MessageBuffer] Failed to release zombies: ${error.message}`);
+        } else {
+          zombies = data?.length || 0;
+        }
+      }
+
+      if (deadLettered > 0 || zombies > 0) {
+        console.log(`[MessageBuffer] Cleanup: removed ${deadLettered} dead-lettered, released ${zombies} zombie messages`);
+      }
+
+      return { deadLettered, zombies };
     },
   };
 }

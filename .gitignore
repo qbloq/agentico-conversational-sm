@@ -41,9 +41,9 @@ scripts/data/batch_output/
 scripts/data/
 
 # BMAD
-.agent/
-.claude/
-.gemini/
-.opencode/
-.windsurf/
-_bmad/
+# .agent/
+# .claude/
+# .gemini/
+# .opencode/
+# .windsurf/
+# _bmad/

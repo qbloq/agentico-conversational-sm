@@ -464,6 +464,21 @@ export interface FollowupStore {
   ): Promise<void>;
 
   /**
+   * Claim a follow-up item for processing
+   */
+  claim(followupId: string): Promise<boolean>;
+
+  /**
+   * Mark a follow-up item as failed with retry increment
+   */
+  markFailed(followupId: string, error: string): Promise<void>;
+
+  /**
+   * Clean up stale follow-up processing locks
+   */
+  cleanupStaleLocks(): Promise<number>;
+
+  /**
    * Cancel all pending follow-ups for a session
    */
   cancelPending(sessionId: string): Promise<void>;
@@ -552,6 +567,13 @@ export interface MessageBufferStore {
    * Check if there are any pending messages (for self-invoke decision)
    */
   hasPendingMessages(): Promise<boolean>;
+
+  /**
+   * Clean up stale messages:
+   * - Delete dead-lettered (retry_count >= MAX_RETRIES)
+   * - Release zombie locks (processing_started_at older than threshold)
+   */
+  cleanupStaleMessages(): Promise<{ deadLettered: number; zombies: number }>;
 }
 
 export interface KnowledgeEntry {

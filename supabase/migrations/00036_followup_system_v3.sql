@@ -22,6 +22,22 @@ BEGIN
             )
         ', schema_name_record.schema_name);
 
+        -- 1.1 Enable RLS for followup_configs
+        EXECUTE format('ALTER TABLE %I.followup_configs ENABLE ROW LEVEL SECURITY', schema_name_record.schema_name);
+
+        -- 1.2 Create RLS policies for followup_configs
+        EXECUTE format('
+            DROP POLICY IF EXISTS "service_role_all" ON %I.followup_configs;
+            CREATE POLICY "service_role_all" ON %I.followup_configs
+                FOR ALL TO service_role USING (true) WITH CHECK (true);
+        ', schema_name_record.schema_name, schema_name_record.schema_name);
+
+        EXECUTE format('
+            DROP POLICY IF EXISTS "authenticated_select" ON %I.followup_configs;
+            CREATE POLICY "authenticated_select" ON %I.followup_configs
+                FOR SELECT TO authenticated USING (true);
+        ', schema_name_record.schema_name, schema_name_record.schema_name);
+
         -- 2. Update followup_queue table
         -- Check if followup_config_name column exists
         IF NOT EXISTS (

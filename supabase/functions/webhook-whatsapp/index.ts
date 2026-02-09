@@ -269,6 +269,11 @@ async function processMessage(
   // Check if debounce is enabled for this client
   const debounceEnabled = clientConfig.debounce?.enabled && clientConfig.debounce?.delayMs > 0;
   
+  // Command messages (starting with /) bypass debounce and are processed immediately
+  const messageContent = normalizedMessage.content || '';
+  const isCommandMessage = messageContent.startsWith('/');
+  const isResetCommand = messageContent.toLowerCase() === '/reset';
+
   // Resolve session early to fix follow-up race condition
   const sessionKeyForLookup = {
     channelType: 'whatsapp' as ChannelType,
@@ -277,14 +282,11 @@ async function processMessage(
   };
   const session = await sessionStore.findByKey(sessionKeyForLookup);
   
-  if (session) {
+  if (session && !isResetCommand) {
     // IMMEDIATE CANCELLATION: Prevent follow-ups from firing while message is being debounced
+    // Skip for /reset since it deletes the contact/session entirely
     await followupStore.cancelPending(session.id);
   }
-
-  // Command messages (starting with /) bypass debounce and are processed immediately
-  const messageContent = normalizedMessage.content || '';
-  const isCommandMessage = messageContent.startsWith('/');
   
   if (debounceEnabled && !isCommandMessage) {
     // Debounce flow: buffer the message, worker will process later
@@ -354,7 +356,8 @@ async function processMessage(
   });
 
   // After processing, if we have a sessionId, we can manage follow-ups
-  if (result.sessionId) {
+  // Skip for /reset since the session/contact is deleted
+  if (result.sessionId && !isResetCommand) {
     // 1. Cancel again if needed (usually handled early, but good for new sessions)
     if (!session) {
       await followupStore.cancelPending(result.sessionId);

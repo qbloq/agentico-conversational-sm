@@ -30,12 +30,68 @@ interface FollowupItem {
   status: string;
 }
 
+const LOCK_TTL_MS = 60000; // 1 minute TTL for follow-up worker
+const WORKER_LOCK_ID = 'process-followups';
+
+/**
+ * Try to acquire a worker lock. Returns true if acquired.
+ */
+async function tryAcquireLock(supabase: ReturnType<typeof createSupabaseClient>): Promise<boolean> {
+  const now = new Date();
+  const expiresAt = new Date(now.getTime() + LOCK_TTL_MS);
+  
+  const { data, error } = await supabase
+    .from('worker_locks')
+    .upsert(
+      { id: WORKER_LOCK_ID, locked_at: now.toISOString(), expires_at: expiresAt.toISOString() },
+      { onConflict: 'id', ignoreDuplicates: false }
+    )
+    .select('id');
+  
+  if (error) {
+    const { data: existing } = await supabase
+      .from('worker_locks')
+      .select('expires_at')
+      .eq('id', WORKER_LOCK_ID)
+      .single();
+    
+    if (existing && new Date(existing.expires_at) > now) {
+      return false;
+    }
+    
+    const { error: updateError } = await supabase
+      .from('worker_locks')
+      .update({ locked_at: now.toISOString(), expires_at: expiresAt.toISOString() })
+      .eq('id', WORKER_LOCK_ID)
+      .lt('expires_at', now.toISOString());
+    
+    return !updateError;
+  }
+  
+  return (data?.length || 0) > 0;
+}
+
+async function releaseLock(supabase: ReturnType<typeof createSupabaseClient>): Promise<void> {
+  await supabase
+    .from('worker_locks')
+    .delete()
+    .eq('id', WORKER_LOCK_ID);
+}
+
 serve(async () => {
   const startTime = Date.now();
+  const supabase = createSupabaseClient();
+  
+  // Single-instance guard
+  const acquired = await tryAcquireLock(supabase);
+  if (!acquired) {
+    console.log('[Follow-up Worker] Another instance is running, skipping');
+    return new Response('Locked', { status: 200 });
+  }
+
   console.log('[Follow-up Worker] Starting execution...');
   
   try {
-    const supabase = createSupabaseClient();
     
     // 1. Get all active clients using the unified router
     const clients = await getAllClientConfigs(supabase);
@@ -59,10 +115,19 @@ serve(async () => {
     }
     
     console.log(`[Follow-up Worker] Finished in ${Date.now() - startTime}ms`);
+    
+    // Release lock
+    await releaseLock(supabase);
+    
     return new Response('OK', { status: 200 });
     
   } catch (error) {
     console.error('[Follow-up Worker] Fatal error:', error);
+    
+    // Release lock on error
+    const supabase = createSupabaseClient();
+    await releaseLock(supabase);
+    
     return new Response('Internal Server Error', { status: 500 });
   }
 });
@@ -72,15 +137,24 @@ async function processClientSchema(
   schemaName: string,
   clientConfig: any
 ) {
-  console.log(`[Follow-up Worker] Checking schema: ${schemaName}`);
+  console.log(`[Follow-up Worker] Checking schema: ${clientConfig.clientId}`);
   
-  // 1. Get pending items due now
+  const followupStore = createSupabaseFollowupStore(supabase, schemaName);
+  
+  // 0. Clean up stale locks first
+  const cleaned = await followupStore.cleanupStaleLocks();
+  if (cleaned > 0) {
+    console.log(`[Follow-up Worker] Cleaned up ${cleaned} stale locks in ${schemaName}`);
+  }
+
+  // 1. Get pending items due now that are NOT already being processed
   const now = new Date().toISOString();
   const { data: pendingItems, error: fetchError } = await supabase
     .schema(schemaName)
     .from('followup_queue')
     .select('*')
     .eq('status', 'pending')
+    .is('processing_started_at', null)
     .lte('scheduled_at', now)
     .limit(50);
     
@@ -98,13 +172,19 @@ async function processClientSchema(
   // 2. Initialize stores and engine
   const sessionStore = createSupabaseSessionStore(supabase, schemaName);
   const messageStore = createSupabaseMessageStore(supabase, schemaName);
-  const followupStore = createSupabaseFollowupStore(supabase, schemaName);
   const stateMachineStore = createSupabaseStateMachineStore(supabase, schemaName);
   const engine = createConversationEngine();
 
   // 3. Process each item
   for (const item of pendingItems) {
     try {
+      // 3.0 Claim the item
+      const claimed = await followupStore.claim(item.id);
+      if (!claimed) {
+        console.log(`[Follow-up Worker] Item ${item.id} already claimed by another worker, skipping`);
+        continue;
+      }
+
       // 3.1 Get session
       const session = await sessionStore.findById(item.session_id);
       if (!session) {
@@ -167,6 +247,7 @@ async function processClientSchema(
           }
 
           // Get state machine for next scheduling
+          console.log('>>>>>>>>clientConfig', clientConfig)
           const sm = await stateMachineStore.findActive(clientConfig.stateMachineName);
           if (sm && sm.states) {
             stateConfig = (sm.states as any)[session.currentState];
@@ -230,6 +311,7 @@ async function processClientSchema(
         .update({
           status: 'sent',
           sent_at: new Date().toISOString(),
+          processing_started_at: null,
         })
         .eq('id', item.id);
 
@@ -240,20 +322,9 @@ async function processClientSchema(
       
     } catch (err) {
       console.error(`[Follow-up Worker] Failed to process item ${item.id}:`, err);
-      await markFailed(supabase, schemaName, item.id, String(err));
+      await followupStore.markFailed(item.id, String(err));
     }
   }
-}
-
-async function markFailed(supabase: any, schema: string, id: string, reason: string) {
-  await supabase
-    .schema(schema)
-    .from('followup_queue')
-    .update({
-      status: 'failed',
-      error_message: reason,
-    })
-    .eq('id', id);
 }
 
 async function sendWhatsAppMessage(
