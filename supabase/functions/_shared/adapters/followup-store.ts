@@ -7,25 +7,10 @@
 import type { SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import type { 
   FollowupStore, 
-  ConversationState 
+  ConversationState,
 } from '@parallelo/sales-engine';
-import { STATE_CONFIGS } from '@parallelo/sales-engine';
+import { calculateScheduledTime } from '@parallelo/sales-engine';
 
-/**
- * Parses interval string (e.g., '15m', '2h', '1d', '1w') into minutes
- */
-function parseIntervalToMinutes(interval: string): number {
-  const val = parseInt(interval);
-  const unit = interval.toLowerCase().replace(/[0-9]/g, '');
-
-  switch (unit) {
-    case 'm': return val;
-    case 'h': return val * 60;
-    case 'd': return val * 60 * 24;
-    case 'w': return val * 60 * 24 * 7;
-    default: return 0;
-  }
-}
 
 export function createSupabaseFollowupStore(
   supabase: SupabaseClient,
@@ -37,30 +22,22 @@ export function createSupabaseFollowupStore(
     async scheduleNext(
       sessionId: string,
       state: ConversationState,
-      currentIndex: number
+      currentIndex: number,
+      followupSequence?: Array<{ interval: string; configName: string }>
     ): Promise<void> {
-      const config = STATE_CONFIGS[state];
-      if (!config || !config.followupSequence) {
-        console.log(`[Follow-up] No sequence configured for state ${state}`);
+      if (!followupSequence) {
+        console.log(`[Follow-up] No sequence provided for session ${sessionId} in state ${state}`);
         return;
       }
 
       const nextIndex = currentIndex + 1;
-      if (nextIndex >= config.followupSequence.length) {
+      if (nextIndex >= followupSequence.length) {
         console.log(`[Follow-up] Sequence complete for session ${sessionId} in state ${state}`);
         return;
       }
 
-      const interval = config.followupSequence[nextIndex];
-      const minutes = parseIntervalToMinutes(interval);
-      
-      if (minutes <= 0) {
-        console.warn(`[Follow-up] Invalid interval '${interval}' for state ${state}`);
-        return;
-      }
-
-      const scheduledAt = new Date();
-      scheduledAt.setMinutes(scheduledAt.getMinutes() + minutes);
+      const { interval, configName } = followupSequence[nextIndex];
+      const scheduledAt = calculateScheduledTime(interval);
 
       console.log(`[Follow-up] Scheduling follow-up #${nextIndex} for session ${sessionId} in ${interval} (${scheduledAt.toISOString()})`);
 
@@ -71,6 +48,7 @@ export function createSupabaseFollowupStore(
           session_id: sessionId,
           scheduled_at: scheduledAt.toISOString(),
           followup_type: 'short_term',
+          followup_config_name: configName,
           sequence_index: nextIndex,
           status: 'pending'
         });

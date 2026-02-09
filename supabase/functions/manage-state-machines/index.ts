@@ -1,6 +1,6 @@
 
 import { serve } from 'https://deno.land/std@0.177.0/http/server.ts';
-import { createSupabaseClient } from '../_shared/supabase.ts';
+import { createSupabaseClient, resolveSchema } from '../_shared/supabase.ts';
 import { createSupabaseStateMachineStore } from '../_shared/adapters/index.ts';
 
 serve(async (req) => {
@@ -15,12 +15,24 @@ serve(async (req) => {
   }
 
   try {
-    const supabase = createSupabaseClient();
+    const url = new URL(req.url);
+    const clientId = url.searchParams.get('clientId');
+    
+    if (!clientId) {
+      throw new Error('Missing variable: clientId');
+    }
+
+    const publicClient = createSupabaseClient(); // Default to public
+    const schemaName = await resolveSchema(publicClient, clientId);
+
+    if (!schemaName) {
+      throw new Error(`Client not found or schema not resolved for ID: ${clientId}`);
+    }
+
+    const supabase = createSupabaseClient(schemaName);
     // Use the schema from the request or default. 
     // In production, this should probably come from an API key or auth token claim.
     // For now, we'll use a query param 'schema' or default to primary schema
-    const url = new URL(req.url);
-    const schemaName = url.searchParams.get('schema') || 'client_tag_markets';
     
     // Check authentication - for now we rely on Supabase Service Role Key protection
     // ensuring this function is only callable by authorized clients (or if anon is allowed via RLS which we set up)

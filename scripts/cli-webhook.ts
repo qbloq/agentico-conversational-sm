@@ -73,6 +73,25 @@ const server = http.createServer((req, res) => {
               console.log(`\x1b[90m[Session] Tracking: ${currentSessionId}\x1b[0m`);
             }
           }
+        } else if (data.type === 'template') {
+          console.log(`\n🤖 Bot > \x1b[32m[Template: ${data.template.name}]\x1b[0m`);
+          
+          // Display components
+          for (const component of data.template.components) {
+            if (component.type === 'header' && component.parameters) {
+              for (const p of component.parameters) {
+                if (p.type === 'image') console.log(`   [Header Image]: ${p.image.link}`);
+              }
+            }
+            if (component.type === 'body' && component.parameters) {
+              const params = component.parameters.map((p: any) => p.text).join(' | ');
+              console.log(`   [Body Params]: ${params}`);
+            }
+            if (component.type === 'button' && component.parameters) {
+              const params = component.parameters.map((p: any) => p.text).join(' | ');
+              console.log(`   [Button Params]: ${params}`);
+            }
+          }
         } else {
           console.log('\n🤖 Bot sent non-text message:', data);
         }
@@ -97,7 +116,7 @@ server.listen(MOCK_SERVER_PORT, () => {
   console.log(`✅ Mock WhatsApp API Server listening on port ${MOCK_SERVER_PORT}`);
   console.log(`   Configure Supabase Function with: WHATSAPP_API_BASE_URL=http://host.docker.internal:${MOCK_SERVER_PORT}`);
   console.log(`   (Or use your local IP if host.docker.internal doesn't work)`);
-  startPollingForAgentMessages();
+  // startPollingForAgentMessages();
   startChat();
 });
 
@@ -172,6 +191,8 @@ function startChat() {
   console.log('Commands:');
   console.log('  /reset  - Reset user data');
   console.log('  /flush  - Trigger process-pending worker (for debounce testing)');
+  console.log('  /followups - Trigger process-followups worker');
+  console.log('  /cron   - Trigger both /flush and /followups');
   console.log('  exit    - Quit\n');
   
   rl.prompt();
@@ -191,6 +212,23 @@ function startChat() {
     // Handle /flush command - trigger the process-pending worker
     if (input === '/flush') {
       await triggerProcessPending();
+      rl.prompt();
+      return;
+    }
+
+    // Handle /followups command
+    if (input === '/followups') {
+      await triggerProcessFollowups();
+      rl.prompt();
+      return;
+    }
+
+    // Handle /cron command
+    if (input === '/cron') {
+      console.log('🚀 Running scheduled workers...');
+      await triggerProcessPending();
+      await triggerProcessFollowups();
+      console.log('✨ Cron cycle complete.');
       rl.prompt();
       return;
     }
@@ -224,6 +262,37 @@ async function triggerProcessPending() {
     if (response.ok) {
       const result = await response.json();
       console.log(`✅ Worker completed: ${result.sessionsProcessed || 0} sessions, ${result.messagesProcessed || 0} messages`);
+    } else {
+      console.error(`❌ Worker Error: ${response.status} ${response.statusText}`);
+      const errText = await response.text();
+      console.error(errText);
+    }
+  } catch (error) {
+    console.error('❌ Network Error:', error);
+  }
+}
+
+/**
+ * Trigger the process-followups Edge Function
+ */
+async function triggerProcessFollowups() {
+  const PROCESS_FOLLOWUPS_URL = 'http://127.0.0.1:54321/functions/v1/process-followups';
+  const authKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY;
+  
+  console.log('⏳ Triggering process-followups worker...');
+  
+  try {
+    const response = await fetch(PROCESS_FOLLOWUPS_URL, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${authKey}`
+      },
+      body: JSON.stringify({ source: 'cli-cron' }),
+    });
+    
+    if (response.ok) {
+      console.log(`✅ Followups worker completed successfully`);
     } else {
       console.error(`❌ Worker Error: ${response.status} ${response.statusText}`);
       const errText = await response.text();

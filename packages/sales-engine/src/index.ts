@@ -69,6 +69,8 @@ export type {
   WhatsAppConfig,
   InstagramConfig,
   MessengerConfig,
+  FollowupRegistryConfig,
+  FollowupVariableConfig,
 } from './engine/types.js';
 
 // =============================================================================
@@ -82,8 +84,8 @@ export type { ConversationEngine, IngestResult } from './engine/conversation.js'
 // State Machine
 // =============================================================================
 
-export { StateMachine, STATE_CONFIGS } from './state/machine.js';
-export type { StateConfig, StateTransition } from './state/machine.js';
+export { StateMachine } from './state/machine.js';
+export type { StateConfig, StateTransition } from './engine/types.js';
 
 export { WhatsAppNotificationService } from './escalation/whatsapp-notification.js';
 
@@ -141,4 +143,9 @@ export {
 } from './examples/index.js';
 
 export { buildEscalationResolutionPrompt } from './prompts/templates.js';
+
+export {
+  parseIntervalToMinutes,
+  calculateScheduledTime,
+} from './engine/followup-utils.js';
 

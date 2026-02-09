@@ -1,0 +1,5 @@
+{
+  "imports": {
+    "@parallelo/sales-engine": "../_shared/sales-engine.bundle.ts"
+  }
+}

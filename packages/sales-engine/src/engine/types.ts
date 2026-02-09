@@ -59,25 +59,57 @@ export interface SessionKey {
  * - Support Flow: technical_support, deposit_support, platform_support, withdrawal_support
  * - Terminal: completed, escalated, follow_up, disqualified
  */
-export type ConversationState =
-  // Entry States
-  | 'initial'
-  // Flow A (12x)
-  | 'pitching_12x'
-  // Flow B (Downsell)
-  | 'pitching_copy_trading'
-  | 'pitching_academy'
-  | 'prospect'
-  // Flow C (Closing)
-  | 'closing'
-  | 'post_registration'
-  // Flow D (Support)
-  | 'returning_customer'
-  | 'support_general'
-  // Terminal States
-  | 'follow_up'
-  | 'escalated'
-  | 'completed';
+export type ConversationState = string;
+
+/**
+ * State transition event
+ */
+export interface StateTransition {
+  from: ConversationState;
+  to: ConversationState;
+  reason: string;
+  timestamp: Date;
+}
+
+/**
+ * Configuration for each state
+ */
+export interface StateConfig {
+  /** The identifier for this state */
+  state: ConversationState;
+
+  /** What the bot should accomplish in this state */
+  objective: string;
+  
+  /** Detailed description for LLM context */
+  description: string;
+  
+  /** Signals that indicate this state's objective is complete */
+  completionSignals: string[];
+  
+  /** KB categories to prioritize for RAG */
+  ragCategories: string[];
+  
+  /** Allowed transitions from this state */
+  allowedTransitions: ConversationState[];
+  
+  /** Description of when to transition to each allowed state (for LLM) */
+  transitionGuidance: Record<string, string>;
+  
+  /** Max messages before suggesting transition (soft limit for LLM) */
+  maxMessages?: number;
+
+  /** 
+   * Follow-up sequence intervals and their corresponding configuration names.
+   * Format: Array<{ interval: string, configName: string }>
+   * Intervals: '15m', '2h', '1d', '1w'
+   * configName: references a global follow-up registry.
+   */
+  followupSequence?: Array<{
+    interval: string;
+    configName: string;
+  }>;
+}
 
 /**
  * Session status
@@ -259,6 +291,8 @@ export interface EngineOutput {
   escalation?: EscalationResult;
   followupSchedule?: FollowupSchedule;
   transitionReason?: string;
+  /** The configuration for the state the session is in AFTER processing */
+  stateConfig?: StateConfig;
 }
 
 /**
@@ -388,11 +422,15 @@ export interface KnowledgeStore {
 }
 
 export interface StateMachineStore {
-  findByName(name: string, version?: string): Promise<Record<ConversationState, any> | null>;
-  findActive(name: string): Promise<Record<ConversationState, any> | null>;
+  findByName(name: string, version?: string): Promise<{ states: Record<string, StateConfig>, initialState: string } | null>;
+  findActive(name: string): Promise<{ states: Record<string, StateConfig>, initialState: string } | null>;
   
   // Get the ID of a state machine by name
   getStateMachineId(name: string): Promise<string | null>;
+  
+  // Fetch state entry message configuration from database
+  // Fetch follow-up configuration by name from the registry
+  getFollowupConfig(name: string): Promise<FollowupRegistryConfig | null>;
   
   // Fetch state entry message configuration from database
   getStateEntryMessages(
@@ -416,11 +454,13 @@ export interface FollowupStore {
    * @param state The current state (to lookup its sequence config)
    * @param currentIndex The index of the last SENT follow-up in the sequence. 
    *                     Pass -1 to schedule the first one (index 0).
+   * @param followupSequence Optional sequence of intervals and config names.
    */
   scheduleNext(
     sessionId: string,
     state: ConversationState,
-    currentIndex: number
+    currentIndex: number,
+    followupSequence?: Array<{ interval: string; configName: string }>
   ): Promise<void>;
 
   /**
@@ -622,4 +662,25 @@ export interface InstagramConfig {
 export interface MessengerConfig {
   pageId: string;
   accessToken: string;
+}
+
+/**
+ * Global follow-up configuration registry item
+ */
+export interface FollowupRegistryConfig {
+  name: string;
+  type: 'text' | 'template';
+  content: string; // Message body or WhatsApp template name
+  variablesConfig: FollowupVariableConfig[];
+}
+
+/**
+ * Configuration for a single dynamic variable within a follow-up
+ */
+export interface FollowupVariableConfig {
+  key: string;
+  type: 'literal' | 'llm' | 'context';
+  value?: string; // For literal types
+  prompt?: string; // For llm types (guidance for generation)
+  field?: string; // For context types (path in session.context)
 }

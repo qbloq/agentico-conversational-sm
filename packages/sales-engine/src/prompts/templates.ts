@@ -1,7 +1,3 @@
-/**
- * Prompt templates for the Sales Engine
- */
-
 import type { ClientConfig, KnowledgeEntry, ConversationExample } from '../engine/types.js';
 // TODO: Re-enable when examples feature is ready
 // import { formatExamples } from '../examples/formatter.js';

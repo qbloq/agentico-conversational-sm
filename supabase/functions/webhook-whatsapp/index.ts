@@ -269,6 +269,19 @@ async function processMessage(
   // Check if debounce is enabled for this client
   const debounceEnabled = clientConfig.debounce?.enabled && clientConfig.debounce?.delayMs > 0;
   
+  // Resolve session early to fix follow-up race condition
+  const sessionKeyForLookup = {
+    channelType: 'whatsapp' as ChannelType,
+    channelId: phoneNumberId,
+    channelUserId: message.from,
+  };
+  const session = await sessionStore.findByKey(sessionKeyForLookup);
+  
+  if (session) {
+    // IMMEDIATE CANCELLATION: Prevent follow-ups from firing while message is being debounced
+    await followupStore.cancelPending(session.id);
+  }
+
   // Command messages (starting with /) bypass debounce and are processed immediately
   const messageContent = normalizedMessage.content || '';
   const isCommandMessage = messageContent.startsWith('/');
@@ -342,13 +355,15 @@ async function processMessage(
 
   // After processing, if we have a sessionId, we can manage follow-ups
   if (result.sessionId) {
-    // 1. Cancel any pending follow-ups because user just responded
-    await followupStore.cancelPending(result.sessionId);
+    // 1. Cancel again if needed (usually handled early, but good for new sessions)
+    if (!session) {
+      await followupStore.cancelPending(result.sessionId);
+    }
 
     // 2. Schedule the FIRST follow-up in the sequence for the NEW current state
     // We pass -1 as currentIndex to indicate we want to start from the beginning (index 0)
     const nextState = result.sessionUpdates?.currentState || result.responses[0]?.metadata?.state || 'initial';
-    await followupStore.scheduleNext(result.sessionId, nextState as any, -1);
+    await followupStore.scheduleNext(result.sessionId, nextState, -1, result.stateConfig?.followupSequence);
   }
   
   // Send responses

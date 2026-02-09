@@ -7,21 +7,16 @@
 
 import { serve } from 'https://deno.land/std@0.177.0/http/server.ts';
 import { createSupabaseClient } from '../_shared/supabase.ts';
+import { getAllClientConfigs } from '../_shared/client-router.ts';
 import {
   createSupabaseSessionStore,
   createSupabaseMessageStore,
   createSupabaseFollowupStore,
+  createSupabaseStateMachineStore,
   createSupabaseLLMLogger,
 } from '../_shared/adapters/index.ts';
 import { createConversationEngine } from '../_shared/sales-engine.bundle.ts';
 import { createGeminiProvider } from '../_shared/sales-engine-llm.bundle.ts';
-
-interface ChannelMapping {
-  client_id: string;
-  schema_name: string;
-  channel_type: string;
-  channel_id: string;
-}
 
 interface FollowupItem {
   id: string;
@@ -31,49 +26,53 @@ interface FollowupItem {
   template_name?: string;
   template_params?: any;
   sequence_index: number;
+  followup_config_name?: string;
   status: string;
 }
 
-serve(async (req) => {
-  console.log('Processing follow-ups...');
+serve(async () => {
+  const startTime = Date.now();
+  console.log('[Follow-up Worker] Starting execution...');
   
   try {
     const supabase = createSupabaseClient();
     
-    // 1. Get all active clients/schemas
-    const { data: mappings, error: mappingError } = await supabase
-      .from('channel_mappings')
-      .select('*')
-      .eq('is_active', true);
-      
-    if (mappingError) throw mappingError;
-    if (!mappings || mappings.length === 0) {
-      console.log('No active channel mappings found.');
+    // 1. Get all active clients using the unified router
+    const clients = await getAllClientConfigs(supabase);
+    
+    if (!clients || clients.length === 0) {
+      console.log('[Follow-up Worker] No active clients found.');
       return new Response('OK', { status: 200 });
     }
     
-    // Deduplicate schemas (we might have multiple channels for same client)
-    const uniqueSchemas = [...new Set(mappings.map(m => m.schema_name))];
+    console.log(`[Follow-up Worker] Processing ${clients.length} clients`);
     
-    // 2. Process each client schema
-    for (const schemaName of uniqueSchemas) {
-      await processClientSchema(supabase, schemaName, mappings);
+    // 2. Process each client
+    for (const client of clients) {
+      const { schemaName, config: clientConfig } = client;
+      
+      try {
+        await processClientSchema(supabase, schemaName, clientConfig);
+      } catch (clientError) {
+        console.error(`[Follow-up Worker] Failed to process client ${client.clientId} (${schemaName}):`, clientError);
+      }
     }
     
+    console.log(`[Follow-up Worker] Finished in ${Date.now() - startTime}ms`);
     return new Response('OK', { status: 200 });
     
   } catch (error) {
-    console.error('Error processing follow-ups:', error);
+    console.error('[Follow-up Worker] Fatal error:', error);
     return new Response('Internal Server Error', { status: 500 });
   }
 });
 
 async function processClientSchema(
-  supabase: ReturnType<typeof createSupabaseClient>,
+  supabase: any,
   schemaName: string,
-  allMappings: ChannelMapping[]
+  clientConfig: any
 ) {
-  console.log(`Checking schema: ${schemaName}`);
+  console.log(`[Follow-up Worker] Checking schema: ${schemaName}`);
   
   // 1. Get pending items due now
   const now = new Date().toISOString();
@@ -83,10 +82,10 @@ async function processClientSchema(
     .select('*')
     .eq('status', 'pending')
     .lte('scheduled_at', now)
-    .limit(50); // Batch size
+    .limit(50);
     
   if (fetchError) {
-    console.error(`Error fetching queue for ${schemaName}:`, fetchError);
+    console.error(`[Follow-up Worker] Error fetching queue for ${schemaName}:`, fetchError);
     return;
   }
   
@@ -94,73 +93,124 @@ async function processClientSchema(
     return;
   }
   
-  console.log(`Found ${pendingItems.length} pending items in ${schemaName}`);
+  console.log(`[Follow-up Worker] Found ${pendingItems.length} pending items in ${schemaName}`);
   
   // 2. Initialize stores and engine
   const sessionStore = createSupabaseSessionStore(supabase, schemaName);
   const messageStore = createSupabaseMessageStore(supabase, schemaName);
   const followupStore = createSupabaseFollowupStore(supabase, schemaName);
+  const stateMachineStore = createSupabaseStateMachineStore(supabase, schemaName);
   const engine = createConversationEngine();
 
   // 3. Process each item
   for (const item of pendingItems) {
     try {
-      // 3.1 Get session to know where to send and current state
+      // 3.1 Get session
       const session = await sessionStore.findById(item.session_id);
       if (!session) {
         await markFailed(supabase, schemaName, item.id, 'Session not found');
         continue;
       }
 
-      // 3.2 Load client config (needed for engine and channel credentials)
-      const { data: settings } = await supabase
-        .schema(schemaName)
-        .from('settings')
-        .select('config')
-        .single();
-      
-      const clientConfig = settings?.config;
-      if (!clientConfig) {
-        await markFailed(supabase, schemaName, item.id, 'Client config not found');
-        continue;
-      }
-
-      // 3.3 Create LLM provider
+      // 3.2 Initialize LLM provider using client configuration
       const llmProvider = createGeminiProvider({
         apiKey: Deno.env.get('GOOGLE_API_KEY') || '',
-        model: clientConfig.llm.model,
+        model: clientConfig.llm?.model || 'gemini-2.5-flash',
       });
 
-      // 3.4 Generate Follow-up Content using LLM
-      console.log(`[Follow-up] Generating content for session ${session.id} (State: ${session.currentState}, Seq Index: ${item.sequence_index})`);
-      const responses = await engine.generateFollowup(session.id, {
-        sessionStore,
-        messageStore,
-        llmProvider,
-        clientConfig,
-      } as any);
+      const deps = { 
+        sessionStore, 
+        messageStore, 
+        llmProvider, 
+        clientConfig, 
+        stateMachineStore,
+        llmLogger: createSupabaseLLMLogger(supabase)
+      };
 
-      // 3.5 Send Message(s)
-      const accessToken = clientConfig.channels.whatsapp?.accessToken || Deno.env.get('WHATSAPP_ACCESS_TOKEN');
+      // 3.3 Resolve Follow-up Content (Registry vs LLM generation)
+      let responses: any[] = [];
+      let stateConfig: any = null;
+
+      if (item.followup_config_name) {
+        console.log(`[Follow-up Worker] Resolving registry config: ${item.followup_config_name}`);
+        const config = await stateMachineStore.getFollowupConfig(item.followup_config_name);
+        
+        if (config) {
+          // Resolve variables (Literal vs LLM)
+          const resolvedVariables: Array<{ key: string; value: string }> = [];
+          for (const v of config.variablesConfig) {
+            let value = '';
+            if (v.type === 'literal') {
+              value = v.value || '';
+            } else if (v.type === 'llm' && v.prompt) {
+              value = await engine.generateFollowupVariable(session.id, v.prompt, deps);
+            } else if (v.type === 'context' && v.field) {
+              value = String(session.context[v.field] || '');
+            }
+            resolvedVariables.push({ key: v.key, value });
+          }
+
+          if (config.type === 'template') {
+            responses = [{
+              type: 'template',
+              content: '', // Template fallback not strictly needed if template works
+              templateName: config.content, 
+              templateParams: resolvedVariables.map(v => v.value)
+            }];
+          } else {
+            // Text message with variable substitution
+            let body = config.content;
+            for (const { key, value } of resolvedVariables) {
+              body = body.replace(new RegExp(`{{${key}}}`, 'g'), value);
+            }
+            responses = [{ type: 'text', content: body }];
+          }
+
+          // Get state machine for next scheduling
+          const sm = await stateMachineStore.findActive(clientConfig.stateMachineName);
+          if (sm && sm.states) {
+            stateConfig = (sm.states as any)[session.currentState];
+          }
+        }
+      }
+
+      // Fallback to legacy generator if no registry config found or resolved
+      if (responses.length === 0) {
+        console.log(`[Follow-up Worker] Falling back to dynamic generator for session ${session.id}`);
+        const res = await engine.generateFollowup(session.id, deps as any);
+        responses = res.responses;
+        stateConfig = res.stateConfig;
+      }
+
+      // 3.4 Send Message(s)
+      const whatsappSecrets = clientConfig.channels?.whatsapp;
+      const accessToken = whatsappSecrets?.accessToken || Deno.env.get('WHATSAPP_ACCESS_TOKEN');
+      const phoneNumberId = whatsappSecrets?.phoneNumberId;
+
+      if (!phoneNumberId || !accessToken) {
+        console.error(`[Follow-up Worker] Missing WhatsApp credentials for ${schemaName}`);
+        await markFailed(supabase, schemaName, item.id, 'Missing WhatsApp credentials');
+        continue;
+      }
       
       for (const response of responses) {
         if (session.channelType === 'whatsapp') {
-          // Find the correct phone_number_id for this channel
-          const mapping = allMappings.find(
-            m => m.schema_name === schemaName && 
-                 m.channel_type === session.channelType && 
-                 m.channel_id === session.channelId
-          );
+          let finalResponse = response;
 
-          if (!mapping) {
-            console.error(`[Follow-up] Mapping not found for session ${session.id}`);
-            continue;
+          // 24h Rule: Force template if window closed
+          if (isMoreThan24Hours(session.lastMessageAt) && response.type === 'text') {
+            console.log(`[Follow-up Worker] 24h Window closed for ${session.id}, forcing template fallback.`);
+            finalResponse = {
+              type: 'template',
+              templateName: Deno.env.get('WHATSAPP_TPL_ESCALATION_01') || 'followup_standard',
+              templateParams: []
+            };
           }
 
           await sendWhatsAppMessage(
-            mapping.channel_id,
+            phoneNumberId,
             session.channelUserId,
-            response.content,
+            finalResponse,
             accessToken
           );
         }
@@ -168,12 +218,12 @@ async function processClientSchema(
         // Save to message history
         await messageStore.save(session.id, {
           direction: 'outbound',
-          type: 'text',
-          content: response.content,
+          type: response.type === 'template' ? 'text' : response.type,
+          content: response.type === 'template' ? `[Template: ${response.templateName}]` : response.content,
         });
       }
 
-      // 3.6 Update Queue Status for CURRENT item
+      // 3.5 Update Queue Status
       await supabase
         .schema(schemaName)
         .from('followup_queue')
@@ -183,11 +233,13 @@ async function processClientSchema(
         })
         .eq('id', item.id);
 
-      // 3.7 Schedule NEXT follow-up in the sequence
-      await followupStore.scheduleNext(session.id, session.currentState, item.sequence_index);
+      // 3.6 Schedule NEXT follow-up in sequence
+      if (stateConfig?.followupSequence) {
+        await followupStore.scheduleNext(session.id, session.currentState, item.sequence_index, stateConfig.followupSequence);
+      }
       
     } catch (err) {
-      console.error(`Failed to process item ${item.id}:`, err);
+      console.error(`[Follow-up Worker] Failed to process item ${item.id}:`, err);
       await markFailed(supabase, schemaName, item.id, String(err));
     }
   }
@@ -204,40 +256,40 @@ async function markFailed(supabase: any, schema: string, id: string, reason: str
     .eq('id', id);
 }
 
-function generateFollowupContent(item: FollowupItem, session: any): string {
-  // Registration check follow-up
-  if (item.followup_type === 'custom' && item.template_name === 'registration_check') {
-    const registrationStatus = session.registration_status;
-    
-    if (registrationStatus === 'registered') {
-      return "¡Felicidades! 🎉 Veo que completaste tu registro. ¿Ya realizaste tu primer depósito? Estoy aquí para ayudarte con cualquier duda.";
-    } else if (registrationStatus === 'link_clicked') {
-      return "Hola! 👋 Vi que abriste el enlace de registro. ¿Necesitas ayuda para completar el proceso? Estoy aquí para asistirte.";
-    } else {
-      return "Hola! 👋 ¿Pudiste revisar el enlace de registro que te envié? Si tienes alguna duda sobre el proceso, con gusto te ayudo.";
-    }
-  }
-  
-  // Simple logic for now - can be expanded with templates
-  if (item.followup_type === 'short_term') {
-    return "Hola! 👋 Sigues ahí? Avísame si tienes alguna duda.";
-  }
-  
-  if (item.followup_type === 'daily') {
-    return "Hola! Espero que estés teniendo un buen día. ¿Pudiste revisar la información sobre las cuentas 12x? Estoy aquí si necesitas ayuda para empezar. 🚀";
-  }
-  
-  return "Hola! Solo pasaba para ver si necesitas algo más. Saludos!";
-}
-
 async function sendWhatsAppMessage(
   phoneNumberId: string,
   to: string,
-  text: string,
+  message: any,
   accessToken: string
 ): Promise<void> {
   const baseUrl = Deno.env.get('WHATSAPP_API_BASE_URL') || 'https://graph.facebook.com';
   const url = `${baseUrl}/v24.0/${phoneNumberId}/messages`;
+
+  const payload: any = {
+    messaging_product: 'whatsapp',
+    recipient_type: 'individual',
+    to,
+  };
+
+  if (message.type === 'template') {
+    payload.type = 'template';
+    payload.template = {
+      name: message.templateName,
+      language: { code: 'es' }, // Default to Spanish as per business requirements
+      components: message.templateParams ? [
+        {
+          type: 'body',
+          parameters: message.templateParams.map((p: string) => ({
+            type: 'text',
+            text: p,
+          })),
+        }
+      ] : [],
+    };
+  } else {
+    payload.type = 'text';
+    payload.text = { body: message.content || message };
+  }
 
   const response = await fetch(url, {
     method: 'POST',
@@ -245,17 +297,18 @@ async function sendWhatsAppMessage(
       'Authorization': `Bearer ${accessToken}`,
       'Content-Type': 'application/json',
     },
-    body: JSON.stringify({
-      messaging_product: 'whatsapp',
-      recipient_type: 'individual',
-      to,
-      type: 'text',
-      text: { body: text },
-    }),
+    body: JSON.stringify(payload),
   });
   
   if (!response.ok) {
     const error = await response.text();
     throw new Error(`WhatsApp API error: ${response.status} - ${error}`);
   }
+}
+
+function isMoreThan24Hours(date: string | Date | undefined | null): boolean {
+  if (!date) return true;
+  const lastAt = new Date(date).getTime();
+  const now = Date.now();
+  return (now - lastAt) > (24 * 60 * 60 * 1000);
 }

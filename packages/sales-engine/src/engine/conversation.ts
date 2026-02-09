@@ -17,6 +17,7 @@ import type {
   ConversationExample,
   SessionKey,
   MessageType,
+  StateConfig,
 } from './types.js';
 
 import { substituteTemplateVariables } from './template-utils.js';
@@ -71,7 +72,19 @@ export interface ConversationEngine {
   generateFollowup(
     sessionId: string,
     deps: EngineDependencies
-  ): Promise<BotResponse[]>;
+  ): Promise<{ 
+    responses: BotResponse[];
+    stateConfig?: StateConfig;
+  }>;
+
+  /**
+   * Generate a specific dynamic variable for a follow-up
+   */
+  generateFollowupVariable(
+    sessionId: string,
+    prompt: string,
+    deps: EngineDependencies
+  ): Promise<string>;
 }
 
 /**
@@ -147,22 +160,41 @@ export function createConversationEngine(): ConversationEngine {
           throw new Error(`State machine '${clientConfig.stateMachineName}' not found`);
         }
         
-        session = await sessionStore.create(sessionKey, contact.id, stateMachineId);
+      session = await sessionStore.create(sessionKey, contact.id, stateMachineId);
       }
+
+      // 3. Initialize state machine
+      let smConfig: Record<string, StateConfig> | undefined = undefined;
+      if (deps.stateMachineStore) {
+        try {
+          const loaded = await deps.stateMachineStore.findActive(clientConfig.stateMachineName);
+          if (loaded) {
+            smConfig = loaded.states;
+          }
+        } catch (err) {
+          console.error('Failed to load state machine config:', err);
+        }
+      }
+
+      if (!smConfig) {
+        throw new Error(`State machine configuration for '${clientConfig.stateMachineName}' could not be loaded`);
+      }
+
+      const stateMachine = StateMachine.fromSession(session, smConfig);
 
       // 3. Check for System Commands (Hidden)
       const inputForSystem = message.content || message.transcription || '';
       if (inputForSystem.toLowerCase() === '/reset') {
         console.log(`[System Command] Resetting data for contact: ${session.contactId}`);
         await contactStore.delete(session.contactId);
-        return {
-          sessionId: session.id,
-          responses: [{
-            type: 'text',
-            content: '🔄 [SYSTEM] User data reset successfully. All history cleared.',
-          }],
-          // No session updates needed as session is deleted
-        };
+          return {
+            sessionId: session.id,
+            responses: [{
+              type: 'text',
+              content: '🔄 [SYSTEM] User data reset successfully. All history cleared.',
+            }],
+            stateConfig: stateMachine.getConfig(),
+          };
       }
 
       let resumeUpdates: Partial<Session> = {};
@@ -199,6 +231,7 @@ export function createConversationEngine(): ConversationEngine {
             sessionId: session.id,
             responses: [],
             sessionUpdates: { lastMessageAt: new Date() },
+            stateConfig: stateMachine.getConfig(),
           };
         }
       }
@@ -219,20 +252,6 @@ export function createConversationEngine(): ConversationEngine {
       // 5. Get conversation history
       const recentMessages = await messageStore.getRecent(session.id, 20);
       
-      // 6. Initialize state machine
-      let smConfig = undefined;
-      if (deps.stateMachineStore) {
-        try {
-          const loadedConfig = await deps.stateMachineStore.findActive(clientConfig.stateMachineName);
-          if (loadedConfig) {
-            smConfig = loadedConfig;
-          }
-        } catch (err) {
-          console.error('Failed to load state machine config:', err);
-        }
-      }
-
-      const stateMachine = StateMachine.fromSession(session, smConfig);
       const stateConfig = stateMachine.getConfig();
       
       // 7. Get relevant conversation examples (few-shot)
@@ -311,7 +330,7 @@ export function createConversationEngine(): ConversationEngine {
         }
 
         const llmLatency = Date.now() - llmStartTime;
-console.log(llmResponse.usage)
+
         // Log LLM chat call (fire and forget)
         if (llmLogger) {
           const fullInput = `${systemPrompt}\n\n${conversationHistory.map(m => `${m.role}: ${m.content}`).join('\n')}\nuser: ${currentFormattedContent}`;
@@ -416,6 +435,7 @@ console.log(llmResponse.usage)
             priority: 'immediate',
             confidence: structuredResponse.escalation.confidence,
           },
+          stateConfig: stateMachine.getConfig(),
         };
       }
       
@@ -458,7 +478,8 @@ console.log(llmResponse.usage)
               sessionUpdates: {
                 ...entryResponse.sessionUpdates,
                 ...sessionUpdates,
-              }
+              },
+              stateConfig: stateMachine.getConfig(),
             };
           }
         }
@@ -552,6 +573,7 @@ console.log(llmResponse.usage)
         sessionUpdates: finalUpdates,
         contactUpdates: Object.keys(contactUpdates).length > 0 ? contactUpdates : undefined,
         transitionReason: structuredResponse.transition?.reason,
+        stateConfig: stateMachine.getConfig(),
       };
     },
     
@@ -715,7 +737,10 @@ console.log(llmResponse.usage)
     async generateFollowup(
       sessionId: string,
       deps: EngineDependencies
-    ): Promise<BotResponse[]> {
+    ): Promise<{ 
+      responses: BotResponse[];
+      stateConfig?: StateConfig;
+    }> {
       const { 
         sessionStore, 
         messageStore, 
@@ -736,7 +761,23 @@ console.log(llmResponse.usage)
       const formattedHistory = formatConversationHistory(history);
 
       // 3. Setup State Machine
-      const machine = StateMachine.fromSession(session);
+      let smConfig: Record<string, StateConfig> | undefined = undefined;
+      if (deps.stateMachineStore) {
+        try {
+          const loaded = await deps.stateMachineStore.findActive(clientConfig.stateMachineName);
+          if (loaded) {
+            smConfig = loaded.states;
+          }
+        } catch (err) {
+          console.error('[Follow-up] Failed to load state machine config:', err);
+        }
+      }
+
+      if (!smConfig) {
+        throw new Error(`State machine configuration for '${clientConfig.stateMachineName}' could not be loaded for follow-up`);
+      }
+
+      const machine = StateMachine.fromSession(session, smConfig);
       const transitionContext = machine.buildTransitionContext();
 
       // 4. Build Prompt
@@ -760,10 +801,13 @@ console.log(llmResponse.usage)
           throw new Error('Invalid LLM response for follow-up');
         }
 
-        return structuredResponse.responses.map((content: string) => ({
-          type: 'text',
-          content
-        }));
+        return {
+          responses: structuredResponse.responses.map((content: string) => ({
+            type: 'text',
+            content
+          })),
+          stateConfig: machine.getConfig()
+        };
       } catch (error) {
         console.error('[Follow-up] LLM generation failed:', error);
         // Fallback
@@ -771,11 +815,52 @@ console.log(llmResponse.usage)
           ? '¡Hola! 👋 Seguimos aquí para ayudarte. ¿Tienes alguna duda?'
           : 'Hi! 👋 We are still here to help. Any questions?';
         
-        return [{
-          type: 'text',
-          content: fallbackMsg
-        }];
+        return {
+          responses: [{
+            type: 'text',
+            content: fallbackMsg
+          }],
+          stateConfig: machine.getConfig()
+        };
       }
+    },
+
+    async generateFollowupVariable(
+      sessionId: string,
+      prompt: string,
+      deps: EngineDependencies
+    ): Promise<string> {
+      const { sessionStore, messageStore, llmProvider } = deps;
+
+      // 1. Get Session
+      const session = await sessionStore.findById(sessionId);
+      if (!session) throw new Error(`Session ${sessionId} not found`);
+
+      // 2. Get History
+      const history = await messageStore.getRecent(sessionId, 10);
+      const formattedHistory = formatConversationHistory(history);
+
+      // 3. Build System Prompt
+      const systemPrompt = `# Role
+You are a helpful sales assistant. Your task is to generate a specific value for a variable in a follow-up message.
+
+# Variable Instruction
+${prompt}
+
+# Guidelines
+- Return ONLY the value for the variable.
+- Do NOT include any explanations or extra text.
+- Match the tone and language of the conversation.
+`;
+
+      // 4. Call LLM
+      const response = await llmProvider.generateResponse({
+        systemPrompt,
+        messages: formattedHistory,
+        temperature: 0.7,
+      });
+
+      return response.content.trim();
     },
   };
 }

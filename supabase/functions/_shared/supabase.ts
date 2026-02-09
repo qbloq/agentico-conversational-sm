@@ -28,4 +28,22 @@ export function createSupabaseClient(schema?: string): SupabaseClient {
   });
 }
 
+/**
+ * Resolve client schema name from client_id
+ */
+export async function resolveSchema(supabase: SupabaseClient, clientId: string): Promise<string | null> {
+  const { data, error } = await supabase
+    .from('client_configs')
+    .select('schema_name')
+    .eq('client_id', clientId)
+    .single();
+    
+  if (error || !data) {
+    console.error(`[resolveSchema] Error looking up schema for client ${clientId}:`, error);
+    return null;
+  }
+  
+  return data.schema_name;
+}
+
 export type { SupabaseClient };

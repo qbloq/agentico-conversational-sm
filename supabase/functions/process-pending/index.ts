@@ -21,6 +21,7 @@ import {
   createSupabaseMessageBufferStore,
   createSupabaseEscalationStore,
   createSupabaseDepositStore,
+  createSupabaseFollowupStore,
 } from '../_shared/adapters/index.ts';
 import { createConversationEngine } from '../_shared/sales-engine.bundle.ts';
 import { createGeminiProvider, createGeminiEmbeddingProvider } from '../_shared/sales-engine-llm.bundle.ts';
@@ -101,6 +102,15 @@ serve(async (req: Request) => {
             
             // Send responses via appropriate channel
             await sendResponses(result.responses, sessionKey, clientConfig);
+
+            // After successful processing, schedule the next follow-up in the sequence
+            if (result.sessionId) {
+              const engineResult = result as any;
+              const { followupStore } = deps;
+              const nextState = engineResult.sessionUpdates?.currentState || engineResult.responses[0]?.metadata?.state || 'initial';
+              console.log(`[ProcessPending] Scheduling follow-up for session ${engineResult.sessionId} in state ${nextState}`);
+              await followupStore.scheduleNext(engineResult.sessionId, nextState, -1, engineResult.stateConfig?.followupSequence);
+            }
           }
         } catch (error) {
           errors++;
@@ -160,6 +170,7 @@ function buildDependencies(
   const stateMachineStore = createSupabaseStateMachineStore(supabase, schemaName);
   const escalationStore = createSupabaseEscalationStore(supabase, schemaName);
   const depositStore = createSupabaseDepositStore(supabase, schemaName);
+  const followupStore = createSupabaseFollowupStore(supabase, schemaName);
   const llmLogger = createSupabaseLLMLogger(supabase);
   
   const llmProvider = createGeminiProvider({
@@ -205,6 +216,7 @@ function buildDependencies(
     notificationService,
     llmLogger,
     clientConfig,
+    followupStore,
   };
 }
 
@@ -257,11 +269,6 @@ async function sendWhatsAppMessage(
 ): Promise<void> {
   const baseUrl = Deno.env.get('WHATSAPP_API_BASE_URL') || 'https://graph.facebook.com';
   const url = `${baseUrl}/v24.0/${phoneNumberId}/messages`;
-
-  console.log(`[ProcessPending] Sending WhatsApp message:`);
-  console.log(`  URL: ${url}`);
-  console.log(`  To: ${to}`);
-  console.log(`  Text: ${text?.slice(0, 100)}...`);
 
   const response = await fetch(url, {
     method: 'POST',

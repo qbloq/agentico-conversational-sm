@@ -1,6 +1,6 @@
 
 import type { SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2';
-import type { StateMachineStore, ConversationState, StateConfig, StateEntryMessageConfig, BotResponse } from '@parallelo/sales-engine';
+import type { StateMachineStore, ConversationState, StateConfig, StateEntryMessageConfig, BotResponse, FollowupRegistryConfig, FollowupVariableConfig } from '@parallelo/sales-engine';
 
 interface StateMachineRow {
   id: string;
@@ -18,7 +18,7 @@ export function createSupabaseStateMachineStore(
   const table = 'state_machines';
 
   return {
-    async findByName(name: string, version?: string): Promise<Record<ConversationState, StateConfig> | null> {
+    async findByName(name: string, version?: string): Promise<{ states: Record<string, StateConfig>, initialState: string } | null> {
       let query = supabase
         .schema(schemaName)
         .from(table)
@@ -30,9 +30,9 @@ export function createSupabaseStateMachineStore(
       } else {
         query = query.eq('is_active', true);
       }
-
+      
       const { data, error } = await query.maybeSingle();
-
+      
       if (error) {
         console.error('Error fetching state machine:', error);
         return null;
@@ -41,11 +41,18 @@ export function createSupabaseStateMachineStore(
       if (!data) {
         return null;
       }
-
-      return (data as StateMachineRow).states;
+      
+      const row = data as StateMachineRow;
+      return {
+        states: row.states,
+        initialState: row.initial_state
+      };
     },
 
-    async findActive(name: string): Promise<Record<ConversationState, StateConfig> | null> {
+    async findActive(name: string): Promise<{ states: Record<string, StateConfig>, initialState: string } | null> {
+      console.log('Fetching active state machine:', name);
+      console.log('Schema name:', schemaName);
+      console.log('Table name:', table);
        const { data, error } = await supabase
         .schema(schemaName)
         .from(table)
@@ -63,7 +70,11 @@ export function createSupabaseStateMachineStore(
         return null;
       }
 
-      return (data as StateMachineRow).states;
+      const row = data as StateMachineRow;
+      return {
+        states: row.states,
+        initialState: row.initial_state
+      };
     },
 
     async getStateMachineId(name: string): Promise<string | null> {
@@ -121,6 +132,37 @@ export function createSupabaseStateMachineStore(
       }
       
       return config;
+    },
+
+    async getFollowupConfig(name: string): Promise<FollowupRegistryConfig | null> {
+      const { data, error } = await supabase
+        .schema(schemaName)
+        .from('followup_configs')
+        .select('*')
+        .eq('name', name)
+        .maybeSingle();
+
+      if (error) {
+        console.error('Error fetching follow-up config:', error);
+        return null;
+      }
+
+      if (!data) {
+        return null;
+      }
+
+      return {
+        name: data.name,
+        type: data.type as 'text' | 'template',
+        content: data.content,
+        variablesConfig: (data.variables_config as any[])?.map(v => ({
+          key: v.key,
+          type: v.type as 'literal' | 'llm' | 'context',
+          value: v.value,
+          prompt: v.prompt,
+          field: v.field
+        })) || []
+      };
     }
   };
 }
