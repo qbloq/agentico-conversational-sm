@@ -57,7 +57,7 @@ export interface StructuredLLMResponse extends LLMResponse {
     /** Whether to escalate to human agent */
     shouldEscalate: boolean;
     /** Reason for escalation */
-    reason: 'explicit_request' | 'frustration' | 'ai_uncertainty' | 'complex_issue' | 'legal_regulatory';
+    reason: 'explicit_request' | 'frustration' | 'high_value' | 'technical_issue' | 'ai_uncertainty' | 'complex_issue' | 'legal_regulatory';
     /** Confidence in escalation decision 0-1 */
     confidence: number;
     /** Brief summary for the human agent */

@@ -477,6 +477,12 @@ export interface EscalationStore {
     aiConfidence?: number;
     priority?: 'low' | 'medium' | 'high' | 'urgent';
   }): Promise<{ id: string }>;
+
+  /**
+   * Check if a session has an active escalation (open, assigned, or in_progress).
+   * Used by the engine to prevent auto-resuming while an agent is still working.
+   */
+  hasActive?(sessionId: string): Promise<boolean>;
 }
 
 export interface DepositStore {

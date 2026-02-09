@@ -32,6 +32,24 @@ const routes = [
     meta: { requiresAuth: true },
   },
   {
+    path: '/followups',
+    name: 'followups',
+    component: () => import('./views/FollowupConfigsView.vue'),
+    meta: { requiresAuth: true },
+  },
+  {
+    path: '/state-machines',
+    name: 'state-machines',
+    component: () => import('./views/StateMachinesView.vue'),
+    meta: { requiresAuth: true },
+  },
+  {
+    path: '/state-machines/:id',
+    name: 'state-editor',
+    component: () => import('./views/StateEditorView.vue'),
+    meta: { requiresAuth: true },
+  },
+  {
     path: '/profile',
     name: 'profile',
     component: () => import('./views/ProfileView.vue'),

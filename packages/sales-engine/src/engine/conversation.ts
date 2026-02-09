@@ -10,6 +10,7 @@ import type {
   EngineOutput,
   BotResponse,
   Session,
+  SessionStatus,
   Contact,
   NormalizedMessage,
   EngineDependencies,
@@ -205,8 +206,14 @@ export function createConversationEngine(): ConversationEngine {
         const lastMessageTime = session.lastMessageAt ? new Date(session.lastMessageAt).getTime() : 0;
         const hoursSinceLastMessage = (now.getTime() - lastMessageTime) / (1000 * 60 * 60);
         
-        // Resume if silent for more than 1 hour
-        if (hoursSinceLastMessage >= 1) {
+        // Check if an agent is still actively working this escalation
+        const { escalationStore } = deps;
+        const agentStillWorking = escalationStore?.hasActive 
+          ? await escalationStore.hasActive(session.id)
+          : false;
+        
+        // Resume only if silent for more than 1 hour AND no agent is actively working
+        if (hoursSinceLastMessage >= 1 && !agentStillWorking) {
           session.isEscalated = false;
           session.status = 'active';
           session.escalationReason = undefined;
@@ -281,6 +288,7 @@ export function createConversationEngine(): ConversationEngine {
       const maxAttempts = 5;
 
       while (attempts < maxAttempts && !structuredResponse) {
+        llmResponse = null;
         if (attempts > 0) {
           const delayMs = attempts * 2000;
           console.warn(`[LLM Retry] Waiting ${delayMs}ms before attempt ${attempts + 1}/${maxAttempts} for session ${session.id}`);
@@ -396,6 +404,7 @@ export function createConversationEngine(): ConversationEngine {
         
         const escalationUpdates = {
           isEscalated: true,
+          status: 'paused' as SessionStatus,
           currentState: 'escalated' as ConversationState,
           escalationReason: structuredResponse.escalation.reason,
           lastMessageAt: new Date(),
@@ -408,7 +417,7 @@ export function createConversationEngine(): ConversationEngine {
           content: escalationResponse.content,
         });
         
-        const { escalationStore } = deps;
+        const { escalationStore, followupStore } = deps;
         if (escalationStore) {
           try {
             await escalationStore.create({
@@ -420,6 +429,14 @@ export function createConversationEngine(): ConversationEngine {
             });
           } catch (error) {
             console.error('[Escalation] Failed to create escalation record:', error);
+          }
+        }
+
+        if (followupStore) {
+          try {
+            await followupStore.cancelPending(session.id);
+          } catch (error) {
+            console.error('[Escalation] Failed to cancel follow-ups:', error);
           }
         }
         
@@ -439,6 +456,80 @@ export function createConversationEngine(): ConversationEngine {
         };
       }
       
+      // 11b. Safety net: auto-escalate if LLM is uncertain but didn't explicitly escalate
+      if (structuredResponse.isUncertain && !structuredResponse.escalation?.shouldEscalate) {
+        console.log(`[Escalation] isUncertain=true without explicit escalation — triggering safety-net escalation`);
+        
+        if (clientConfig.escalation.enabled && clientConfig.escalation.notifyWhatsApp) {
+          try {
+            await notificationService.sendEscalationAlert(
+              clientConfig.escalation.notifyWhatsApp,
+              {
+                reason: 'ai_uncertainty',
+                userName: contact.fullName || contact.phone || 'Unknown User',
+                userPhone: contact.phone || sessionKey.channelUserId,
+                summary: `AI flagged uncertainty. Last message: ${currentFormattedContent.slice(0, 100)}`,
+              }
+            );
+          } catch (error) {
+            console.error('Failed to send uncertainty escalation notification:', error);
+          }
+        }
+
+        const uncertaintyUpdates = {
+          isEscalated: true,
+          status: 'paused' as SessionStatus,
+          currentState: 'escalated' as ConversationState,
+          escalationReason: 'ai_uncertainty',
+          lastMessageAt: new Date(),
+        };
+
+        const escalationResponse = createEscalationResponse({ reason: 'ai_uncertainty' }, clientConfig);
+        await messageStore.save(session.id, {
+          direction: 'outbound',
+          type: 'text',
+          content: escalationResponse.content,
+        });
+
+        const { escalationStore, followupStore } = deps;
+        if (escalationStore) {
+          try {
+            await escalationStore.create({
+              sessionId: session.id,
+              reason: 'ai_uncertainty',
+              aiSummary: `AI flagged uncertainty. Last message: ${currentFormattedContent.slice(0, 100)}`,
+              aiConfidence: 0.5,
+              priority: 'medium',
+            });
+          } catch (error) {
+            console.error('[Escalation] Failed to create uncertainty escalation record:', error);
+          }
+        }
+
+        if (followupStore) {
+          try {
+            await followupStore.cancelPending(session.id);
+          } catch (error) {
+            console.error('[Escalation] Failed to cancel follow-ups:', error);
+          }
+        }
+
+        await sessionStore.update(session.id, uncertaintyUpdates);
+
+        return {
+          sessionId: session.id,
+          responses: [escalationResponse],
+          sessionUpdates: uncertaintyUpdates,
+          escalation: {
+            shouldEscalate: true,
+            reason: 'ai_uncertainty',
+            priority: 'medium',
+            confidence: 0.5,
+          },
+          stateConfig: stateMachine.getConfig(),
+        };
+      }
+
       // 12. Evaluate state transition
       let sessionUpdates: Partial<Session> = {
         lastMessageAt: new Date(),

@@ -2,12 +2,46 @@
 import { serve } from 'https://deno.land/std@0.177.0/http/server.ts';
 import { createSupabaseClient, resolveSchema } from '../_shared/supabase.ts';
 import { createSupabaseStateMachineStore } from '../_shared/adapters/index.ts';
+import { verify } from 'https://deno.land/x/djwt@v3.0.1/mod.ts';
+
+interface AgentPayload {
+  sub: string;
+  phone: string;
+  clientSchema: string;
+  exp: number;
+}
+
+async function verifyAgent(req: Request): Promise<AgentPayload | null> {
+  const authHeader = req.headers.get('Authorization');
+  if (!authHeader?.startsWith('Bearer ')) {
+    return null;
+  }
+
+  const token = authHeader.substring(7);
+  const jwtSecret = Deno.env.get('AGENT_JWT_SECRET') || 'your-secret-key';
+
+  try {
+    const key = await crypto.subtle.importKey(
+      'raw',
+      new TextEncoder().encode(jwtSecret),
+      { name: 'HMAC', hash: 'SHA-256' },
+      false,
+      ['sign', 'verify']
+    );
+
+    const payload = await verify(token, key) as unknown as AgentPayload;
+    return payload;
+  } catch {
+    return null;
+  }
+}
 
 serve(async (req) => {
   // CORS configuration
   const corsHeaders = {
     'Access-Control-Allow-Origin': '*',
     'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+    'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
   };
 
   if (req.method === 'OPTIONS') {
@@ -16,27 +50,31 @@ serve(async (req) => {
 
   try {
     const url = new URL(req.url);
-    const clientId = url.searchParams.get('clientId');
-    
-    if (!clientId) {
-      throw new Error('Missing variable: clientId');
+    let schemaName: string | null = null;
+
+    // Auth Strategy 1: Agent JWT (from Human Agent App)
+    const agent = await verifyAgent(req);
+    if (agent) {
+      schemaName = agent.clientSchema;
     }
 
-    const publicClient = createSupabaseClient(); // Default to public
-    const schemaName = await resolveSchema(publicClient, clientId);
+    // Auth Strategy 2: clientId query param (legacy/internal)
+    if (!schemaName) {
+      const clientId = url.searchParams.get('clientId');
+      if (clientId) {
+        const publicClient = createSupabaseClient();
+        schemaName = await resolveSchema(publicClient, clientId);
+      }
+    }
 
     if (!schemaName) {
-      throw new Error(`Client not found or schema not resolved for ID: ${clientId}`);
+      return new Response(
+        JSON.stringify({ error: 'Unauthorized or missing clientId' }),
+        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
     }
 
     const supabase = createSupabaseClient(schemaName);
-    // Use the schema from the request or default. 
-    // In production, this should probably come from an API key or auth token claim.
-    // For now, we'll use a query param 'schema' or default to primary schema
-    
-    // Check authentication - for now we rely on Supabase Service Role Key protection
-    // ensuring this function is only callable by authorized clients (or if anon is allowed via RLS which we set up)
-
     const table = 'state_machines';
 
     // GET: List or Fetch State Machine
@@ -196,8 +234,10 @@ serve(async (req) => {
 
   } catch (error) {
     console.error('API Error:', error);
-    return new Response(JSON.stringify({ error: error.message }), { 
-      status: 500,
+    const message = error instanceof Error ? error.message : String(error);
+    const isValidation = message.startsWith('Missing required');
+    return new Response(JSON.stringify({ error: message }), { 
+      status: isValidation ? 400 : 500,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' }
     });
   }

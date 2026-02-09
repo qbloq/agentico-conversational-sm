@@ -21,6 +21,8 @@ export const ConversationResponseSchema = z.object({
     reason: z.enum([
       "explicit_request", 
       "frustration", 
+      "high_value",
+      "technical_issue",
       "ai_uncertainty", 
       "complex_issue", 
       "legal_regulatory"

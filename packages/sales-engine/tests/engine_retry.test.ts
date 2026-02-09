@@ -30,6 +30,7 @@ const mockContact: Contact = {
 const mockSession: Session = {
   id: 'session-1',
   contactId: 'contact-1',
+  stateMachineId: 'sm-1',
   channelType: 'whatsapp',
   channelId: 'phone-123',
   channelUserId: 'wa-user-456',
@@ -39,6 +40,27 @@ const mockSession: Session = {
   isEscalated: false,
   createdAt: new Date(),
   updatedAt: new Date(),
+};
+
+const mockStateConfig = {
+  initial: {
+    state: 'initial',
+    objective: 'Greet the user',
+    description: 'Initial greeting state',
+    completionSignals: ['user shows interest'],
+    ragCategories: ['general'],
+    allowedTransitions: ['escalated'],
+    transitionGuidance: { escalated: 'When escalation needed' },
+  },
+  escalated: {
+    state: 'escalated',
+    objective: 'Session handed to human agent',
+    description: 'Escalated to human',
+    completionSignals: [],
+    ragCategories: [],
+    allowedTransitions: ['initial'],
+    transitionGuidance: { initial: 'When agent resolves' },
+  },
 };
 
 function createMockDeps(): EngineDependencies {
@@ -57,6 +79,13 @@ function createMockDeps(): EngineDependencies {
     messageStore: {
       getRecent: vi.fn().mockResolvedValue([]),
       save: vi.fn().mockResolvedValue({} as Message),
+    } as any,
+    stateMachineStore: {
+      findByName: vi.fn().mockResolvedValue({ states: mockStateConfig, initialState: 'initial' }),
+      findActive: vi.fn().mockResolvedValue({ states: mockStateConfig, initialState: 'initial' }),
+      getStateMachineId: vi.fn().mockResolvedValue('sm-1'),
+      getFollowupConfig: vi.fn().mockResolvedValue(null),
+      getStateEntryMessages: vi.fn().mockResolvedValue(null),
     } as any,
     llmProvider: {
       name: 'mock',
@@ -79,6 +108,7 @@ function createMockDeps(): EngineDependencies {
     } as any,
     clientConfig: {
       clientId: 'tag_markets',
+      stateMachineName: 'tag_markets_v1',
       llm: {
         provider: 'gemini',
         model: 'gemini-2.0-flash',
@@ -111,6 +141,7 @@ describe('ConversationEngine Retry Logic', () => {
   };
 
   it('should retry when LLM returns malformed JSON and succeed on second attempt', async () => {
+    vi.useFakeTimers();
     const engine = createConversationEngine();
     const deps = createMockDeps();
     
@@ -123,22 +154,29 @@ describe('ConversationEngine Retry Logic', () => {
         finishReason: 'stop',
       })
       .mockResolvedValueOnce({
-        content: '```json\n{"response": "Valid JSON response", "transition": {"to": "initial", "reason": "test", "confidence": 0.9}}\n```',
+        content: '```json\n{"responses": ["Valid JSON response", "Second message"], "transition": {"to": "initial", "reason": "test", "confidence": 0.9}}\n```',
         usage: { promptTokens: 100, completionTokens: 50, totalTokens: 150 },
         finishReason: 'stop',
       });
     
-    const result = await engine.processMessage({
+    const resultPromise = engine.processMessage({
       sessionKey,
       message,
       deps,
     });
+
+    // Advance timers to skip retry delays
+    await vi.advanceTimersByTimeAsync(30000);
+    
+    const result = await resultPromise;
     
     expect(deps.llmProvider.generateResponse).toHaveBeenCalledTimes(2);
     expect(result.responses[0].content).toBe('Valid JSON response');
+    vi.useRealTimers();
   });
 
-  it('should fail after 3 attempts if LLM consistently returns malformed JSON', async () => {
+  it('should fail after 5 attempts if LLM consistently returns malformed JSON', async () => {
+    vi.useFakeTimers();
     const engine = createConversationEngine();
     const deps = createMockDeps();
     
@@ -148,13 +186,20 @@ describe('ConversationEngine Retry Logic', () => {
       finishReason: 'stop',
     });
     
-    const result = await engine.processMessage({
+    const resultPromise = engine.processMessage({
       sessionKey,
       message,
       deps,
     });
+
+    // Advance timers to skip retry delays
+    await vi.advanceTimersByTimeAsync(30000);
     
-    expect(deps.llmProvider.generateResponse).toHaveBeenCalledTimes(3);
-    expect(result.responses[0].content).toContain('dificultades técnicas');
+    const result = await resultPromise;
+    
+    // With the fix, generateResponse is called on every retry attempt
+    expect(deps.llmProvider.generateResponse).toHaveBeenCalledTimes(5);
+    expect(result.responses[0].content).toBe('Dame un momento por favor ...');
+    vi.useRealTimers();
   });
 });

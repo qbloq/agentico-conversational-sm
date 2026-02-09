@@ -388,3 +388,147 @@ export async function deletePushSubscription(
     body: JSON.stringify({ subscription }),
   });
 }
+
+// =============================================================================
+// Followup Configs API
+// =============================================================================
+
+export interface FollowupVariableConfig {
+  key: string;
+  type: 'literal' | 'llm' | 'context';
+  value?: string;
+  prompt?: string;
+  field?: string;
+}
+
+export interface FollowupConfig {
+  name: string;
+  type: 'text' | 'template';
+  content: string;
+  variables_config: FollowupVariableConfig[];
+  created_at?: string;
+  updated_at?: string;
+}
+
+export async function listFollowupConfigs(): Promise<FollowupConfig[]> {
+  return request('/manage-followup-configs');
+}
+
+export async function getFollowupConfig(name: string): Promise<FollowupConfig> {
+  return request(`/manage-followup-configs?name=${encodeURIComponent(name)}`);
+}
+
+export async function upsertFollowupConfig(
+  config: Omit<FollowupConfig, 'created_at' | 'updated_at'>
+): Promise<FollowupConfig> {
+  return request('/manage-followup-configs', {
+    method: 'POST',
+    body: JSON.stringify(config),
+  });
+}
+
+export async function deleteFollowupConfig(name: string): Promise<{ success: boolean }> {
+  return request(`/manage-followup-configs?name=${encodeURIComponent(name)}`, {
+    method: 'DELETE',
+  });
+}
+
+// =============================================================================
+// Followup Queue API
+// =============================================================================
+
+export interface FollowupQueueItem {
+  id: string;
+  session_id: string;
+  scheduled_at: string;
+  followup_type: string | null;
+  template_name: string | null;
+  template_params: Record<string, unknown> | null;
+  status: 'pending' | 'sent' | 'cancelled' | 'failed';
+  sent_at: string | null;
+  error_message: string | null;
+  created_at: string;
+  sessions: {
+    contact_id: string;
+    current_state: string;
+    contacts: {
+      phone: string;
+      full_name: string | null;
+    };
+  };
+}
+
+export async function listFollowupQueue(
+  options?: { status?: string; sessionId?: string }
+): Promise<FollowupQueueItem[]> {
+  const params = new URLSearchParams({ resource: 'queue' });
+  if (options?.status) params.set('status', options.status);
+  if (options?.sessionId) params.set('sessionId', options.sessionId);
+  return request(`/manage-followup-configs?${params.toString()}`);
+}
+
+export async function cancelFollowupQueueItem(id: string): Promise<FollowupQueueItem> {
+  return request(`/manage-followup-configs?resource=queue&id=${encodeURIComponent(id)}`, {
+    method: 'DELETE',
+  });
+}
+
+export async function cancelSessionFollowups(sessionId: string): Promise<{ cancelled: number }> {
+  return request(`/manage-followup-configs?resource=queue&sessionId=${encodeURIComponent(sessionId)}`, {
+    method: 'DELETE',
+  });
+}
+
+// =============================================================================
+// State Machines API
+// =============================================================================
+
+export interface FollowupSequenceItem {
+  interval: string;
+  configName: string;
+}
+
+export interface StateConfig {
+  state: string;
+  objective: string;
+  description: string;
+  completionSignals: string[];
+  ragCategories: string[];
+  allowedTransitions: string[];
+  transitionGuidance: Record<string, string>;
+  maxMessages?: number;
+  followupSequence?: FollowupSequenceItem[];
+}
+
+export interface StateMachineSummary {
+  id: string;
+  name: string;
+  version: string;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface StateMachine extends StateMachineSummary {
+  initial_state: string;
+  states: Record<string, StateConfig>;
+  visualization?: string;
+  knowledgeBaseIds?: string[];
+}
+
+export async function listStateMachines(): Promise<StateMachineSummary[]> {
+  return request('/manage-state-machines');
+}
+
+export async function getStateMachine(id: string): Promise<StateMachine> {
+  return request(`/manage-state-machines?id=${encodeURIComponent(id)}`);
+}
+
+export async function saveStateMachine(
+  machine: Pick<StateMachine, 'id' | 'name' | 'version' | 'initial_state' | 'states' | 'visualization'>
+): Promise<StateMachine> {
+  return request('/manage-state-machines', {
+    method: 'POST',
+    body: JSON.stringify(machine),
+  });
+}

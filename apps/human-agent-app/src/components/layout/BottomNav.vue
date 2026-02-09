@@ -12,6 +12,8 @@ const escalations = useEscalationsStore();
 const tabs = [
   { name: 'Escalations', route: '/', icon: 'bell' },
   { name: 'All Chats', route: '/chats', icon: 'chat' },
+  { name: 'Follow-ups', route: '/followups', icon: 'clock' },
+  { name: 'States', route: '/state-machines', icon: 'cpu' },
   { name: 'Profile', route: '/profile', icon: 'user' },
 ];
 
@@ -63,6 +65,22 @@ function navigate(tabRoute: string) {
           <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" 
               d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+          </svg>
+        </template>
+
+        <!-- Clock Icon (Follow-ups) -->
+        <template v-else-if="tab.icon === 'clock'">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" 
+              d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+          </svg>
+        </template>
+
+        <!-- CPU Icon (State Machines) -->
+        <template v-else-if="tab.icon === 'cpu'">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" 
+              d="M9 3v2m6-2v2M9 19v2m6-2v2M5 9H3m2 6H3m18-6h-2m2 6h-2M7 19h10a2 2 0 002-2V7a2 2 0 00-2-2H7a2 2 0 00-2 2v10a2 2 0 002 2zM9 9h6v6H9V9z" />
           </svg>
         </template>
 

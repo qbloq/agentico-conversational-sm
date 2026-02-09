@@ -61,5 +61,18 @@ export function createSupabaseEscalationStore(
 
       return { id: escalation.id };
     },
+
+    async hasActive(sessionId: string): Promise<boolean> {
+      const { data } = await supabase
+        .schema(schemaName)
+        .from('escalations')
+        .select('id')
+        .eq('session_id', sessionId)
+        .in('status', ['open', 'assigned', 'in_progress'])
+        .limit(1)
+        .maybeSingle();
+
+      return !!data;
+    },
   };
 }

@@ -36,6 +36,8 @@ const getReasonLabel = (reason: string) => {
   const labels: Record<string, string> = {
     explicit_request: 'Agent Requested',
     frustration: 'User Frustrated',
+    high_value: 'High Value Client',
+    technical_issue: 'Technical Issue',
     ai_uncertainty: 'AI Uncertain',
     complex_issue: 'Complex Issue',
     legal_regulatory: 'Legal/Compliance',

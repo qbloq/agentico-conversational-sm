@@ -176,6 +176,16 @@ serve(async (req: Request) => {
 
     const session = escalation.session;
 
+    // Load client config for dynamic bucket and WhatsApp token
+    const { data: clientConfig } = await supabase
+      .from('client_configs')
+      .select('storage_bucket')
+      .eq('schema_name', agent.clientSchema)
+      .eq('is_active', true)
+      .single();
+
+    const storageBucket = clientConfig?.storage_bucket || `media-${agent.clientSchema.replace('client_', '')}`;
+
     // Handle image/video upload if present
     let mediaUrl: string | undefined;
     const mediaFile = imageFile || videoFile;
@@ -199,7 +209,7 @@ serve(async (req: Request) => {
         
         const { data: uploadData, error: uploadError } = await supabase
           .storage
-          .from('media-tag-markets') // Using existing bucket
+          .from(storageBucket)
           .upload(path, await mediaFile.arrayBuffer(), {
             contentType: mediaFile.type,
             upsert: false,
@@ -221,7 +231,7 @@ serve(async (req: Request) => {
 
         // Get public URL
         const { data: urlData } = supabase.storage
-          .from('media-tag-markets')
+          .from(storageBucket)
           .getPublicUrl(path);
         
         mediaUrl = urlData.publicUrl;
@@ -370,8 +380,18 @@ async function sendWhatsAppMessage(
   replyToMessageId?: string,
   mediaType?: 'image' | 'video'
 ): Promise<boolean> {
-  // Get access token based on client (for now use env var)
-  const accessToken = Deno.env.get('TAG_WHATSAPP_ACCESS_TOKEN');
+  // Get access token from client secrets, fallback to env var
+  const supabaseForSecrets = createClient(
+    Deno.env.get('SUPABASE_URL') || '',
+    Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || ''
+  );
+  const { data: secretRow } = await supabaseForSecrets
+    .from('client_secrets')
+    .select('secrets')
+    .eq('client_id', clientSchema.replace('client_', ''))
+    .eq('channel_type', 'whatsapp')
+    .single();
+  const accessToken = secretRow?.secrets?.access_token || Deno.env.get('TAG_WHATSAPP_ACCESS_TOKEN');
 
   if (!accessToken) {
     console.error('WhatsApp access token not configured');
