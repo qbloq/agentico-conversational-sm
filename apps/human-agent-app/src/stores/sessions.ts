@@ -6,7 +6,7 @@
 import { defineStore } from 'pinia';
 import { ref, computed } from 'vue';
 import type { RealtimeChannel } from '@supabase/supabase-js';
-import { supabase, CLIENT_SCHEMA } from '@/api/supabase';
+import { supabase } from '@/api/supabase';
 import {
   listSessions as apiListSessions,
   getSession as apiGetSession,
@@ -15,6 +15,7 @@ import {
   type SessionDetail,
   type Message,
 } from '@/api/client';
+import { useAuthStore } from './auth';
 
 export type { SessionSummary, SessionDetail };
 
@@ -51,7 +52,8 @@ export const useSessionsStore = defineStore('sessions', () => {
     error.value = null;
 
     try {
-      const result = await apiListSessions();
+      const auth = useAuthStore();
+      const result = await apiListSessions(auth.activeClientId);
       sessions.value = result.sessions;
       return true;
     } catch (e) {
@@ -111,7 +113,7 @@ export const useSessionsStore = defineStore('sessions', () => {
         'postgres_changes',
         {
           event: 'INSERT',
-          schema: CLIENT_SCHEMA,
+          schema: useAuthStore().clientSchema,
           table: 'messages',
           filter: `session_id=eq.${sessionId}`,
         },

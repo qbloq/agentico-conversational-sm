@@ -89,6 +89,26 @@ Deno.serve(async (req: Request) => {
         });
       }
 
+      // GET ?action=agents&schema={schemaName} — list human agents with their allowed_client_ids
+      if (action === 'agents') {
+        const schema = url.searchParams.get('schema');
+        if (!schema) {
+          return new Response(
+            JSON.stringify({ error: 'Missing schema parameter' }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+        const { data, error } = await supabase
+          .schema(schema)
+          .from('human_agents')
+          .select('id, phone, first_name, last_name, email, is_active, allowed_client_ids, created_at')
+          .order('first_name', { ascending: true });
+        if (error) throw error;
+        return new Response(JSON.stringify(data), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+
       // GET ?action=state-machines&schema={schemaName} — list active state machines
       if (action === 'state-machines') {
         const schema = url.searchParams.get('schema');
@@ -169,6 +189,31 @@ Deno.serve(async (req: Request) => {
         const { data, error } = await supabase.storage.createBucket(name, { public: true });
         if (error) throw error;
         return new Response(JSON.stringify(data), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+
+      // POST { action: 'update-agent-clients', schema, agentId, allowedClientIds }
+      if (action === 'update-agent-clients') {
+        const { schema, agentId, allowedClientIds } = body;
+        if (!schema || !agentId) {
+          return new Response(
+            JSON.stringify({ error: 'Missing schema or agentId' }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+        const { data: updated, error: updateErr } = await supabase
+          .schema(schema)
+          .from('human_agents')
+          .update({
+            allowed_client_ids: allowedClientIds || null,
+            updated_at: new Date().toISOString(),
+          })
+          .eq('id', agentId)
+          .select('id, phone, first_name, last_name, allowed_client_ids')
+          .single();
+        if (updateErr) throw updateErr;
+        return new Response(JSON.stringify({ success: true, agent: updated }), {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         });
       }

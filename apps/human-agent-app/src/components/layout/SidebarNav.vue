@@ -3,14 +3,35 @@
  * SidebarNav - Desktop sidebar navigation
  */
 
+import { ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { useEscalationsStore } from '@/stores/escalations';
+import { useSessionsStore } from '@/stores/sessions';
 import { useAuthStore } from '@/stores/auth';
 
 const route = useRoute();
 const router = useRouter();
 const escalations = useEscalationsStore();
+const sessions = useSessionsStore();
 const auth = useAuthStore();
+
+const clientDropdownOpen = ref(false);
+
+function handleClientSwitch(clientId: string) {
+  if (clientId === auth.activeClientId) {
+    clientDropdownOpen.value = false;
+    return;
+  }
+  auth.switchClient(clientId);
+  clientDropdownOpen.value = false;
+  // Reload data for the new client
+  escalations.fetchEscalations();
+  sessions.fetchSessions();
+  // Navigate to home if in a detail view
+  if (route.name === 'chat' || route.name === 'conversation') {
+    router.push('/');
+  }
+}
 
 const navItems = [
   { name: 'Escalations', route: '/', icon: 'bell' },
@@ -18,6 +39,7 @@ const navItems = [
   { name: 'Follow-ups', route: '/followups', icon: 'clock' },
   { name: 'State Machines', route: '/state-machines', icon: 'cpu' },
   { name: 'Clients', route: '/clients', icon: 'clients' },
+  { name: 'Agents', route: '/agents', icon: 'agents' },
 ];
 
 const isActive = (itemRoute: string) => {
@@ -37,7 +59,7 @@ function navigate(itemRoute: string) {
 <template>
   <div class="h-full flex flex-col">
     <!-- Header / Branding -->
-    <div class="flex-shrink-0 h-16 flex items-center px-6 border-b border-surface-200 dark:border-surface-700">
+    <div class="flex-shrink-0 flex items-center px-6 h-16 border-b border-surface-200 dark:border-surface-700">
       <div class="flex items-center gap-3">
         <div class="w-8 h-8 rounded-lg bg-gradient-to-br from-accent-500 to-accent-600 flex items-center justify-center">
           <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -46,6 +68,62 @@ function navigate(itemRoute: string) {
           </svg>
         </div>
         <span class="font-semibold text-surface-900 dark:text-white text-lg">Agent Hub</span>
+      </div>
+    </div>
+
+    <!-- Client Switcher -->
+    <div v-if="auth.availableClients.length > 0" class="flex-shrink-0 px-3 py-2 border-b border-surface-200 dark:border-surface-700">
+      <div class="relative">
+        <button
+          @click="clientDropdownOpen = !clientDropdownOpen"
+          class="w-full flex items-center gap-2 px-3 py-2 rounded-lg bg-surface-100 dark:bg-surface-800 hover:bg-surface-200 dark:hover:bg-surface-700 transition-colors text-left"
+        >
+          <div class="w-6 h-6 rounded bg-primary-600/20 flex items-center justify-center flex-shrink-0">
+            <svg class="w-3.5 h-3.5 text-primary-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" 
+                d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+            </svg>
+          </div>
+          <div class="flex-1 min-w-0">
+            <p class="text-sm font-medium text-surface-900 dark:text-white truncate">
+              {{ auth.activeClient?.business_name || 'Select Client' }}
+            </p>
+          </div>
+          <svg 
+            v-if="auth.hasMultipleClients"
+            :class="['w-4 h-4 text-surface-400 transition-transform', clientDropdownOpen ? 'rotate-180' : '']"
+            fill="none" stroke="currentColor" viewBox="0 0 24 24"
+          >
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+          </svg>
+        </button>
+
+        <!-- Dropdown -->
+        <div 
+          v-if="clientDropdownOpen && auth.hasMultipleClients"
+          class="absolute z-50 mt-1 left-0 right-0 bg-white dark:bg-surface-800 border border-surface-200 dark:border-surface-700 rounded-lg shadow-lg overflow-hidden"
+        >
+          <button
+            v-for="client in auth.availableClients"
+            :key="client.client_id"
+            @click="handleClientSwitch(client.client_id)"
+            :class="[
+              'w-full flex items-center gap-2 px-3 py-2.5 text-left text-sm transition-colors',
+              client.client_id === auth.activeClientId
+                ? 'bg-accent-600/10 text-accent-500'
+                : 'text-surface-700 dark:text-surface-300 hover:bg-surface-100 dark:hover:bg-surface-700'
+            ]"
+          >
+            <svg 
+              v-if="client.client_id === auth.activeClientId"
+              class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"
+            >
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+            </svg>
+            <div v-else class="w-4 h-4 flex-shrink-0"></div>
+            <span class="truncate">{{ client.business_name }}</span>
+          </button>
+        </div>
       </div>
     </div>
 
@@ -107,6 +185,14 @@ function navigate(itemRoute: string) {
           <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" 
               d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+          </svg>
+        </template>
+
+        <!-- Users Icon (Agents) -->
+        <template v-else-if="item.icon === 'agents'">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" 
+              d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
           </svg>
         </template>
 

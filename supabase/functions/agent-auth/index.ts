@@ -35,6 +35,8 @@ serve(async (req: Request) => {
         return await handleVerifyOtp(req);
       case 'complete-profile':
         return await handleCompleteProfile(req);
+      case 'available-clients':
+        return await handleAvailableClients(req);
       default:
         return new Response(
           JSON.stringify({ error: 'Unknown endpoint' }),
@@ -194,6 +196,9 @@ async function handleVerifyOtp(req: Request): Promise<Response> {
     .update({ last_login_at: new Date().toISOString() })
     .eq('id', agent.id);
 
+  // Fetch available clients for this agent
+  const availableClients = await getAvailableClients(supabase, clientSchema, agent.allowed_client_ids);
+
   // Generate JWT
   const jwtSecret = Deno.env.get('AGENT_JWT_SECRET') || 'your-secret-key';
   const key = await crypto.subtle.importKey(
@@ -227,6 +232,7 @@ async function handleVerifyOtp(req: Request): Promise<Response> {
         email: agent.email,
       },
       isFirstLogin: !agent.first_name,
+      availableClients,
     }),
     { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
   );
@@ -295,6 +301,99 @@ async function handleCompleteProfile(req: Request): Promise<Response> {
       { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   }
+}
+
+/**
+ * GET /agent-auth/available-clients
+ * Returns the available clients for the authenticated agent (uses JWT).
+ */
+async function handleAvailableClients(req: Request): Promise<Response> {
+  const authHeader = req.headers.get('Authorization');
+  if (!authHeader) {
+    return new Response(
+      JSON.stringify({ error: 'Missing authorization header' }),
+      { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+    );
+  }
+
+  try {
+    const token = authHeader.replace('Bearer ', '');
+    const jwtSecret = Deno.env.get('AGENT_JWT_SECRET') || 'your-secret-key';
+    const key = await crypto.subtle.importKey(
+      'raw',
+      new TextEncoder().encode(jwtSecret),
+      { name: 'HMAC', hash: 'SHA-256' },
+      false,
+      ['sign', 'verify']
+    );
+
+    const payload = await verify(token, key);
+    const clientSchema = payload.clientSchema as string;
+    const agentId = payload.sub as string;
+
+    const supabase = createSupabaseClient();
+
+    // Get agent's allowed_client_ids
+    const { data: agent, error: agentError } = await supabase
+      .schema(clientSchema)
+      .from('human_agents')
+      .select('allowed_client_ids')
+      .eq('id', agentId)
+      .single();
+
+    if (agentError || !agent) {
+      return new Response(
+        JSON.stringify({ error: 'Agent not found' }),
+        { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    const availableClients = await getAvailableClients(supabase, clientSchema, agent.allowed_client_ids);
+
+    return new Response(
+      JSON.stringify({ availableClients }),
+      { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+    );
+  } catch (error) {
+    return new Response(
+      JSON.stringify({ error: 'Invalid token' }),
+      { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+    );
+  }
+}
+
+/**
+ * Get available clients for an agent based on their allowed_client_ids
+ * If allowed_client_ids is null/empty, returns all active clients in the schema.
+ */
+async function getAvailableClients(
+  supabase: ReturnType<typeof createSupabaseClient>,
+  clientSchema: string,
+  allowedClientIds: string[] | null
+): Promise<Array<{ client_id: string; business_name: string; channel_type: string | null; channel_id: string | null }>> {
+  let query = supabase
+    .from('client_configs')
+    .select('client_id, schema_name, channel_type, channel_id, config, is_active')
+    .eq('schema_name', clientSchema)
+    .eq('is_active', true);
+
+  if (allowedClientIds && allowedClientIds.length > 0) {
+    query = query.in('client_id', allowedClientIds);
+  }
+
+  const { data: clients, error } = await query;
+
+  if (error) {
+    console.error('Failed to fetch available clients:', error);
+    return [];
+  }
+
+  return (clients || []).map((c: any) => ({
+    client_id: c.client_id,
+    business_name: c.config?.business?.name || c.client_id,
+    channel_type: c.channel_type,
+    channel_id: c.channel_id,
+  }));
 }
 
 /**

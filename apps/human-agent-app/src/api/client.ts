@@ -62,6 +62,13 @@ export interface RequestOtpResponse {
   isFirstLogin: boolean;
 }
 
+export interface AvailableClient {
+  client_id: string;
+  business_name: string;
+  channel_type: string | null;
+  channel_id: string | null;
+}
+
 export interface VerifyOtpResponse {
   success: boolean;
   token: string;
@@ -73,6 +80,11 @@ export interface VerifyOtpResponse {
     email: string | null;
   };
   isFirstLogin: boolean;
+  availableClients?: AvailableClient[];
+}
+
+export async function fetchAvailableClients(): Promise<{ availableClients: AvailableClient[] }> {
+  return request('/agent-auth/available-clients');
 }
 
 export async function requestOtp(phone: string, clientSchema: string): Promise<RequestOtpResponse> {
@@ -162,8 +174,9 @@ export interface EscalationDetail extends Escalation {
   };
 }
 
-export async function listEscalations(): Promise<{ escalations: Escalation[] }> {
-  return request('/manage-escalations/escalations');
+export async function listEscalations(clientId?: string | null): Promise<{ escalations: Escalation[] }> {
+  const params = clientId ? `?clientId=${encodeURIComponent(clientId)}` : '';
+  return request(`/manage-escalations/escalations${params}`);
 }
 
 export async function getEscalation(id: string): Promise<{
@@ -347,8 +360,9 @@ export interface SessionDetail extends SessionSummary {
   } | null;
 }
 
-export async function listSessions(): Promise<{ sessions: SessionSummary[] }> {
-  return request('/manage-escalations/sessions');
+export async function listSessions(clientId?: string | null): Promise<{ sessions: SessionSummary[] }> {
+  const params = clientId ? `?clientId=${encodeURIComponent(clientId)}` : '';
+  return request(`/manage-escalations/sessions${params}`);
 }
 
 export async function getSession(id: string): Promise<{
@@ -621,4 +635,39 @@ export async function createBucket(name: string): Promise<StorageBucket> {
 
 export async function listTenantStateMachines(schema: string): Promise<StateMachineOption[]> {
   return request(`/manage-clients?action=state-machines&schema=${encodeURIComponent(schema)}`);
+}
+
+// =============================================================================
+// Agents API (for admin management of agent-client access)
+// =============================================================================
+
+export interface HumanAgent {
+  id: string;
+  phone: string;
+  first_name: string | null;
+  last_name: string | null;
+  email: string | null;
+  is_active: boolean;
+  allowed_client_ids: string[] | null;
+  created_at: string;
+}
+
+export async function listAgents(schema: string): Promise<HumanAgent[]> {
+  return request(`/manage-clients?action=agents&schema=${encodeURIComponent(schema)}`);
+}
+
+export async function updateAgentClients(
+  schema: string,
+  agentId: string,
+  allowedClientIds: string[] | null
+): Promise<{ success: boolean; agent: HumanAgent }> {
+  return request('/manage-clients', {
+    method: 'POST',
+    body: JSON.stringify({
+      action: 'update-agent-clients',
+      schema,
+      agentId,
+      allowedClientIds,
+    }),
+  });
 }

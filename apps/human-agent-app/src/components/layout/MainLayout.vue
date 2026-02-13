@@ -5,14 +5,37 @@
  * Mobile: Content + bottom tabs
  * Desktop: Sidebar + content (master-detail)
  */
-import { computed, onMounted } from 'vue';
-import { useRoute } from 'vue-router';
+import { ref, computed, onMounted } from 'vue';
+import { useRoute, useRouter } from 'vue-router';
 import BottomNav from './BottomNav.vue';
 import SidebarNav from './SidebarNav.vue';
 import { useNotificationStore } from '@/stores/notifications';
+import { useAuthStore } from '@/stores/auth';
+import { useEscalationsStore } from '@/stores/escalations';
+import { useSessionsStore } from '@/stores/sessions';
 
 const route = useRoute();
+const router = useRouter();
 const notificationStore = useNotificationStore();
+const auth = useAuthStore();
+const escalations = useEscalationsStore();
+const sessions = useSessionsStore();
+
+const mobileClientDropdownOpen = ref(false);
+
+function handleMobileClientSwitch(clientId: string) {
+  if (clientId === auth.activeClientId) {
+    mobileClientDropdownOpen.value = false;
+    return;
+  }
+  auth.switchClient(clientId);
+  mobileClientDropdownOpen.value = false;
+  escalations.fetchEscalations();
+  sessions.fetchSessions();
+  if (route.name === 'chat' || route.name === 'conversation') {
+    router.push('/');
+  }
+}
 
 // Routes that shouldn't show navigation (login, full-screen chat on mobile)
 const hideNav = computed(() => {
@@ -63,6 +86,59 @@ onMounted(() => {
         >
           {{ notificationStore.loading ? 'Enabling...' : 'Enable Notifications' }}
         </button>
+      </div>
+    </div>
+
+    <!-- Mobile Client Switcher (hidden on desktop) -->
+    <div 
+      v-if="!hideNav && !isDetailView && auth.availableClients.length > 1"
+      class="lg:hidden flex-shrink-0 border-b border-surface-200 dark:border-surface-700 bg-white dark:bg-surface-800"
+    >
+      <div class="relative px-3 py-2">
+        <button
+          @click="mobileClientDropdownOpen = !mobileClientDropdownOpen"
+          class="w-full flex items-center gap-2 px-3 py-1.5 rounded-lg bg-surface-100 dark:bg-surface-700 text-left"
+        >
+          <svg class="w-4 h-4 text-primary-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" 
+              d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+          </svg>
+          <span class="flex-1 text-sm font-medium text-surface-900 dark:text-white truncate">
+            {{ auth.activeClient?.business_name || 'Select Client' }}
+          </span>
+          <svg 
+            :class="['w-4 h-4 text-surface-400 transition-transform', mobileClientDropdownOpen ? 'rotate-180' : '']"
+            fill="none" stroke="currentColor" viewBox="0 0 24 24"
+          >
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+          </svg>
+        </button>
+
+        <div 
+          v-if="mobileClientDropdownOpen"
+          class="absolute z-50 mt-1 left-3 right-3 bg-white dark:bg-surface-800 border border-surface-200 dark:border-surface-700 rounded-lg shadow-lg overflow-hidden"
+        >
+          <button
+            v-for="client in auth.availableClients"
+            :key="client.client_id"
+            @click="handleMobileClientSwitch(client.client_id)"
+            :class="[
+              'w-full flex items-center gap-2 px-3 py-2.5 text-left text-sm transition-colors',
+              client.client_id === auth.activeClientId
+                ? 'bg-accent-600/10 text-accent-500'
+                : 'text-surface-700 dark:text-surface-300 hover:bg-surface-100 dark:hover:bg-surface-700'
+            ]"
+          >
+            <svg 
+              v-if="client.client_id === auth.activeClientId"
+              class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"
+            >
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+            </svg>
+            <div v-else class="w-4 h-4 flex-shrink-0"></div>
+            <span class="truncate">{{ client.business_name }}</span>
+          </button>
+        </div>
       </div>
     </div>
 

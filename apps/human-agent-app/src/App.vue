@@ -20,6 +20,11 @@ onMounted(() => {
     auth.logout();
     router.push({ name: 'login' });
   });
+
+  // Refresh available clients on app load for existing sessions
+  if (auth.isAuthenticated && auth.availableClients.length === 0) {
+    auth.refreshAvailableClients();
+  }
 });
 </script>
 

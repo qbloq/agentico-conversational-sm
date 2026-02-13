@@ -61,7 +61,7 @@ serve(async (req: Request) => {
     // Route handling
     if (req.method === 'GET' && pathParts.length === 2 && pathParts[1] === 'escalations') {
       // GET /manage-escalations/escalations
-      return await listEscalations(agent);
+      return await listEscalations(agent, url);
     }
     
     if (req.method === 'GET' && pathParts.length === 3 && pathParts[1] === 'escalations') {
@@ -82,7 +82,7 @@ serve(async (req: Request) => {
     // Sessions routes
     if (req.method === 'GET' && pathParts.length === 2 && pathParts[1] === 'sessions') {
       // GET /manage-escalations/sessions
-      return await listSessions(agent);
+      return await listSessions(agent, url);
     }
     
     if (req.method === 'GET' && pathParts.length === 3 && pathParts[1] === 'sessions') {
@@ -137,13 +137,43 @@ async function verifyAgent(req: Request): Promise<AgentPayload | null> {
 }
 
 /**
+ * Resolve clientId query param to channel_type + channel_id from public.client_configs
+ */
+async function resolveClientChannel(
+  supabase: ReturnType<typeof createClient>,
+  clientId: string
+): Promise<{ channel_type: string; channel_id: string } | null> {
+  const { data, error } = await supabase
+    .from('client_configs')
+    .select('channel_type, channel_id')
+    .eq('client_id', clientId)
+    .eq('is_active', true)
+    .single();
+
+  if (error || !data || !data.channel_type || !data.channel_id) {
+    console.error('Failed to resolve client channel:', error);
+    return null;
+  }
+
+  return { channel_type: data.channel_type, channel_id: data.channel_id };
+}
+
+/**
  * List open/assigned escalations for the agent's client
  */
-async function listEscalations(agent: AgentPayload): Promise<Response> {
+async function listEscalations(agent: AgentPayload, url: URL): Promise<Response> {
   const supabase = createClient(
     Deno.env.get('SUPABASE_URL') || '',
     Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || ''
   );
+
+  // Optionally filter by clientId
+  const clientId = url.searchParams.get('clientId');
+  let channelFilter: { channel_type: string; channel_id: string } | null = null;
+
+  if (clientId) {
+    channelFilter = await resolveClientChannel(supabase, clientId);
+  }
 
   const { data: escalations, error } = await supabase
     .schema(agent.clientSchema)
@@ -159,6 +189,8 @@ async function listEscalations(agent: AgentPayload): Promise<Response> {
       assigned_at,
       session:session_id (
         id,
+        channel_type,
+        channel_id,
         channel_user_id,
         current_state,
         contact:contact_id (
@@ -179,8 +211,17 @@ async function listEscalations(agent: AgentPayload): Promise<Response> {
     );
   }
 
+  // Filter by channel if clientId was provided
+  let filtered = escalations || [];
+  if (channelFilter) {
+    filtered = filtered.filter((e: any) =>
+      e.session?.channel_type === channelFilter!.channel_type &&
+      e.session?.channel_id === channelFilter!.channel_id
+    );
+  }
+
   return new Response(
-    JSON.stringify({ escalations }),
+    JSON.stringify({ escalations: filtered }),
     { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
   );
 }
@@ -440,14 +481,22 @@ async function resolveEscalation(
 /**
  * List all sessions with contact info and last message preview
  */
-async function listSessions(agent: AgentPayload): Promise<Response> {
+async function listSessions(agent: AgentPayload, url: URL): Promise<Response> {
   const supabase = createClient(
     Deno.env.get('SUPABASE_URL') || '',
     Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || ''
   );
 
+  // Optionally filter by clientId
+  const clientId = url.searchParams.get('clientId');
+  let channelFilter: { channel_type: string; channel_id: string } | null = null;
+
+  if (clientId) {
+    channelFilter = await resolveClientChannel(supabase, clientId);
+  }
+
   // Fetch sessions with contact info
-  const { data: sessions, error } = await supabase
+  let query = supabase
     .schema(agent.clientSchema)
     .from('sessions')
     .select(`
@@ -467,6 +516,14 @@ async function listSessions(agent: AgentPayload): Promise<Response> {
     `)
     .order('last_message_at', { ascending: false, nullsFirst: false })
     .limit(50);
+
+  if (channelFilter) {
+    query = query
+      .eq('channel_type', channelFilter.channel_type)
+      .eq('channel_id', channelFilter.channel_id);
+  }
+
+  const { data: sessions, error } = await query;
 
   if (error) {
     console.error('Failed to list sessions:', error);

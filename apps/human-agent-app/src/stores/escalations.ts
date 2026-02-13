@@ -19,7 +19,8 @@ import {
   type Message,
   type WhatsAppTemplate,
 } from '@/api/client';
-import { supabase, CLIENT_SCHEMA } from '@/api/supabase';
+import { supabase } from '@/api/supabase';
+import { useAuthStore } from './auth';
 
 export const useEscalationsStore = defineStore('escalations', () => {
   // State
@@ -78,7 +79,8 @@ export const useEscalationsStore = defineStore('escalations', () => {
     error.value = null;
 
     try {
-      const result = await listEscalations();
+      const auth = useAuthStore();
+      const result = await listEscalations(auth.activeClientId);
       escalations.value = result.escalations;
       return true;
     } catch (e) {
@@ -343,7 +345,7 @@ export const useEscalationsStore = defineStore('escalations', () => {
         'postgres_changes',
         {
           event: 'INSERT',
-          schema: CLIENT_SCHEMA,
+          schema: useAuthStore().clientSchema,
           table: 'messages',
           filter: `session_id=eq.${sessionId}`,
         },
