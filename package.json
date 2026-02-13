@@ -18,7 +18,9 @@
     "sync:gemini": "npx tsx scripts/sync-knowledge-to-gemini.ts",
     "query:kb": "npx tsx scripts/query-knowledge-base.ts",
     "supabase:dev": "pnpm build:supabase && supabase functions serve --no-verify-jwt",
-    "supabase:deploy": "pnpm build:supabase && supabase functions deploy"
+    "supabase:deploy": "pnpm build:supabase && supabase functions deploy",
+    "trigger:followups": "npx tsx scripts/trigger-workers.ts followups",
+    "trigger:pending": "npx tsx scripts/trigger-workers.ts pending"
   },
   "keywords": [
     "sales",

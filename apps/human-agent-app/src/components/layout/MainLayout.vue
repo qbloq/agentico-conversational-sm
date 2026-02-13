@@ -21,7 +21,7 @@ const hideNav = computed(() => {
 
 // Check if we're in a detail view (chat)
 const isDetailView = computed(() => {
-  return route.name === 'chat' || route.name === 'conversation';
+  return route.name === 'chat' || route.name === 'conversation' || route.name === 'client-editor';
 });
 
 // Show prompt if supported but not granted/subscribed

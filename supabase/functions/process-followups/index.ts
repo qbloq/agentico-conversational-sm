@@ -346,7 +346,7 @@ async function sendWhatsAppMessage(
     payload.type = 'template';
     payload.template = {
       name: message.templateName,
-      language: { code: 'es' }, // Default to Spanish as per business requirements
+      language: { code: 'es_co' }, // Default to Spanish as per business requirements
       components: message.templateParams ? [
         {
           type: 'body',

@@ -37,6 +37,10 @@ const editorForm = ref<StateConfig>({
 const newSignal = ref('');
 const newCategory = ref('');
 
+// Track which followup steps are newly added (not yet saved)
+const newStepIndices = ref<Set<number>>(new Set());
+const savingSequence = ref(false);
+
 // Computed
 const machineId = computed(() => route.params.id as string);
 const machine = computed(() => smStore.currentMachine);
@@ -76,6 +80,7 @@ function loadStateIntoEditor(stateName: string) {
     followupSequence: (config.followupSequence || []).map(f => ({ ...f })),
   };
   hasUnsavedChanges.value = false;
+  newStepIndices.value.clear();
 }
 
 function markDirty() {
@@ -126,22 +131,89 @@ function updateGuidance(state: string, value: string) {
 }
 
 // Follow-up sequence helpers
+
+/** Parse interval string (e.g. '15m', '2h', '1d', '1w') to milliseconds for sorting */
+function intervalToMs(interval: string): number {
+  const match = interval.trim().match(/^(\d+(?:\.\d+)?)\s*(m|h|d|w)$/i);
+  if (!match) return Infinity; // unparseable goes to end
+  const val = parseFloat(match[1]);
+  switch (match[2].toLowerCase()) {
+    case 'm': return val * 60_000;
+    case 'h': return val * 3_600_000;
+    case 'd': return val * 86_400_000;
+    case 'w': return val * 604_800_000;
+    default: return Infinity;
+  }
+}
+
 function addFollowupStep() {
   if (!editorForm.value.followupSequence) {
     editorForm.value.followupSequence = [];
   }
-  editorForm.value.followupSequence.push({ interval: '1h', configName: '' });
-  markDirty();
+  const newIdx = editorForm.value.followupSequence.length;
+  editorForm.value.followupSequence.push({ interval: '', configName: '' });
+  newStepIndices.value.add(newIdx);
 }
 
 function removeFollowupStep(idx: number) {
   editorForm.value.followupSequence?.splice(idx, 1);
+  // Rebuild newStepIndices after splice
+  const updated = new Set<number>();
+  for (const i of newStepIndices.value) {
+    if (i < idx) updated.add(i);
+    else if (i > idx) updated.add(i - 1);
+    // i === idx is removed
+  }
+  newStepIndices.value = updated;
   markDirty();
+}
+
+/** Save only the followupSequence for the current state, sorted by interval */
+async function saveFollowupSequence() {
+  if (!machine.value || !selectedState.value) return;
+  savingSequence.value = true;
+
+  // Sort by interval ascending
+  const sorted = [...(editorForm.value.followupSequence || [])]
+    .filter(s => s.interval && s.configName)
+    .sort((a, b) => intervalToMs(a.interval) - intervalToMs(b.interval));
+
+  // Update editor form with sorted sequence
+  editorForm.value.followupSequence = sorted;
+
+  // Apply only followupSequence to the machine state
+  machine.value.states[selectedState.value] = {
+    ...machine.value.states[selectedState.value],
+    followupSequence: sorted,
+  };
+
+  const success = await smStore.saveMachine({
+    id: machine.value.id,
+    name: machine.value.name,
+    version: machine.value.version,
+    initial_state: machine.value.initial_state,
+    states: machine.value.states,
+    visualization: machine.value.visualization,
+  });
+
+  if (success) {
+    newStepIndices.value.clear();
+    saveSuccess.value = true;
+    hasUnsavedChanges.value = false;
+    setTimeout(() => { saveSuccess.value = false; }, 3000);
+  }
+  savingSequence.value = false;
 }
 
 // Apply state changes to the local machine object
 function applyStateChanges() {
   if (!machine.value || !selectedState.value) return;
+  // Always sort followupSequence by interval before applying
+  if (editorForm.value.followupSequence?.length) {
+    editorForm.value.followupSequence = editorForm.value.followupSequence
+      .filter(s => s.interval && s.configName)
+      .sort((a, b) => intervalToMs(a.interval) - intervalToMs(b.interval));
+  }
   machine.value.states[selectedState.value] = { ...editorForm.value };
   hasUnsavedChanges.value = false;
 }
@@ -450,7 +522,12 @@ onMounted(() => {
               <div
                 v-for="(step, idx) in editorForm.followupSequence"
                 :key="idx"
-                class="flex items-center gap-2 p-3 bg-surface-50 dark:bg-surface-700/50 rounded-lg border border-surface-200 dark:border-surface-600"
+                :class="[
+                  'flex items-center gap-2 p-3 rounded-lg border transition-colors',
+                  newStepIndices.has(idx)
+                    ? 'bg-accent-50 dark:bg-accent-900/20 border-accent-300 dark:border-accent-700'
+                    : 'bg-surface-50 dark:bg-surface-700/50 border-surface-200 dark:border-surface-600'
+                ]"
               >
                 <span class="text-xs font-medium text-surface-400 w-6 text-center">{{ idx + 1 }}</span>
                 <div class="flex-1 flex items-center gap-2">
@@ -476,6 +553,15 @@ onMounted(() => {
                     </select>
                   </div>
                 </div>
+                <!-- Inline Save button for new steps once configName is filled -->
+                <button
+                  v-if="newStepIndices.has(idx) && step.configName && step.interval"
+                  @click="saveFollowupSequence"
+                  :disabled="savingSequence"
+                  class="flex-shrink-0 px-2.5 py-1.5 text-xs font-medium text-white bg-accent-600 hover:bg-accent-700 rounded-lg transition-colors active:scale-95 disabled:opacity-50 self-end mb-0.5"
+                >
+                  {{ savingSequence ? 'Saving...' : 'Save' }}
+                </button>
                 <button @click="removeFollowupStep(idx)" class="p-1 text-surface-400 hover:text-red-500 rounded self-end mb-0.5">
                   <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg>
                 </button>
@@ -485,7 +571,7 @@ onMounted(() => {
                 <code class="bg-surface-200 dark:bg-surface-600 px-1 rounded">2h</code>
                 <code class="bg-surface-200 dark:bg-surface-600 px-1 rounded">1d</code>
                 <code class="bg-surface-200 dark:bg-surface-600 px-1 rounded">1w</code>
-                — Config names reference the Follow-up Configs registry.
+                — Saved sequences are automatically sorted by interval (shortest first).
               </p>
             </div>
           </section>

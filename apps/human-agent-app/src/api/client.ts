@@ -532,3 +532,93 @@ export async function saveStateMachine(
     body: JSON.stringify(machine),
   });
 }
+
+// =============================================================================
+// Clients API
+// =============================================================================
+
+export interface ClientConfigSummary {
+  id: string;
+  client_id: string;
+  schema_name: string;
+  channel_type: string | null;
+  channel_id: string | null;
+  state_machine_name: string;
+  storage_bucket: string | null;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+  config: {
+    business?: { name?: string; language?: string };
+    [key: string]: unknown;
+  };
+}
+
+export interface ClientSecretInfo {
+  channel_type: string;
+  has_secrets: boolean;
+  phoneNumberId?: string | null;
+  wabaId?: string | null;
+}
+
+export interface ClientConfigDetail extends ClientConfigSummary {
+  secrets: ClientSecretInfo[];
+}
+
+export interface StorageBucket {
+  id: string;
+  name: string;
+  public: boolean;
+  created_at: string;
+}
+
+export interface StateMachineOption {
+  id: string;
+  name: string;
+  version: string;
+  is_active: boolean;
+}
+
+export async function listClients(): Promise<ClientConfigSummary[]> {
+  return request('/manage-clients');
+}
+
+export async function getClient(id: string): Promise<ClientConfigDetail> {
+  return request(`/manage-clients?id=${encodeURIComponent(id)}`);
+}
+
+export async function createClient(data: Record<string, unknown>): Promise<ClientConfigDetail> {
+  return request('/manage-clients', {
+    method: 'POST',
+    body: JSON.stringify({ action: 'create', ...data }),
+  });
+}
+
+export async function updateClient(id: string, data: Record<string, unknown>): Promise<ClientConfigDetail> {
+  return request('/manage-clients', {
+    method: 'POST',
+    body: JSON.stringify({ action: 'update', id, ...data }),
+  });
+}
+
+export async function toggleClientActive(id: string): Promise<{ success: boolean; is_active: boolean }> {
+  return request('/manage-clients', {
+    method: 'POST',
+    body: JSON.stringify({ action: 'toggle-active', id }),
+  });
+}
+
+export async function listBuckets(): Promise<StorageBucket[]> {
+  return request('/manage-clients?action=buckets');
+}
+
+export async function createBucket(name: string): Promise<StorageBucket> {
+  return request('/manage-clients', {
+    method: 'POST',
+    body: JSON.stringify({ action: 'create-bucket', name }),
+  });
+}
+
+export async function listTenantStateMachines(schema: string): Promise<StateMachineOption[]> {
+  return request(`/manage-clients?action=state-machines&schema=${encodeURIComponent(schema)}`);
+}
