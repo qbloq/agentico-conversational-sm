@@ -19,12 +19,17 @@ import { useAuthStore } from './auth';
 
 export type { SessionSummary, SessionDetail };
 
+const PAGE_SIZE = 20;
+
 export const useSessionsStore = defineStore('sessions', () => {
   // State
   const sessions = ref<SessionSummary[]>([]);
   const currentSession = ref<SessionDetail | null>(null);
   const messages = ref<Message[]>([]);
   const loading = ref(false);
+  const loadingMore = ref(false);
+  const hasMore = ref(false);
+  const searchQuery = ref('');
   const error = ref<string | null>(null);
   const sending = ref(false);
   
@@ -35,7 +40,6 @@ export const useSessionsStore = defineStore('sessions', () => {
   // Computed
   const sortedSessions = computed(() => {
     return [...sessions.value].sort((a, b) => {
-      // Sort by last message time (most recent first)
       const aTime = a.last_message_at ? new Date(a.last_message_at).getTime() : 0;
       const bTime = b.last_message_at ? new Date(b.last_message_at).getTime() : 0;
       return bTime - aTime;
@@ -47,14 +51,23 @@ export const useSessionsStore = defineStore('sessions', () => {
   );
 
   // Actions
+
+  /**
+   * Fetch first page of sessions (resets list).
+   */
   async function fetchSessions(): Promise<boolean> {
     loading.value = true;
     error.value = null;
 
     try {
       const auth = useAuthStore();
-      const result = await apiListSessions(auth.activeClientId);
+      const result = await apiListSessions({
+        clientId: auth.activeClientId,
+        limit: PAGE_SIZE,
+        search: searchQuery.value || null,
+      });
       sessions.value = result.sessions;
+      hasMore.value = result.hasMore;
       return true;
     } catch (e) {
       error.value = e instanceof Error ? e.message : 'Failed to load sessions';
@@ -62,6 +75,44 @@ export const useSessionsStore = defineStore('sessions', () => {
     } finally {
       loading.value = false;
     }
+  }
+
+  /**
+   * Fetch next page and append to existing list.
+   */
+  async function fetchMoreSessions(): Promise<boolean> {
+    if (loadingMore.value || !hasMore.value) return false;
+
+    const lastSession = sortedSessions.value[sortedSessions.value.length - 1];
+    if (!lastSession?.last_message_at) return false;
+
+    loadingMore.value = true;
+
+    try {
+      const auth = useAuthStore();
+      const result = await apiListSessions({
+        clientId: auth.activeClientId,
+        cursor: lastSession.last_message_at,
+        limit: PAGE_SIZE,
+        search: searchQuery.value || null,
+      });
+      sessions.value = [...sessions.value, ...result.sessions];
+      hasMore.value = result.hasMore;
+      return true;
+    } catch (e) {
+      error.value = e instanceof Error ? e.message : 'Failed to load more sessions';
+      return false;
+    } finally {
+      loadingMore.value = false;
+    }
+  }
+
+  /**
+   * Update search query and re-fetch from first page.
+   */
+  function setSearchQuery(query: string) {
+    searchQuery.value = query;
+    fetchSessions();
   }
 
   async function fetchSession(id: string): Promise<boolean> {
@@ -169,6 +220,9 @@ export const useSessionsStore = defineStore('sessions', () => {
     currentSession,
     messages,
     loading,
+    loadingMore,
+    hasMore,
+    searchQuery,
     error,
     sending,
     realtimeConnected,
@@ -177,6 +231,8 @@ export const useSessionsStore = defineStore('sessions', () => {
     activeSessions,
     // Actions
     fetchSessions,
+    fetchMoreSessions,
+    setSearchQuery,
     fetchSession,
     escalateSession,
     clearCurrent,

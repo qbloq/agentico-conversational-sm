@@ -479,7 +479,14 @@ async function resolveEscalation(
 }
 
 /**
- * List all sessions with contact info and last message preview
+ * List all sessions with contact info and last message preview.
+ * Supports cursor-based pagination, search by contact name/phone, and client filtering.
+ *
+ * Query params:
+ *   clientId  — filter by client (resolved to channel_type + channel_id)
+ *   cursor    — ISO timestamp of last_message_at from previous page (for pagination)
+ *   limit     — page size (default 20, max 100)
+ *   search    — free-text search on contact full_name or phone
  */
 async function listSessions(agent: AgentPayload, url: URL): Promise<Response> {
   const supabase = createClient(
@@ -487,15 +494,49 @@ async function listSessions(agent: AgentPayload, url: URL): Promise<Response> {
     Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || ''
   );
 
-  // Optionally filter by clientId
+  // Parse query params
   const clientId = url.searchParams.get('clientId');
-  let channelFilter: { channel_type: string; channel_id: string } | null = null;
+  const cursor = url.searchParams.get('cursor');
+  const search = url.searchParams.get('search')?.trim() || null;
+  const limit = Math.min(Math.max(parseInt(url.searchParams.get('limit') || '20', 10) || 20, 1), 100);
 
+  // Resolve client channel filter
+  let channelFilter: { channel_type: string; channel_id: string } | null = null;
   if (clientId) {
     channelFilter = await resolveClientChannel(supabase, clientId);
   }
 
-  // Fetch sessions with contact info
+  // If searching, first find matching contact IDs
+  let matchingContactIds: string[] | null = null;
+  if (search) {
+    const searchPattern = `%${search}%`;
+    const { data: contacts, error: searchError } = await supabase
+      .schema(agent.clientSchema)
+      .from('contacts')
+      .select('id')
+      .or(`full_name.ilike.${searchPattern},phone.ilike.${searchPattern}`)
+      .limit(200);
+
+    if (searchError) {
+      console.error('Failed to search contacts:', searchError);
+      return new Response(
+        JSON.stringify({ error: 'Failed to search contacts' }),
+        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    matchingContactIds = (contacts || []).map((c: any) => c.id);
+
+    // No matching contacts = empty result
+    if (matchingContactIds.length === 0) {
+      return new Response(
+        JSON.stringify({ sessions: [], hasMore: false }),
+        { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+  }
+
+  // Build sessions query
   let query = supabase
     .schema(agent.clientSchema)
     .from('sessions')
@@ -515,12 +556,23 @@ async function listSessions(agent: AgentPayload, url: URL): Promise<Response> {
       )
     `)
     .order('last_message_at', { ascending: false, nullsFirst: false })
-    .limit(50);
+    .limit(limit);
 
+  // Apply channel filter (client scoping)
   if (channelFilter) {
     query = query
       .eq('channel_type', channelFilter.channel_type)
       .eq('channel_id', channelFilter.channel_id);
+  }
+
+  // Apply cursor for pagination
+  if (cursor) {
+    query = query.lt('last_message_at', cursor);
+  }
+
+  // Apply contact search filter
+  if (matchingContactIds) {
+    query = query.in('contact_id', matchingContactIds);
   }
 
   const { data: sessions, error } = await query;
@@ -533,9 +585,11 @@ async function listSessions(agent: AgentPayload, url: URL): Promise<Response> {
     );
   }
 
+  const rows = sessions || [];
+
   // Fetch last message for each session (batched for efficiency)
   const sessionsWithMessages = await Promise.all(
-    (sessions || []).map(async (session) => {
+    rows.map(async (session) => {
       const { data: lastMsg } = await supabase
         .schema(agent.clientSchema)
         .from('messages')
@@ -553,7 +607,7 @@ async function listSessions(agent: AgentPayload, url: URL): Promise<Response> {
   );
 
   return new Response(
-    JSON.stringify({ sessions: sessionsWithMessages }),
+    JSON.stringify({ sessions: sessionsWithMessages, hasMore: rows.length === limit }),
     { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
   );
 }

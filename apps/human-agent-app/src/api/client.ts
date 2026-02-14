@@ -360,9 +360,19 @@ export interface SessionDetail extends SessionSummary {
   } | null;
 }
 
-export async function listSessions(clientId?: string | null): Promise<{ sessions: SessionSummary[] }> {
-  const params = clientId ? `?clientId=${encodeURIComponent(clientId)}` : '';
-  return request(`/manage-escalations/sessions${params}`);
+export async function listSessions(params: {
+  clientId?: string | null;
+  cursor?: string | null;
+  limit?: number;
+  search?: string | null;
+} = {}): Promise<{ sessions: SessionSummary[]; hasMore: boolean }> {
+  const qp = new URLSearchParams();
+  if (params.clientId) qp.set('clientId', params.clientId);
+  if (params.cursor) qp.set('cursor', params.cursor);
+  if (params.limit) qp.set('limit', String(params.limit));
+  if (params.search) qp.set('search', params.search);
+  const qs = qp.toString();
+  return request(`/manage-escalations/sessions${qs ? '?' + qs : ''}`);
 }
 
 export async function getSession(id: string): Promise<{
