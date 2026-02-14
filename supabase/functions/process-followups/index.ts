@@ -266,11 +266,13 @@ async function processClientSchema(
       // 3.4 Send Message(s)
       const whatsappSecrets = clientConfig.channels?.whatsapp;
       const accessToken = whatsappSecrets?.accessToken || Deno.env.get('WHATSAPP_ACCESS_TOKEN');
-      const phoneNumberId = whatsappSecrets?.phoneNumberId;
+      const clientConfiguredPhoneNumberId = whatsappSecrets?.phoneNumberId;
+      const phoneNumberId = session.channelId || clientConfiguredPhoneNumberId;
 
       if (!phoneNumberId || !accessToken) {
-        console.error(`[Follow-up Worker] Missing WhatsApp credentials for ${schemaName}`);
-        await markFailed(supabase, schemaName, item.id, 'Missing WhatsApp credentials');
+        const missingDetails = `Missing WhatsApp routing credentials: phoneNumberId=${phoneNumberId ? 'present' : 'missing'}, accessToken=${accessToken ? 'present' : 'missing'}`;
+        console.error(`[Follow-up Worker] ${missingDetails} for ${schemaName} (item=${item.id}, session=${item.session_id})`);
+        await markFailed(supabase, schemaName, item.id, missingDetails);
         continue;
       }
       
