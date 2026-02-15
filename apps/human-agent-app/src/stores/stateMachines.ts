@@ -58,7 +58,7 @@ export const useStateMachinesStore = defineStore('stateMachines', () => {
   }
 
   async function saveMachine(
-    machine: Pick<StateMachine, 'id' | 'name' | 'version' | 'initial_state' | 'states' | 'visualization'>
+    machine: Pick<StateMachine, 'name' | 'version' | 'initial_state' | 'states' | 'visualization'> & { id?: string }
   ): Promise<boolean> {
     saving.value = true;
     error.value = null;
@@ -77,6 +77,15 @@ export const useStateMachinesStore = defineStore('stateMachines', () => {
           created_at: saved.created_at,
           updated_at: saved.updated_at,
         };
+      } else {
+        machines.value.unshift({
+          id: saved.id,
+          name: saved.name,
+          version: saved.version,
+          is_active: saved.is_active,
+          created_at: saved.created_at,
+          updated_at: saved.updated_at,
+        });
       }
       return true;
     } catch (e) {

@@ -2,15 +2,102 @@
 /**
  * StateMachinesView - List and manage state machine configurations
  */
-import { onMounted } from 'vue';
+import { onMounted, ref, computed } from 'vue';
 import { useStateMachinesStore } from '@/stores/stateMachines';
 import { useRouter } from 'vue-router';
 
 const router = useRouter();
 const store = useStateMachinesStore();
 
+const showCreateModal = ref(false);
+const creating = ref(false);
+const createError = ref<string | null>(null);
+const newMachineName = ref('');
+const newMachineVersion = ref('1.0.0');
+const sourceMachineId = ref<string>('');
+
+const sourceOptions = computed(() => [
+  { id: '', label: 'Blank state machine' },
+  ...store.machines.map(machine => ({ id: machine.id, label: `${machine.name} (v${machine.version})` })),
+]);
+
 function openMachine(id: string) {
   router.push(`/state-machines/${id}`);
+}
+
+function openCreateModal() {
+  showCreateModal.value = true;
+  createError.value = null;
+  newMachineName.value = '';
+  newMachineVersion.value = '1.0.0';
+  sourceMachineId.value = '';
+}
+
+function closeCreateModal() {
+  if (creating.value) return;
+  showCreateModal.value = false;
+}
+
+async function createMachine() {
+  const trimmedName = newMachineName.value.trim();
+  if (!trimmedName) {
+    createError.value = 'Name is required';
+    return;
+  }
+
+  creating.value = true;
+  createError.value = null;
+
+  try {
+    let states: Record<string, unknown> = {};
+    let initialState = 'start';
+    let visualization: string | undefined;
+
+    if (sourceMachineId.value) {
+      await store.fetchMachine(sourceMachineId.value);
+      if (!store.currentMachine) {
+        throw new Error('Could not load source state machine');
+      }
+
+      states = JSON.parse(JSON.stringify(store.currentMachine.states || {}));
+      initialState = store.currentMachine.initial_state;
+      visualization = store.currentMachine.visualization;
+      if (!newMachineVersion.value.trim()) {
+        newMachineVersion.value = store.currentMachine.version || '1.0.0';
+      }
+    } else {
+      states = {
+        start: {
+          state: 'start',
+          objective: '',
+          description: '',
+          completionSignals: [],
+          ragCategories: [],
+          allowedTransitions: [],
+          transitionGuidance: {},
+        },
+      };
+    }
+
+    const success = await store.saveMachine({
+      name: trimmedName,
+      version: newMachineVersion.value.trim() || '1.0.0',
+      initial_state: initialState,
+      states: states as any,
+      visualization,
+    });
+
+    if (!success || !store.currentMachine?.id) {
+      throw new Error(store.error || 'Failed to create state machine');
+    }
+
+    showCreateModal.value = false;
+    openMachine(store.currentMachine.id);
+  } catch (e) {
+    createError.value = e instanceof Error ? e.message : 'Failed to create state machine';
+  } finally {
+    creating.value = false;
+  }
 }
 
 function goBack() {
@@ -52,6 +139,15 @@ onMounted(() => {
             <p class="text-xs text-surface-500 dark:text-surface-400">{{ store.machineCount }} configurations</p>
           </div>
         </div>
+        <button
+          @click="openCreateModal"
+          class="w-9 h-9 flex items-center justify-center rounded-lg bg-accent-600 hover:bg-accent-700 text-white transition-colors"
+          aria-label="Create state machine"
+        >
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
+          </svg>
+        </button>
       </div>
     </header>
 
@@ -131,6 +227,87 @@ onMounted(() => {
             </svg>
           </div>
         </button>
+      </div>
+    </div>
+
+    <!-- Create Modal -->
+    <div
+      v-if="showCreateModal"
+      class="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4"
+      @click.self="closeCreateModal"
+    >
+      <div class="w-full max-w-lg rounded-2xl bg-white dark:bg-surface-800 border border-surface-200 dark:border-surface-700 shadow-xl overflow-hidden">
+        <div class="px-5 py-4 border-b border-surface-200 dark:border-surface-700 flex items-center justify-between">
+          <h2 class="text-base font-semibold text-surface-900 dark:text-white">New State Machine</h2>
+          <button
+            @click="closeCreateModal"
+            class="p-1 text-surface-400 hover:text-surface-700 dark:hover:text-surface-200"
+          >
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+
+        <div class="p-5 space-y-4">
+          <div>
+            <label class="block text-xs font-medium text-surface-600 dark:text-surface-400 mb-1">Name *</label>
+            <input
+              v-model="newMachineName"
+              type="text"
+              placeholder="e.g. sales_qualification_v2"
+              class="w-full px-3 py-2 rounded-lg border border-surface-200 dark:border-surface-600 bg-white dark:bg-surface-900 text-sm text-surface-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-accent-500/40"
+            />
+          </div>
+
+          <div>
+            <label class="block text-xs font-medium text-surface-600 dark:text-surface-400 mb-1">Version</label>
+            <input
+              v-model="newMachineVersion"
+              type="text"
+              placeholder="1.0.0"
+              class="w-full px-3 py-2 rounded-lg border border-surface-200 dark:border-surface-600 bg-white dark:bg-surface-900 text-sm text-surface-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-accent-500/40"
+            />
+          </div>
+
+          <div>
+            <label class="block text-xs font-medium text-surface-600 dark:text-surface-400 mb-1">Create from</label>
+            <select
+              v-model="sourceMachineId"
+              class="w-full px-3 py-2 rounded-lg border border-surface-200 dark:border-surface-600 bg-white dark:bg-surface-900 text-sm text-surface-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-accent-500/40"
+            >
+              <option v-for="option in sourceOptions" :key="option.id || 'blank'" :value="option.id">
+                {{ option.label }}
+              </option>
+            </select>
+            <p class="mt-1 text-xs text-surface-500 dark:text-surface-400">
+              Pick an existing state machine to clone its states, transitions, and visualization.
+            </p>
+          </div>
+
+          <div
+            v-if="createError"
+            class="rounded-lg border border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-900/20 px-3 py-2 text-xs text-red-600 dark:text-red-300"
+          >
+            {{ createError }}
+          </div>
+        </div>
+
+        <div class="px-5 py-4 border-t border-surface-200 dark:border-surface-700 flex items-center justify-end gap-2">
+          <button
+            @click="closeCreateModal"
+            class="px-3 py-2 text-sm text-surface-600 dark:text-surface-300 hover:text-surface-900 dark:hover:text-white"
+          >
+            Cancel
+          </button>
+          <button
+            @click="createMachine"
+            :disabled="creating"
+            class="px-4 py-2 rounded-lg bg-accent-600 hover:bg-accent-700 disabled:opacity-60 text-white text-sm font-medium"
+          >
+            {{ creating ? 'Creating...' : 'Create' }}
+          </button>
+        </div>
       </div>
     </div>
   </div>

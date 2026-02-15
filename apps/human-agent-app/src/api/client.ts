@@ -552,7 +552,7 @@ export async function getStateMachine(id: string): Promise<StateMachine> {
 }
 
 export async function saveStateMachine(
-  machine: Pick<StateMachine, 'id' | 'name' | 'version' | 'initial_state' | 'states' | 'visualization'>
+  machine: Pick<StateMachine, 'name' | 'version' | 'initial_state' | 'states' | 'visualization'> & { id?: string }
 ): Promise<StateMachine> {
   return request('/manage-state-machines', {
     method: 'POST',
