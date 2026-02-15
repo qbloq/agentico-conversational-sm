@@ -50,9 +50,6 @@ export function createSupabaseStateMachineStore(
     },
 
     async findActive(name: string): Promise<{ states: Record<string, StateConfig>, initialState: string } | null> {
-      console.log('Fetching active state machine:', name);
-      console.log('Schema name:', schemaName);
-      console.log('Table name:', table);
        const { data, error } = await supabase
         .schema(schemaName)
         .from(table)

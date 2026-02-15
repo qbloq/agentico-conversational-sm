@@ -126,7 +126,7 @@ serve(async (req: Request) => {
       await bufStore.cleanupStaleMessages();
     }
     
-    console.log(`[ProcessPending] Processing ${clients.length} clients`);
+    // console.log(`[ProcessPending] Processing ${clients.length} clients`);
     
     for (const client of clients) {
       const schemaName = client.schemaName;
@@ -139,7 +139,7 @@ serve(async (req: Request) => {
         continue;
       }
       
-      console.log(`[ProcessPending] Checking ${client.clientId} (${schemaName}, channel: ${channelId})`);
+      // console.log(`[ProcessPending] Checking ${client.clientId} (${schemaName}, channel: ${channelId})`);
       
       const messageBufferStore = createSupabaseMessageBufferStore(supabase, schemaName, channelId);
       
@@ -157,7 +157,7 @@ serve(async (req: Request) => {
           // Get session info BEFORE processing (since processPendingMessages deletes the messages)
           const pendingBeforeProcess = await messageBufferStore.getBySession(sessionKeyHash);
           if (pendingBeforeProcess.length === 0) {
-            console.log(`[ProcessPending] No messages for ${sessionKeyHash.slice(0, 8)}...`);
+            // console.log(`[ProcessPending] No messages for ${sessionKeyHash.slice(0, 8)}...`);
             continue;
           }
           

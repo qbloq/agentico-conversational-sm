@@ -726,7 +726,7 @@ export function createConversationEngine(): ConversationEngine {
       sessionKeyHash: string,
       deps: EngineDependencies
     ): Promise<EngineOutput> {
-      console.log(`[DEBUG] processPendingMessages: sessionKeyHash=${sessionKeyHash}`);
+      // console.log(`[DEBUG] processPendingMessages: sessionKeyHash=${sessionKeyHash}`);
       
       const { messageBufferStore } = deps;
       
@@ -745,7 +745,7 @@ export function createConversationEngine(): ConversationEngine {
       // 2. Get all pending messages for this session
       const pending = await messageBufferStore.getBySession(sessionKeyHash);
       if (pending.length === 0) {
-        console.log(`[Debounce] No pending messages for ${sessionKeyHash.slice(0, 8)}...`);
+        // console.log(`[Debounce] No pending messages for ${sessionKeyHash.slice(0, 8)}...`);
         return { sessionId: '', responses: [] };
       }
       
@@ -812,7 +812,7 @@ export function createConversationEngine(): ConversationEngine {
           // Success! Delete processed messages from buffer
           await messageBufferStore.deleteByIds(pending.map(p => p.id));
           
-          console.log(`[Debounce] Successfully processed and cleaned up ${pending.length} merged messages`);
+          // console.log(`[Debounce] Successfully processed and cleaned up ${pending.length} merged messages`);
           
           return result;
         }

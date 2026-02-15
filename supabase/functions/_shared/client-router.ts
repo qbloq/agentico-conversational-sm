@@ -167,8 +167,7 @@ export async function getAllClientConfigs(
       config,
     });
   }
-  console.log("[getAllClientConfigs] Results: ", JSON.stringify(results));
-  console.log(`[getAllClientConfigs] Loaded ${results.length} client(s)`);
+
   return results;
 }
 
