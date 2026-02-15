@@ -1,39 +1,7 @@
 
 import { serve } from 'https://deno.land/std@0.177.0/http/server.ts';
-import { createSupabaseClient, resolveSchema } from '../_shared/supabase.ts';
-import { verify } from 'https://deno.land/x/djwt@v3.0.1/mod.ts';
-
-interface AgentPayload {
-  sub: string;
-  phone: string;
-  clientSchema: string;
-  exp: number;
-}
-
-async function verifyAgent(req: Request): Promise<AgentPayload | null> {
-  const authHeader = req.headers.get('Authorization');
-  if (!authHeader?.startsWith('Bearer ')) {
-    return null;
-  }
-
-  const token = authHeader.substring(7);
-  const jwtSecret = Deno.env.get('AGENT_JWT_SECRET') || 'your-secret-key';
-
-  try {
-    const key = await crypto.subtle.importKey(
-      'raw',
-      new TextEncoder().encode(jwtSecret),
-      { name: 'HMAC', hash: 'SHA-256' },
-      false,
-      ['sign', 'verify']
-    );
-
-    const payload = await verify(token, key) as unknown as AgentPayload;
-    return payload;
-  } catch {
-    return null;
-  }
-}
+import { createSupabaseClient } from '../_shared/supabase.ts';
+import { verifyAgent, hasRequiredLevel } from '../_shared/auth.ts';
 
 serve(async (req) => {
   // CORS configuration
@@ -49,29 +17,22 @@ serve(async (req) => {
 
   try {
     const url = new URL(req.url);
-    let schemaName: string | null = null;
-
-    // Auth Strategy 1: Agent JWT (from Human Agent App)
     const agent = await verifyAgent(req);
-    if (agent) {
-      schemaName = agent.clientSchema;
-    }
-
-    // Auth Strategy 2: clientId query param (legacy/internal)
-    if (!schemaName) {
-      const clientId = url.searchParams.get('clientId');
-      if (clientId) {
-        const publicClient = createSupabaseClient();
-        schemaName = await resolveSchema(publicClient, clientId);
-      }
-    }
-
-    if (!schemaName) {
+    if (!agent) {
       return new Response(
-        JSON.stringify({ error: 'Unauthorized or missing clientId' }),
+        JSON.stringify({ error: 'Unauthorized' }),
         { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
+
+    if (!hasRequiredLevel(agent, 'admin')) {
+      return new Response(
+        JSON.stringify({ error: 'Forbidden' }),
+        { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    const schemaName = agent.clientSchema;
 
     const supabase = createSupabaseClient(schemaName);
     const resource = url.searchParams.get('resource'); // 'queue' or null (configs)

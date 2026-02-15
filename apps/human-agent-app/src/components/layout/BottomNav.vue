@@ -4,19 +4,29 @@
  */
 import { useRoute, useRouter } from 'vue-router';
 import { useEscalationsStore } from '@/stores/escalations';
+import { useAuthStore } from '@/stores/auth';
+import { computed } from 'vue';
 
 const route = useRoute();
 const router = useRouter();
 const escalations = useEscalationsStore();
+const auth = useAuthStore();
 
 const tabs = [
   { name: 'Escalations', route: '/', icon: 'bell' },
   { name: 'All Chats', route: '/chats', icon: 'chat' },
-  { name: 'Follow-ups', route: '/followups', icon: 'clock' },
-  { name: 'States', route: '/state-machines', icon: 'cpu' },
-  { name: 'Clients', route: '/clients', icon: 'clients' },
+  { name: 'Follow-ups', route: '/followups', icon: 'clock', requiredLevel: 'admin' as const },
+  { name: 'States', route: '/state-machines', icon: 'cpu', requiredLevel: 'admin' as const },
+  { name: 'Clients', route: '/clients', icon: 'clients', requiredLevel: 'admin' as const },
   { name: 'Profile', route: '/profile', icon: 'user' },
 ];
+
+const visibleTabs = computed(() =>
+  tabs.filter((tab) => {
+    if (!tab.requiredLevel) return true;
+    return auth.hasLevel(tab.requiredLevel);
+  })
+);
 
 const isActive = (tabRoute: string) => {
   if (tabRoute === '/') {
@@ -34,7 +44,7 @@ function navigate(tabRoute: string) {
   <nav class="fixed bottom-0 left-0 right-0 z-50 flex-shrink-0 bg-white dark:bg-surface-800 border-t border-surface-200 dark:border-surface-700">
     <div class="flex items-center justify-around h-14">
       <button
-        v-for="tab in tabs"
+        v-for="tab in visibleTabs"
         :key="tab.name"
         @click="navigate(tab.route)"
         :class="[

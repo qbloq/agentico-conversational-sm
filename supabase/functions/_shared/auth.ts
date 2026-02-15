@@ -1,10 +1,26 @@
 import { verify } from 'https://deno.land/x/djwt@v3.0.1/mod.ts';
 
+export type AgentLevel = 'agent' | 'manager' | 'admin';
+
 export interface AgentPayload {
   sub: string;
   phone: string;
   clientSchema: string;
+  level: AgentLevel;
   exp: number;
+}
+
+function levelRank(level: AgentLevel): number {
+  if (level === 'admin') return 3;
+  if (level === 'manager') return 2;
+  return 1;
+}
+
+export function hasRequiredLevel(
+  agent: Pick<AgentPayload, 'level'>,
+  required: AgentLevel,
+): boolean {
+  return levelRank(agent.level) >= levelRank(required);
 }
 
 /**

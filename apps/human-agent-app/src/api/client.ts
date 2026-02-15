@@ -69,6 +69,8 @@ export interface AvailableClient {
   channel_id: string | null;
 }
 
+export type AgentLevel = 'agent' | 'manager' | 'admin';
+
 export interface VerifyOtpResponse {
   success: boolean;
   token: string;
@@ -78,6 +80,7 @@ export interface VerifyOtpResponse {
     firstName: string | null;
     lastName: string | null;
     email: string | null;
+    level: AgentLevel;
   };
   isFirstLogin: boolean;
   availableClients?: AvailableClient[];
@@ -658,6 +661,7 @@ export interface HumanAgent {
   last_name: string | null;
   email: string | null;
   is_active: boolean;
+  level: AgentLevel;
   allowed_client_ids: string[] | null;
   created_at: string;
 }
@@ -678,6 +682,22 @@ export async function updateAgentClients(
       schema,
       agentId,
       allowedClientIds,
+    }),
+  });
+}
+
+export async function updateAgentLevel(
+  schema: string,
+  agentId: string,
+  level: AgentLevel,
+): Promise<{ success: boolean; agent: HumanAgent }> {
+  return request('/manage-clients', {
+    method: 'POST',
+    body: JSON.stringify({
+      action: 'update-agent-level',
+      schema,
+      agentId,
+      level,
     }),
   });
 }

@@ -5,12 +5,28 @@ import { defineStore } from 'pinia';
 import { ref, computed } from 'vue';
 import { requestOtp, verifyOtp, completeProfile, fetchAvailableClients as apiFetchAvailableClients, type AvailableClient } from '@/api/client';
 
+export type AgentLevel = 'agent' | 'manager' | 'admin';
+
+function normalizeLevel(level: unknown): AgentLevel {
+  if (level === 'admin' || level === 'manager' || level === 'agent') {
+    return level;
+  }
+  return 'agent';
+}
+
+function levelRank(level: AgentLevel): number {
+  if (level === 'admin') return 3;
+  if (level === 'manager') return 2;
+  return 1;
+}
+
 export interface Agent {
   id: string;
   phone: string;
   firstName: string | null;
   lastName: string | null;
   email: string | null;
+  level: AgentLevel;
 }
 
 export const useAuthStore = defineStore('auth', () => {
@@ -18,7 +34,12 @@ export const useAuthStore = defineStore('auth', () => {
   const token = ref<string | null>(localStorage.getItem('agent_token'));
   const agent = ref<Agent | null>((() => {
     const stored = localStorage.getItem('agent_data');
-    return stored ? JSON.parse(stored) : null;
+    if (!stored) return null;
+    const parsed = JSON.parse(stored);
+    return {
+      ...parsed,
+      level: normalizeLevel(parsed?.level),
+    };
   })());
   const clientSchema = ref<string>(localStorage.getItem('client_schema') || 'client_tag_markets');
   const availableClients = ref<AvailableClient[]>((() => {
@@ -36,6 +57,13 @@ export const useAuthStore = defineStore('auth', () => {
     availableClients.value.find(c => c.client_id === activeClientId.value) || availableClients.value[0] || null
   );
   const hasMultipleClients = computed(() => availableClients.value.length > 1);
+  const agentLevel = computed<AgentLevel>(() => normalizeLevel(agent.value?.level));
+  const isAdmin = computed(() => agentLevel.value === 'admin');
+  const isManagerOrAbove = computed(() => levelRank(agentLevel.value) >= levelRank('manager'));
+
+  function hasLevel(requiredLevel: AgentLevel): boolean {
+    return levelRank(agentLevel.value) >= levelRank(requiredLevel);
+  }
 
   // Actions
   async function sendOtp(phone: string): Promise<boolean> {
@@ -62,7 +90,10 @@ export const useAuthStore = defineStore('auth', () => {
       const result = await verifyOtp(phone, otp, clientSchema.value);
       
       token.value = result.token;
-      agent.value = result.agent;
+      agent.value = {
+        ...result.agent,
+        level: normalizeLevel(result.agent.level),
+      };
       isFirstLogin.value = result.isFirstLogin;
 
       // Store available clients
@@ -106,6 +137,7 @@ export const useAuthStore = defineStore('auth', () => {
           firstName,
           lastName: lastName || null,
           email: email || null,
+          level: normalizeLevel(agent.value.level),
         };
         localStorage.setItem('agent_data', JSON.stringify(agent.value));
       }
@@ -172,6 +204,10 @@ export const useAuthStore = defineStore('auth', () => {
     isAuthenticated,
     activeClient,
     hasMultipleClients,
+    agentLevel,
+    isAdmin,
+    isManagerOrAbove,
+    hasLevel,
     // Actions
     sendOtp,
     verify,

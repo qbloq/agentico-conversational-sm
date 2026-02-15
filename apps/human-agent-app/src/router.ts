@@ -1,7 +1,15 @@
-import { createRouter, createWebHistory } from 'vue-router';
+import { createRouter, createWebHistory, type RouteRecordRaw } from 'vue-router';
 import { useAuthStore } from './stores/auth';
+import type { AgentLevel } from './stores/auth';
 
-const routes = [
+declare module 'vue-router' {
+  interface RouteMeta {
+    requiresAuth?: boolean;
+    requiredLevel?: AgentLevel;
+  }
+}
+
+const routes: RouteRecordRaw[] = [
   {
     path: '/login',
     name: 'login',
@@ -35,37 +43,37 @@ const routes = [
     path: '/followups',
     name: 'followups',
     component: () => import('./views/FollowupConfigsView.vue'),
-    meta: { requiresAuth: true },
+    meta: { requiresAuth: true, requiredLevel: 'admin' },
   },
   {
     path: '/state-machines',
     name: 'state-machines',
     component: () => import('./views/StateMachinesView.vue'),
-    meta: { requiresAuth: true },
+    meta: { requiresAuth: true, requiredLevel: 'admin' },
   },
   {
     path: '/state-machines/:id',
     name: 'state-editor',
     component: () => import('./views/StateEditorView.vue'),
-    meta: { requiresAuth: true },
+    meta: { requiresAuth: true, requiredLevel: 'admin' },
   },
   {
     path: '/clients',
     name: 'clients',
     component: () => import('./views/ClientsView.vue'),
-    meta: { requiresAuth: true },
+    meta: { requiresAuth: true, requiredLevel: 'admin' },
   },
   {
     path: '/clients/:id',
     name: 'client-editor',
     component: () => import('./views/ClientEditorView.vue'),
-    meta: { requiresAuth: true },
+    meta: { requiresAuth: true, requiredLevel: 'admin' },
   },
   {
     path: '/agents',
     name: 'agents',
     component: () => import('./views/AgentsView.vue'),
-    meta: { requiresAuth: true },
+    meta: { requiresAuth: true, requiredLevel: 'admin' },
   },
   {
     path: '/profile',
@@ -86,6 +94,8 @@ router.beforeEach((to, _from, next) => {
   
   if (to.meta.requiresAuth && !auth.isAuthenticated) {
     next({ name: 'login' });
+  } else if (to.meta.requiresAuth && to.meta.requiredLevel && !auth.hasLevel(to.meta.requiredLevel)) {
+    next({ name: 'queue' });
   } else if (to.name === 'login' && auth.isAuthenticated) {
     next({ name: 'queue' });
   } else {

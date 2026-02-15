@@ -12,6 +12,15 @@ import { serve } from 'https://deno.land/std@0.177.0/http/server.ts';
 import { createSupabaseClient } from '../_shared/supabase.ts';
 import { create, verify, getNumericDate } from 'https://deno.land/x/djwt@v3.0.1/mod.ts';
 
+type AgentLevel = 'agent' | 'manager' | 'admin';
+
+function normalizeLevel(level: unknown): AgentLevel {
+  if (level === 'admin' || level === 'manager' || level === 'agent') {
+    return level;
+  }
+  return 'agent';
+}
+
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
@@ -215,6 +224,7 @@ async function handleVerifyOtp(req: Request): Promise<Response> {
       sub: agent.id,
       phone: agent.phone,
       clientSchema,
+      level: normalizeLevel(agent.level),
       exp: getNumericDate(60 * 60 * 24 * 7), // 7 days
     },
     key
@@ -230,6 +240,7 @@ async function handleVerifyOtp(req: Request): Promise<Response> {
         firstName: agent.first_name,
         lastName: agent.last_name,
         email: agent.email,
+        level: normalizeLevel(agent.level),
       },
       isFirstLogin: !agent.first_name,
       availableClients,

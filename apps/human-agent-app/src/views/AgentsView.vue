@@ -8,6 +8,8 @@ import { useClientsStore } from '@/stores/clients';
 import {
   listAgents,
   updateAgentClients,
+  updateAgentLevel,
+  type AgentLevel,
   type HumanAgent,
 } from '@/api/client';
 
@@ -20,6 +22,7 @@ const error = ref<string | null>(null);
 const saving = ref<string | null>(null); // agentId being saved
 const editingAgent = ref<string | null>(null); // agentId being edited
 const editClientIds = ref<string[]>([]);
+const editLevel = ref<AgentLevel>('agent');
 
 const schemaClients = computed(() =>
   clientsStore.clients.filter(c => c.schema_name === auth.clientSchema)
@@ -59,11 +62,13 @@ function getClientNames(agent: HumanAgent): string {
 function startEditing(agent: HumanAgent) {
   editingAgent.value = agent.id;
   editClientIds.value = agent.allowed_client_ids ? [...agent.allowed_client_ids] : [];
+  editLevel.value = agent.level;
 }
 
 function cancelEditing() {
   editingAgent.value = null;
   editClientIds.value = [];
+  editLevel.value = 'agent';
 }
 
 function toggleClientId(clientId: string) {
@@ -80,21 +85,42 @@ async function saveAgentClients(agentId: string) {
   error.value = null;
 
   try {
+    const currentAgent = agents.value.find(a => a.id === agentId) || null;
+
     // If all clients are selected or none, set to null (= all access)
     const ids = editClientIds.value.length === 0 || editClientIds.value.length === schemaClients.value.length
       ? null
       : editClientIds.value;
 
-    await updateAgentClients(auth.clientSchema, agentId, ids);
+    if (!currentAgent) {
+      throw new Error('Agent not found');
+    }
+
+    const clientsChanged =
+      (currentAgent.allowed_client_ids || []).join('|') !== (ids || []).join('|') ||
+      (currentAgent.allowed_client_ids === null) !== (ids === null);
+    const levelChanged = currentAgent.level !== editLevel.value;
+
+    if (clientsChanged) {
+      await updateAgentClients(auth.clientSchema, agentId, ids);
+    }
+    if (levelChanged) {
+      await updateAgentLevel(auth.clientSchema, agentId, editLevel.value);
+    }
 
     // Update local state
     const idx = agents.value.findIndex(a => a.id === agentId);
     if (idx >= 0) {
-      agents.value[idx] = { ...agents.value[idx], allowed_client_ids: ids };
+      agents.value[idx] = {
+        ...agents.value[idx],
+        allowed_client_ids: ids,
+        level: editLevel.value,
+      };
     }
 
     editingAgent.value = null;
     editClientIds.value = [];
+    editLevel.value = 'agent';
   } catch (e) {
     error.value = e instanceof Error ? e.message : 'Failed to update agent';
   } finally {
@@ -165,8 +191,11 @@ async function saveAgentClients(agentId: string) {
               >
                 Inactive
               </span>
+              <span class="text-xs px-2 py-0.5 bg-surface-100 dark:bg-surface-700 text-surface-600 dark:text-surface-300 rounded-full uppercase">
+                {{ agent.level }}
+              </span>
               <button
-                v-if="editingAgent !== agent.id && schemaClients.length > 1"
+                v-if="editingAgent !== agent.id"
                 @click="startEditing(agent)"
                 class="text-xs px-3 py-1.5 bg-surface-100 dark:bg-surface-700 hover:bg-surface-200 dark:hover:bg-surface-600 text-surface-700 dark:text-surface-300 rounded-lg transition-colors"
               >
@@ -185,6 +214,16 @@ async function saveAgentClients(agentId: string) {
 
           <!-- Editing Mode -->
           <div v-else class="px-4 pb-4 border-t border-surface-100 dark:border-surface-700 pt-3">
+            <p class="text-xs text-surface-500 mb-2">Role level:</p>
+            <select
+              v-model="editLevel"
+              class="w-full mb-3 px-3 py-2 rounded-lg border border-surface-200 dark:border-surface-600 bg-white dark:bg-surface-700 text-sm text-surface-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-accent-500/50"
+            >
+              <option value="agent">Agent</option>
+              <option value="manager">Manager</option>
+              <option value="admin">Admin</option>
+            </select>
+
             <p class="text-xs text-surface-500 mb-2">Select clients this agent can access:</p>
             <div class="space-y-2 mb-3">
               <label

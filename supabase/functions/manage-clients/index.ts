@@ -1,6 +1,6 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createSupabaseClient } from '../_shared/supabase.ts';
-import { verifyAgent, corsHeaders } from '../_shared/auth.ts';
+import { verifyAgent, corsHeaders, hasRequiredLevel, type AgentLevel } from '../_shared/auth.ts';
 import { WABAClient } from 'npm:whatsapp-business';
 
 interface WabaPayload {
@@ -8,6 +8,10 @@ interface WabaPayload {
   phoneNumberId: string;
   wabaId: string;
   businessId: string;
+}
+
+function isValidAgentLevel(level: unknown): level is AgentLevel {
+  return level === 'agent' || level === 'manager' || level === 'admin';
 }
 
 async function linkWaba(waba: WabaPayload): Promise<{ accessToken: string; name: string; phoneNumber: string }> {
@@ -70,6 +74,13 @@ Deno.serve(async (req: Request) => {
       );
     }
 
+    if (!hasRequiredLevel(agent, 'admin')) {
+      return new Response(
+        JSON.stringify({ error: 'Forbidden' }),
+        { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
     const supabase = createSupabaseClient();
     const url = new URL(req.url);
 
@@ -101,7 +112,7 @@ Deno.serve(async (req: Request) => {
         const { data, error } = await supabase
           .schema(schema)
           .from('human_agents')
-          .select('id, phone, first_name, last_name, email, is_active, allowed_client_ids, created_at')
+          .select('id, phone, first_name, last_name, email, is_active, level, allowed_client_ids, created_at')
           .order('first_name', { ascending: true });
         if (error) throw error;
         return new Response(JSON.stringify(data), {
@@ -210,7 +221,32 @@ Deno.serve(async (req: Request) => {
             updated_at: new Date().toISOString(),
           })
           .eq('id', agentId)
-          .select('id, phone, first_name, last_name, allowed_client_ids')
+          .select('id, phone, first_name, last_name, level, allowed_client_ids')
+          .single();
+        if (updateErr) throw updateErr;
+        return new Response(JSON.stringify({ success: true, agent: updated }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+
+      // POST { action: 'update-agent-level', schema, agentId, level }
+      if (action === 'update-agent-level') {
+        const { schema, agentId, level } = body;
+        if (!schema || !agentId || !isValidAgentLevel(level)) {
+          return new Response(
+            JSON.stringify({ error: 'Missing schema, agentId, or invalid level' }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+        const { data: updated, error: updateErr } = await supabase
+          .schema(schema)
+          .from('human_agents')
+          .update({
+            level,
+            updated_at: new Date().toISOString(),
+          })
+          .eq('id', agentId)
+          .select('id, phone, first_name, last_name, level, allowed_client_ids')
           .single();
         if (updateErr) throw updateErr;
         return new Response(JSON.stringify({ success: true, agent: updated }), {

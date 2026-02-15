@@ -3,7 +3,7 @@
  * SidebarNav - Desktop sidebar navigation
  */
 
-import { ref } from 'vue';
+import { computed, ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { useEscalationsStore } from '@/stores/escalations';
 import { useSessionsStore } from '@/stores/sessions';
@@ -36,11 +36,18 @@ function handleClientSwitch(clientId: string) {
 const navItems = [
   { name: 'Escalations', route: '/', icon: 'bell' },
   { name: 'All Chats', route: '/chats', icon: 'chat' },
-  { name: 'Follow-ups', route: '/followups', icon: 'clock' },
-  { name: 'State Machines', route: '/state-machines', icon: 'cpu' },
-  { name: 'Clients', route: '/clients', icon: 'clients' },
-  { name: 'Agents', route: '/agents', icon: 'agents' },
+  { name: 'Follow-ups', route: '/followups', icon: 'clock', requiredLevel: 'admin' as const },
+  { name: 'State Machines', route: '/state-machines', icon: 'cpu', requiredLevel: 'admin' as const },
+  { name: 'Clients', route: '/clients', icon: 'clients', requiredLevel: 'admin' as const },
+  { name: 'Agents', route: '/agents', icon: 'agents', requiredLevel: 'admin' as const },
 ];
+
+const visibleNavItems = computed(() =>
+  navItems.filter((item) => {
+    if (!item.requiredLevel) return true;
+    return auth.hasLevel(item.requiredLevel);
+  })
+);
 
 const isActive = (itemRoute: string) => {
   if (itemRoute === '/') {
@@ -130,7 +137,7 @@ function navigate(itemRoute: string) {
     <!-- Navigation Items -->
     <nav class="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
       <button
-        v-for="item in navItems"
+        v-for="item in visibleNavItems"
         :key="item.name"
         @click="navigate(item.route)"
         :class="[
