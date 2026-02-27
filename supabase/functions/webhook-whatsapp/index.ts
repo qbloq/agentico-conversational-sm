@@ -32,6 +32,28 @@ import {
 import { WhatsAppNotificationService } from '../_shared/sales-engine-escalation.bundle.ts';
 import type { NormalizedMessage, ChannelType } from '../_shared/sales-engine.bundle.ts';
 
+/**
+ * External dispatch routing table.
+ * Maps a phoneNumberId to an external URL for forwarding unmatched requests.
+ * Set via the EXTERNAL_DISPATCH_ROUTES env var as a JSON object, e.g.:
+ *   {"123456789":"https://example.com/webhook","987654321":"https://other.com/webhook"}
+ * If a phoneNumberId is not in this table, falls back to Premium Academy.
+ */
+function loadExternalDispatchRoutes(): Record<string, string> {
+  const raw = Deno.env.get('EXTERNAL_DISPATCH_ROUTES');
+  if (!raw) return {};
+  try {
+    const parsed = JSON.parse(raw);
+    // console.log(`[Webhook WhatsApp] Loaded ${Object.keys(parsed).length} external dispatch route(s)`);
+    return parsed;
+  } catch (e) {
+    // console.error('[Webhook WhatsApp] Failed to parse EXTERNAL_DISPATCH_ROUTES:', e);
+    return {};
+  }
+}
+
+const externalDispatchRoutes = loadExternalDispatchRoutes();
+
 // WhatsApp message types
 interface WhatsAppWebhookPayload {
   object: string;
@@ -161,8 +183,14 @@ async function handleIncomingMessage(req: Request): Promise<Response> {
         // console.log(`[DEBUG] Route result: ${route ? `Found (${route.clientId})` : 'NOT FOUND'}`);
         
         if (!route) {
-          console.error(`No client found for phone_number_id: ${phoneNumberId}. Dispatching to Premium Academy...`);
-          await dispatchToPremiumAcademy(req.headers, body);
+          const externalUrl = externalDispatchRoutes[phoneNumberId];
+          if (externalUrl) {
+            console.log(`[Webhook WhatsApp] No client found for phone_number_id: ${phoneNumberId}. Dispatching to external URL: ${externalUrl}`);
+            await dispatchToExternalUrl(req.headers, body, externalUrl);
+          } else {
+            console.error(`No client found for phone_number_id: ${phoneNumberId}. Dispatching to Premium Academy...`);
+            await dispatchToPremiumAcademy(req.headers, body);
+          }
           continue;
         }
         
@@ -641,6 +669,28 @@ async function sendWhatsAppTemplate(
     await sendWhatsAppMessage(phoneNumberId, to, response.content, accessToken);
   } else {
     console.log(`Template sent successfully`);
+  }
+}
+
+/**
+ * Dispatch request to an external URL based on routing table
+ */
+async function dispatchToExternalUrl(headers: Headers, body: string, targetUrl: string): Promise<void> {
+  try {
+    console.log('[Webhook WhatsApp] Dispatching to external URL:', targetUrl);
+
+    const response = await fetch(targetUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': headers.get('Content-Type') || 'application/json',
+        'x-hub-signature-256': headers.get('x-hub-signature-256') || '',
+      },
+      body: body,
+    });
+
+    console.log(`[Webhook WhatsApp] External dispatch responded: ${response.status}`);
+  } catch (error) {
+    console.error(`[Webhook WhatsApp] Error dispatching to ${targetUrl}:`, error);
   }
 }
 

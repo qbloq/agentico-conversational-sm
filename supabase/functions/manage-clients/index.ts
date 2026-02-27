@@ -254,6 +254,71 @@ Deno.serve(async (req: Request) => {
         });
       }
 
+      // POST { action: 'create-agent', schema, phone, level }
+      if (action === 'create-agent') {
+        const { schema, phone, level } = body;
+        if (!schema || !phone) {
+          return new Response(
+            JSON.stringify({ error: 'Missing schema or phone' }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+        if (!isValidAgentLevel(level)) {
+          return new Response(
+            JSON.stringify({ error: 'Invalid agent level' }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+        const { data: created, error: createErr } = await supabase
+          .schema(schema)
+          .from('human_agents')
+          .insert({
+            phone,
+            level: level || 'agent',
+            is_active: true,
+            allowed_client_ids: null,
+          })
+          .select('id, phone, first_name, last_name, email, is_active, level, allowed_client_ids, created_at')
+          .single();
+        if (createErr) {
+          if (createErr.code === '23505') {
+            return new Response(
+              JSON.stringify({ error: 'Agent with this phone number already exists' }),
+              { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+            );
+          }
+          throw createErr;
+        }
+        return new Response(JSON.stringify({ success: true, agent: created }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+
+      // POST { action: 'update-agent-active', schema, agentId, isActive }
+      if (action === 'update-agent-active') {
+        const { schema, agentId, isActive } = body;
+        if (!schema || !agentId || typeof isActive !== 'boolean') {
+          return new Response(
+            JSON.stringify({ error: 'Missing schema, agentId, or isActive' }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+        const { data: updated, error: updateErr } = await supabase
+          .schema(schema)
+          .from('human_agents')
+          .update({
+            is_active: isActive,
+            updated_at: new Date().toISOString(),
+          })
+          .eq('id', agentId)
+          .select('id, phone, first_name, last_name, level, allowed_client_ids, is_active')
+          .single();
+        if (updateErr) throw updateErr;
+        return new Response(JSON.stringify({ success: true, agent: updated }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+
       // POST { action: 'toggle-active', id }
       if (action === 'toggle-active') {
         const { id } = body;

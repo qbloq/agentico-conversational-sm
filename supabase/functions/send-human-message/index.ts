@@ -38,6 +38,7 @@ serve(async (req: Request) => {
   }
 
   try {
+    console.log('--- Send Human Message v1.0.6 ---');
     // Verify agent
     const agent = await verifyAgent(req);
     if (!agent) {
@@ -54,6 +55,7 @@ serve(async (req: Request) => {
     let languageCode: string | undefined;
     let imageFile: File | undefined;
     let videoFile: File | undefined;
+    let audioFile: File | undefined;
     let caption: string | undefined;
 
     const contentType = req.headers.get('content-type') || '';
@@ -72,6 +74,7 @@ serve(async (req: Request) => {
         escalationId = formData.get('escalationId') as string;
         imageFile = formData.get('image') as File;
         videoFile = formData.get('video') as File;
+        audioFile = formData.get('audio') as File;
         caption = formData.get('caption') as string | undefined;
         replyToMessageId = formData.get('replyToMessageId') as string | undefined;
         
@@ -79,6 +82,7 @@ serve(async (req: Request) => {
           escalationId,
           imageFileName: imageFile?.name,
           videoFileName: videoFile?.name,
+          audioFileName: audioFile?.name,
           caption,
           replyToMessageId
         });
@@ -109,9 +113,9 @@ serve(async (req: Request) => {
       }
     }
 
-    if (!escalationId || (!message && !templateName && !imageFile && !videoFile)) {
+    if (!escalationId || (!message && !templateName && !imageFile && !videoFile && !audioFile)) {
       return new Response(
-        JSON.stringify({ error: 'escalationId and either message, templateName, image, or video are required' }),
+        JSON.stringify({ error: 'escalationId and either message, templateName, image, video, or audio are required' }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
@@ -177,51 +181,79 @@ serve(async (req: Request) => {
     const session = escalation.session;
 
     // Load client config for dynamic bucket and WhatsApp token
-    const { data: clientConfig } = await supabase
+    console.log('Fetching client config for schema:', agent.clientSchema);
+    const { data: clientConfig, error: configError } = await supabase
       .from('client_configs')
       .select('storage_bucket')
       .eq('schema_name', agent.clientSchema)
       .eq('is_active', true)
-      .single();
+      .limit(1) // Avoid .single() error if multiple rows exist
+      .maybeSingle();
 
-    const storageBucket = clientConfig?.storage_bucket || `media-${agent.clientSchema.replace('client_', '')}`;
+    if (configError) {
+      console.error('Error fetching client config:', configError);
+    }
 
-    // Handle image/video upload if present
+    const storageBucket = clientConfig?.storage_bucket || `media-${agent.clientSchema.replace('client_', '').replace(/_/g, '-')}`;
+    console.log('Calculated storage bucket:', storageBucket);
+
+    // Handle image/video/audio upload if present
     let mediaUrl: string | undefined;
-    const mediaFile = imageFile || videoFile;
+    const mediaFile = imageFile || videoFile || audioFile;
     const isVideo = !!videoFile;
+    const isAudio = !!audioFile;
 
     if (mediaFile) {
       try {
-        console.log(`Processing ${isVideo ? 'video' : 'image'} upload...`);
+        const typeLabel = isVideo ? 'video' : (isAudio ? 'audio' : 'image');
+        console.log(`Processing ${typeLabel} upload...`);
         console.log('Media details:', {
           name: mediaFile.name,
           type: mediaFile.type,
           size: mediaFile.size
         });
         
+        // Normalize MIME type (Meta rejects "audio/ogg; codecs=opus" on processing)
+        let contentType = mediaFile.type;
+        if (isAudio && contentType.includes(';')) {
+          contentType = contentType.split(';')[0].trim();
+          console.log(`Normalized audio content-type from ${mediaFile.type} to ${contentType}`);
+        }
+
         // Upload to Supabase Storage
         const date = new Date();
-        const ext = mediaFile.name.split('.').pop() || (isVideo ? 'mp4' : 'jpg');
+        let ext = mediaFile.name.split('.').pop() || (isVideo ? 'mp4' : (isAudio ? 'aac' : 'jpg'));
+        
+        if (isAudio && contentType) {
+          if (contentType.includes('webm')) ext = 'webm';
+          else if (contentType.includes('mp4')) ext = 'mp4';
+          else if (contentType.includes('ogg')) ext = 'ogg';
+          else if (contentType.includes('aac')) ext = 'aac';
+          else if (contentType.includes('mpeg')) ext = 'mp3';
+        }
+        
         const path = `${agent.clientSchema}/${date.getFullYear()}/${date.getMonth() + 1}/${date.getDate()}/${crypto.randomUUID()}.${ext}`;
         
-        console.log('Uploading to path:', path);
-        
+        console.log(`Uploading to path: ${path} with contentType: ${contentType}`);
+
         const { data: uploadData, error: uploadError } = await supabase
           .storage
           .from(storageBucket)
           .upload(path, await mediaFile.arrayBuffer(), {
-            contentType: mediaFile.type,
+            contentType: contentType,
             upsert: false,
           });
 
         if (uploadError) {
-          console.error(`Failed to upload ${isVideo ? 'video' : 'image'}:`, uploadError);
-          console.error('Upload error details:', JSON.stringify(uploadError));
+          const typeLabel = isVideo ? 'video' : (isAudio ? 'audio' : 'image');
+          console.error(`[v1.0.7] Failed to upload ${typeLabel} to bucket ${storageBucket}:`, uploadError);
           return new Response(
             JSON.stringify({ 
-              error: `Failed to upload ${isVideo ? 'video' : 'image'}`, 
-              details: uploadError.message 
+              error: `Failed to upload ${typeLabel}`, 
+              details: uploadError.message,
+              bucket: storageBucket,
+              path: path,
+              version: '1.0.7'
             }),
             { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
           );
@@ -264,6 +296,90 @@ serve(async (req: Request) => {
       }
     }
 
+    // Send message to WhatsApp via Meta API
+    let deliverySuccess = false;
+    let fallbackMessageId: string | undefined;
+    
+    // For audio, we upload directly to Meta to bypass Supabase Storage content-type stripping
+    let directMediaId: string | undefined;
+    
+    if (isAudio && mediaFile) {
+       console.log(`Audio detected. Original media file type: ${mediaFile.type}, ContentType: ${contentType}`);
+       
+       // Force a WhatsApp-compatible mime type regardless of what Deno extracted
+       let uploadMimeType = 'audio/mp4'; 
+       if (contentType && contentType !== 'multipart/form-data') {
+         if (contentType.includes('ogg') || contentType.includes('opus')) uploadMimeType = 'audio/ogg'; // WhatsApp accepts ogg but Meta verification is flaky
+         if (contentType.includes('mp4')) uploadMimeType = 'audio/mp4';
+         if (contentType.includes('aac')) uploadMimeType = 'audio/aac';
+         if (contentType.includes('mpeg')) uploadMimeType = 'audio/mpeg';
+       }
+
+       console.log('Uploading directly to Meta /media endpoint to preserve MIME type as: ' + uploadMimeType);
+       const supabaseForSecrets = createClient(
+          Deno.env.get('SUPABASE_URL') || '',
+          Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || ''
+        );
+        const { data: secretRow } = await supabaseForSecrets
+          .from('client_secrets')
+          .select('secrets')
+          .eq('client_id', agent.clientSchema.replace('client_', ''))
+          .eq('channel_type', 'whatsapp')
+          .single();
+        const accessToken = secretRow?.secrets?.access_token || Deno.env.get('TAG_WHATSAPP_ACCESS_TOKEN');
+
+       if (accessToken && escalation.session?.channel_id) {
+         try {
+           // Construct manual multipart/form-data payload to guarantee Content-Type headers
+           const boundary = '----WebKitFormBoundary' + crypto.randomUUID().replace(/-/g, '').substring(0, 16);
+           
+           const textEncoder = new TextEncoder();
+           const rawBuffer = await mediaFile.arrayBuffer();
+           
+           // Build the multipart payload
+           const preamble = textEncoder.encode(
+             `--${boundary}\r\n` +
+             `Content-Disposition: form-data; name="messaging_product"\r\n\r\n` +
+             `whatsapp\r\n` +
+             `--${boundary}\r\n` +
+             `Content-Disposition: form-data; name="type"\r\n\r\n` +
+             `${uploadMimeType}\r\n` +
+             `--${boundary}\r\n` +
+             `Content-Disposition: form-data; name="file"; filename="${mediaFile.name || 'audio.mp4'}"\r\n` +
+             `Content-Type: ${uploadMimeType}\r\n\r\n`
+           );
+           
+           const postamble = textEncoder.encode(`\r\n--${boundary}--\r\n`);
+           
+           // Concatenate preamble, binary data, and postamble
+           const payloadLength = preamble.length + rawBuffer.byteLength + postamble.length;
+           const payload = new Uint8Array(payloadLength);
+           payload.set(preamble, 0);
+           payload.set(new Uint8Array(rawBuffer), preamble.length);
+           payload.set(postamble, preamble.length + rawBuffer.byteLength);
+
+           const uploadRes = await fetch(`https://graph.facebook.com/v24.0/${escalation.session.channel_id}/media`, {
+             method: 'POST',
+             headers: {
+               'Authorization': `Bearer ${accessToken}`,
+               'Content-Type': `multipart/form-data; boundary=${boundary}`
+             },
+             body: payload
+           });
+           
+           if (uploadRes.ok) {
+             const resData = await uploadRes.json();
+             directMediaId = resData.id;
+             console.log(`Direct Meta Media Upload Success: Media ID ${directMediaId}`);
+           } else {
+             console.error('Direct Meta Media Upload Failed:', await uploadRes.text());
+           }
+         } catch(e) {
+           console.error('Exception during direct Meta media upload:', e);
+         }
+       }
+    }
+
     // Save message to DB
     const { data: savedMessage, error: msgError } = await supabase
       .schema(agent.clientSchema)
@@ -271,8 +387,8 @@ serve(async (req: Request) => {
       .insert({
         session_id: session.id,
         direction: 'outbound',
-        type: videoFile ? 'video' : (imageFile ? 'image' : (templateName ? 'template' : 'text')),
-        content: (imageFile || videoFile) ? (caption || null) : (message || (templateName ? `Template: ${templateName}` : null)),
+        type: audioFile ? 'audio' : (videoFile ? 'video' : (imageFile ? 'image' : (templateName ? 'template' : 'text'))),
+        content: (imageFile || videoFile || audioFile) ? (caption || null) : (message || (templateName ? `Template: ${templateName}` : null)),
         media_url: mediaUrl,
         sent_by_agent_id: agent.sub, // Proper FK to human_agents table
         reply_to_message_id: replyToMessageId,
@@ -289,17 +405,18 @@ serve(async (req: Request) => {
     }
 
     // Send via WhatsApp
-    const sent = await sendWhatsAppMessage(
-      session.channel_id,          // phone_number_id
-      session.channel_user_id,     // customer phone
-      message || caption || '',
-      agent.clientSchema,
+    const sent = await sendWhatsAppMessage({
+      phoneNumberId: session.channel_id,
+      to: session.channel_user_id,
+      text: message || caption || '',
+      clientSchema: agent.clientSchema,
       templateName,
       languageCode,
-      mediaUrl,                     // Pass media URL for image/video messages
-      platformReplyToId,            // Pass platform ID for replies
-      videoFile ? 'video' : (imageFile ? 'image' : undefined)
-    );
+      mediaUrl: (!directMediaId) ? mediaUrl : undefined,
+      mediaId: directMediaId,
+      replyToMessageId: platformReplyToId,
+      mediaType: audioFile ? 'audio' : (videoFile ? 'video' : (imageFile ? 'image' : undefined))
+    });
 
     if (!sent) {
       // Message saved but not sent - mark for retry or notify
@@ -366,20 +483,36 @@ async function verifyAgent(req: Request): Promise<AgentPayload | null> {
   }
 }
 
+interface WhatsAppMessagePayload {
+  phoneNumberId: string;
+  to: string;
+  text?: string;
+  clientSchema: string;
+  templateName?: string;
+  languageCode?: string;
+  mediaUrl?: string;
+  mediaId?: string;
+  replyToMessageId?: string;
+  mediaType?: 'image' | 'video' | 'audio';
+}
+
 /**
  * Send message via WhatsApp Cloud API
  */
-async function sendWhatsAppMessage(
-  phoneNumberId: string,
-  to: string,
-  text: string,
-  clientSchema: string,
-  templateName?: string,
-  languageCode: string = 'es_CO',
-  mediaUrl?: string,
-  replyToMessageId?: string,
-  mediaType?: 'image' | 'video'
-): Promise<boolean> {
+async function sendWhatsAppMessage(payload: WhatsAppMessagePayload): Promise<boolean> {
+  const {
+    phoneNumberId,
+    to,
+    text,
+    clientSchema,
+    templateName,
+    languageCode = 'es_CO',
+    mediaUrl,
+    mediaId,
+    replyToMessageId,
+    mediaType
+  } = payload;
+
   // Get access token from client secrets, fallback to env var
   const supabaseForSecrets = createClient(
     Deno.env.get('SUPABASE_URL') || '',
@@ -413,19 +546,30 @@ async function sendWhatsAppMessage(
         name: templateName,
         language: { code: languageCode },
       };
+    } else if (mediaId) {
+      const type = mediaType || 'audio';
+      body.type = type;
+      body[type] = {
+        id: mediaId
+      };
+      if (text && type !== 'audio') {
+        body[type].caption = text;
+      }
     } else if (mediaUrl) {
-      // Send image or video with optional caption
+      // Send image, video or audio with optional caption
       const type = mediaType || 'image';
       body.type = type;
       body[type] = {
         link: mediaUrl,
       };
-      if (text) {
+      if (text && type !== 'audio') { // WhatsApp doesnt support captions for audio
         body[type].caption = text;
       }
     } else {
       body.type = 'text';
-      body.text = { body: text };
+      if (text) {
+        body.text = { body: text };
+      }
     }
 
     if (replyToMessageId) {
@@ -443,13 +587,13 @@ async function sendWhatsAppMessage(
       body: JSON.stringify(body),
     });
 
+    const resBody = await response.json();
     if (!response.ok) {
-      const error = await response.text();
-      console.error('WhatsApp API error:', error);
+      console.error('WhatsApp API error body:', JSON.stringify(resBody));
       return false;
     }
 
-    console.log(`Message sent to ${to} by agent (${mediaType || (templateName ? 'template' : 'text')})`);
+    console.log(`Message sent to ${to} by agent (${mediaType || (templateName ? 'template' : 'text')}). Meta ID: ${resBody.messages?.[0]?.id}`);
     return true;
   } catch (error) {
     console.error('Failed to send WhatsApp message:', error);

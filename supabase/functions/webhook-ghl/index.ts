@@ -27,6 +27,52 @@ interface GHLLocation {
   fullAddress?: string;
 }
 
+/**
+ * Resolve WhatsApp channel_id using workflow.name as client_id key
+ */
+async function resolveChannelIdByWorkflowName(
+  supabase: ReturnType<typeof createSupabaseClient>,
+  workflowName: string
+): Promise<string | null> {
+  const { data, error } = await supabase
+    .from('client_configs')
+    .select('channel_id')
+    .eq('client_id', workflowName)
+    .eq('channel_type', CHANNEL_TYPE)
+    .eq('is_active', true)
+    .maybeSingle();
+
+  if (error) {
+    console.error('[GHL Webhook] Error resolving channel_id from client_configs:', error);
+    return null;
+  }
+
+  return data?.channel_id ?? null;
+}
+
+/**
+ * Resolve WhatsApp access token from client secrets using workflow.name as client_id key
+ */
+async function resolveAccessTokenByWorkflowName(
+  supabase: ReturnType<typeof createSupabaseClient>,
+  workflowName: string
+): Promise<string | null> {
+  const { data, error } = await supabase
+    .from('client_secrets')
+    .select('secrets')
+    .eq('client_id', workflowName)
+    .eq('channel_type', CHANNEL_TYPE)
+    .maybeSingle();
+
+  if (error) {
+    console.error('[GHL Webhook] Error resolving access token from client_secrets:', error);
+    return null;
+  }
+
+  const accessToken = (data?.secrets as { accessToken?: unknown } | null)?.accessToken;
+  return typeof accessToken === 'string' && accessToken.length > 0 ? accessToken : null;
+}
+
 interface GHLWorkflow {
   id: string;
   name: string;
@@ -92,7 +138,6 @@ interface GHLWebhookPayload {
 
 const SCHEMA_NAME = 'client_tag_markets';
 const CHANNEL_TYPE = 'whatsapp';
-const CHANNEL_ID = Deno.env.get('TAG_WHATSAPP_PHONE_NUMBER_ID'); // Placeholder channel ID for GHL-originated contacts
 
 // =============================================================================
 // Main Handler
@@ -137,6 +182,24 @@ serve(async (req: Request) => {
     // Initialize Supabase client
     const supabase = createSupabaseClient();
 
+    const workflowName = payload.workflow?.name?.trim();
+    if (!workflowName) {
+      console.error('[GHL Webhook] Missing workflow.name in payload');
+      return new Response('OK', { status: 200 });
+    }
+
+    const channelId = await resolveChannelIdByWorkflowName(supabase, workflowName);
+    if (!channelId) {
+      console.error(`[GHL Webhook] No channel_id found for workflow/client: ${workflowName}`);
+      return new Response('OK', { status: 200 });
+    }
+
+    const accessToken = await resolveAccessTokenByWorkflowName(supabase, workflowName);
+    if (!accessToken) {
+      console.error(`[GHL Webhook] No WhatsApp access token found for workflow/client: ${workflowName}`);
+      return new Response('OK', { status: 200 });
+    }
+
     // Extract attribution data
     const attribution = payload.contact?.attributionSource || payload.contact?.lastAttributionSource;
 
@@ -171,7 +234,7 @@ serve(async (req: Request) => {
     console.log(`[GHL Webhook] Contact: ${contactRecord.id} (${phone})`);
 
     // 2. Find or create session
-    const session = await findOrCreateSession(supabase, contactRecord.id, phone, {
+    const session = await findOrCreateSession(supabase, contactRecord.id, phone, channelId, {
       ghl_contact_id: payload.contact_id,
       ghl_workflow: payload.workflow?.name,
       tags: payload.tags,
@@ -179,7 +242,7 @@ serve(async (req: Request) => {
     console.log(`[GHL Webhook] Session: ${session.id}`);
 
     // 3. Send WhatsApp template message
-    const templateSent = await sendWhatsAppTemplate(phone, contactName);
+    const templateSent = await sendWhatsAppTemplate(phone, contactName, channelId, accessToken);
     console.log(`[GHL Webhook] Template sent: ${templateSent}`);
 
     // 4. Log the outbound message if sent successfully
@@ -325,6 +388,7 @@ async function findOrCreateSession(
   supabase: ReturnType<typeof createSupabaseClient>,
   contactId: string,
   phone: string,
+  channelId: string,
   context: Record<string, unknown>
 ): Promise<{ id: string }> {
   // Try to find existing session
@@ -333,7 +397,7 @@ async function findOrCreateSession(
     .from('sessions')
     .select('id')
     .eq('channel_type', CHANNEL_TYPE)
-    .eq('channel_id', CHANNEL_ID)
+    .eq('channel_id', channelId)
     .eq('channel_user_id', phone)
     .maybeSingle();
 
@@ -366,7 +430,7 @@ async function findOrCreateSession(
     .insert({
       contact_id: contactId,
       channel_type: CHANNEL_TYPE,
-      channel_id: CHANNEL_ID,
+      channel_id: channelId,
       channel_user_id: phone,
       current_state: 'initial',
       context: { ...context, source: 'ghl_opportunity' },
@@ -387,15 +451,13 @@ async function findOrCreateSession(
 /**
  * Send WhatsApp template message
  */
-async function sendWhatsAppTemplate(phone: string, contactName: string): Promise<boolean> {
-  const phoneNumberId = Deno.env.get('TAG_WHATSAPP_PHONE_NUMBER_ID');
-  const accessToken = Deno.env.get('TAG_WHATSAPP_ACCESS_TOKEN');
+async function sendWhatsAppTemplate(
+  phone: string,
+  contactName: string,
+  phoneNumberId: string,
+  accessToken: string
+): Promise<boolean> {
   const templateName = Deno.env.get('WHATSAPP_TPL_GHL_OPPORTUNITY') || 'hola';
-
-  if (!phoneNumberId || !accessToken) {
-    console.error('[GHL Webhook] WhatsApp credentials not configured');
-    return false;
-  }
 
   try {
     const url = `https://graph.facebook.com/v24.0/${phoneNumberId}/messages`;
@@ -414,17 +476,6 @@ async function sendWhatsAppTemplate(phone: string, contactName: string): Promise
           name: templateName,
           language: { code: 'es_CO' },
           components: [
-            {
-              type: 'header',
-              parameters: [
-                { 
-                  type: 'image', 
-                  image: { 
-                    link: Deno.env.get('WHATSAPP_TPL_GHL_HEADER_IMAGE') || 'https://tournament.tagmarkets.com/assets/logo-tag-BYchnq3N.png'
-                  } 
-                },
-              ],
-            },
             {
               type: 'body',
               parameters: [

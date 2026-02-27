@@ -37,7 +37,7 @@ async function testAPI() {
     { name: 'Nested fileSearchStore', params: { fileSearchStore: { displayName: 'test-store-2' } } },
   ];
   
-  for (const testCase of testCases) {
+  /*for (const testCase of testCases) {
     console.log(`\nTrying: ${testCase.name}`);
     console.log('Params:', JSON.stringify(testCase.params));
     try {
@@ -54,7 +54,7 @@ async function testAPI() {
     } catch (e: any) {
       console.log('❌ Failed:', e.message);
     }
-  }
+  }*/
 }
 
 testAPI().catch(console.error);

@@ -198,6 +198,14 @@ async function handleVerifyOtp(req: Request): Promise<Response> {
     );
   }
 
+  // Check if agent is still active
+  if (!agent.is_active) {
+    return new Response(
+      JSON.stringify({ error: 'Agent account is deactivated. Contact your administrator.' }),
+      { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+    );
+  }
+
   // Update last login
   await supabase
     .schema(clientSchema)

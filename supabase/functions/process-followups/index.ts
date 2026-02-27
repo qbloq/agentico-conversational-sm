@@ -105,10 +105,10 @@ serve(async () => {
     
     // 2. Process each client
     for (const client of clients) {
-      const { schemaName, config: clientConfig } = client;
+      const { schemaName, channelId, config: clientConfig } = client;
       
       try {
-        await processClientSchema(supabase, schemaName, clientConfig);
+        await processClientSchema(supabase, schemaName, clientConfig, channelId);
       } catch (clientError) {
         console.error(`[Follow-up Worker] Failed to process client ${client.clientId} (${schemaName}):`, clientError);
       }
@@ -135,7 +135,8 @@ serve(async () => {
 async function processClientSchema(
   supabase: any,
   schemaName: string,
-  clientConfig: any
+  clientConfig: any,
+  clientChannelId: string
 ) {
   console.log(`[Follow-up Worker] Checking schema: ${clientConfig.clientId}`);
   
@@ -149,13 +150,25 @@ async function processClientSchema(
 
   // 1. Get pending items due now that are NOT already being processed
   const now = new Date().toISOString();
-  const { data: pendingItems, error: fetchError } = await supabase
+  const { data: pendingItemsWithSession, error: fetchError } = await supabase
     .schema(schemaName)
     .from('followup_queue')
-    .select('*')
+    .select(`
+      id,
+      session_id,
+      scheduled_at,
+      followup_type,
+      template_name,
+      template_params,
+      sequence_index,
+      followup_config_name,
+      status,
+      sessions!inner(channel_id)
+    `)
     .eq('status', 'pending')
     .is('processing_started_at', null)
     .lte('scheduled_at', now)
+    .eq('sessions.channel_id', clientChannelId)
     .limit(50);
     
   if (fetchError) {
@@ -163,9 +176,11 @@ async function processClientSchema(
     return;
   }
   
-  if (!pendingItems || pendingItems.length === 0) {
+  if (!pendingItemsWithSession || pendingItemsWithSession.length === 0) {
     return;
   }
+
+  const pendingItems: FollowupItem[] = pendingItemsWithSession.map(({ sessions: _sessions, ...item }: any) => item as FollowupItem);
   
   console.log(`[Follow-up Worker] Found ${pendingItems.length} pending items in ${schemaName}`);
   
@@ -337,6 +352,12 @@ async function sendWhatsAppMessage(
 ): Promise<void> {
   const baseUrl = Deno.env.get('WHATSAPP_API_BASE_URL') || 'https://graph.facebook.com';
   const url = `${baseUrl}/v24.0/${phoneNumberId}/messages`;
+
+
+  console.log(`[Follow-up Worker] Sending WhatsApp message to ${to}:`, message);
+
+
+  console.log(phoneNumberId, accessToken);
 
   const payload: any = {
     messaging_product: 'whatsapp',

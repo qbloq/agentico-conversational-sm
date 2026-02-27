@@ -167,12 +167,24 @@ async function listEscalations(agent: AgentPayload, url: URL): Promise<Response>
     Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || ''
   );
 
-  // Optionally filter by clientId
+  // Require clientId parameter
   const clientId = url.searchParams.get('clientId');
+  if (!clientId) {
+    return new Response(
+      JSON.stringify({ error: 'Client not found' }),
+      { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+    );
+  }
+
   let channelFilter: { channel_type: string; channel_id: string } | null = null;
 
-  if (clientId) {
-    channelFilter = await resolveClientChannel(supabase, clientId);
+  channelFilter = await resolveClientChannel(supabase, clientId);
+  // Return 404 if clientId is invalid
+  if (!channelFilter) {
+    return new Response(
+      JSON.stringify({ error: 'Client not found' }),
+      { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+    );
   }
 
   const { data: escalations, error } = await supabase
@@ -500,10 +512,23 @@ async function listSessions(agent: AgentPayload, url: URL): Promise<Response> {
   const search = url.searchParams.get('search')?.trim() || null;
   const limit = Math.min(Math.max(parseInt(url.searchParams.get('limit') || '20', 10) || 20, 1), 100);
 
+  // Require clientId parameter
+  if (!clientId) {
+    return new Response(
+      JSON.stringify({ error: 'Client not found' }),
+      { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+    );
+  }
+
   // Resolve client channel filter
   let channelFilter: { channel_type: string; channel_id: string } | null = null;
-  if (clientId) {
-    channelFilter = await resolveClientChannel(supabase, clientId);
+  channelFilter = await resolveClientChannel(supabase, clientId);
+  // Return 404 if clientId is invalid
+  if (!channelFilter) {
+    return new Response(
+      JSON.stringify({ error: 'Client not found' }),
+      { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+    );
   }
 
   // If searching, first find matching contact IDs

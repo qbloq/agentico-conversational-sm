@@ -44,11 +44,18 @@ serve(async (req: Request) => {
 
     const url = new URL(req.url);
     const pathParts = url.pathname.split('/').filter(Boolean);
+    const clientId = url.searchParams.get('clientId');
     
     // pathParts[0] = 'manage-whatsapp-templates'
     
     if (req.method === 'GET' && pathParts[1] === 'templates') {
-      return await listTemplates(agent);
+      if (!clientId) {
+        return new Response(
+          JSON.stringify({ error: 'clientId query parameter is required' }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+      return await listTemplates(clientId);
     }
 
     return new Response(
@@ -88,34 +95,46 @@ async function verifyAgent(req: Request): Promise<AgentPayload | null> {
   }
 }
 
-async function listTemplates(agent: AgentPayload): Promise<Response> {
+async function listTemplates(clientId: string): Promise<Response> {
   const supabase = createClient(
     Deno.env.get('SUPABASE_URL') || '',
     Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || ''
   );
 
-  // 1. Get WABA config
-  const { data: waba, error: wabaError } = await supabase
-    // .schema(agent.clientSchema) // DO NOT REMOVE COMMENT
-    .from('meta_wabas')
-    .select('waba_id, access_token')
-    .limit(1)
+  // Get WhatsApp secrets from client_secrets (public schema)
+  const { data: secrets, error: secretsError } = await supabase
+    .from('client_secrets')
+    .select('secrets')
+    .eq('client_id', clientId)
+    .eq('channel_type', 'whatsapp')
     .single();
 
-  if (wabaError || !waba) {
-    console.error('WABA config not found:', wabaError);
+  if (secretsError || !secrets) {
+    console.error('WhatsApp secrets not found:', secretsError);
     return new Response(
       JSON.stringify({ error: 'WhatsApp Business configuration not found for this client' }),
       { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   }
 
-  // 2. Fetch templates from Meta
-  const metaUrl = `https://graph.facebook.com/v24.0/${waba.waba_id}/message_templates?limit=100`;
+  // Extract accessToken and wabaId from secrets JSONB
+  const accessToken = secrets.secrets?.accessToken;
+  const wabaId = secrets.secrets?.wabaId;
+
+  if (!accessToken || !wabaId) {
+    console.error('Missing accessToken or wabaId in secrets:', secrets.secrets);
+    return new Response(
+      JSON.stringify({ error: 'WhatsApp credentials incomplete' }),
+      { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+    );
+  }
+
+  // 3. Fetch templates from Meta
+  const metaUrl = `https://graph.facebook.com/v24.0/${wabaId}/message_templates?limit=100`;
   
   const response = await fetch(metaUrl, {
     headers: {
-      'Authorization': `Bearer ${waba.access_token}`,
+      'Authorization': `Bearer ${accessToken}`,
     },
   });
 
