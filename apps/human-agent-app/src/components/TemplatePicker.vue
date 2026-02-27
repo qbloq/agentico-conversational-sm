@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import { ref, onMounted, computed } from 'vue';
+import { ref, onMounted, computed, watch } from 'vue';
 import { useEscalationsStore } from '@/stores/escalations';
+import { useAuthStore } from '@/stores/auth';
 import type { WhatsAppTemplate } from '@/api/client';
 
 const props = defineProps<{
@@ -9,12 +10,15 @@ const props = defineProps<{
 }>();
 
 const escalations = useEscalationsStore();
+const auth = useAuthStore();
 const searchQuery = ref('');
 
 onMounted(async () => {
-  if (escalations.templates.length === 0) {
-    await escalations.fetchTemplates();
-  }
+  await escalations.fetchTemplates();
+});
+
+watch(() => auth.activeClientId, async () => {
+  await escalations.fetchTemplates();
 });
 
 const filteredTemplates = computed(() => {

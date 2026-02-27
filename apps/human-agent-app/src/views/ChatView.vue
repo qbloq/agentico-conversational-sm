@@ -22,6 +22,24 @@ const mediaPreviewUrl = ref<string | null>(null);
 const fileInput = ref<HTMLInputElement | null>(null);
 const isVideoSelected = ref(false);
 
+// Voice Recording
+const isRecording = ref(false);
+const recordingDuration = ref(0);
+const audioBlob = ref<Blob | null>(null);
+const audioChunks = ref<Blob[]>([]);
+const mediaRecorder = ref<any>(null);
+const recordingTimer = ref<number | null>(null);
+const audioContext = ref<AudioContext | null>(null);
+const analyser = ref<AnalyserNode | null>(null);
+const animationFrame = ref<number | null>(null);
+const canvasRef = ref<HTMLCanvasElement | null>(null);
+const stream = ref<MediaStream | null>(null);
+
+// Voice Preview
+const audioPreviewUrl = ref<string | null>(null);
+const isPlayingPreview = ref(false);
+const audioPreviewElement = ref<HTMLAudioElement | null>(null);
+
 // Long-press and Context Menu
 const showContextMenu = ref(false);
 const selectedMessage = ref<any>(null);
@@ -144,6 +162,222 @@ async function handleTemplateSelect(templateName: string) {
   scrollToBottom();
 }
 
+// Recording Functions
+async function startRecording() {
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+    console.error('navigator.mediaDevices.getUserMedia is not available.');
+    alert('Voice recording requires a secure connection (HTTPS or localhost). If you are testing on a local IP, use localhost instead or enable HTTPS in your dev server.');
+    return;
+  }
+
+  try {
+    stream.value = await navigator.mediaDevices.getUserMedia({ audio: true });
+    
+    // Find the best supported mime type for WhatsApp compatibility
+    const supportedTypes = [
+      'audio/mp4',           // Safari standard, works on WhatsApp
+      'audio/aac',
+      'audio/mpeg',
+      'audio/ogg;codecs=opus',  // Firefox native WhatsApp format
+      'audio/webm;codecs=opus', // Chrome default
+      'audio/webm'
+    ];
+    
+    let selectedMimeType = '';
+    for (const type of supportedTypes) {
+      if (MediaRecorder.isTypeSupported(type)) {
+        selectedMimeType = type;
+        break;
+      }
+    }
+    console.log('Selected audio MIME type:', selectedMimeType || 'default browser fallback');
+    
+    mediaRecorder.value = selectedMimeType ? new MediaRecorder(stream.value, { mimeType: selectedMimeType }) : new MediaRecorder(stream.value);
+    audioChunks.value = [];
+    
+    // Setup Analyser for Wavelet Visualization
+    audioContext.value = new (window.AudioContext || (window as any).webkitAudioContext)();
+    const source = audioContext.value.createMediaStreamSource(stream.value);
+    analyser.value = audioContext.value.createAnalyser();
+    analyser.value.fftSize = 256;
+    source.connect(analyser.value);
+
+    mediaRecorder.value.ondataavailable = (event: any) => {
+      if (event.data.size > 0) {
+        audioChunks.value.push(event.data);
+      }
+    };
+
+    mediaRecorder.value.onstop = () => {
+      const blobType = selectedMimeType || 'audio/webm';
+      audioBlob.value = new Blob(audioChunks.value, { type: blobType });
+      if (audioBlob.value) {
+        audioPreviewUrl.value = URL.createObjectURL(audioBlob.value);
+        scrollToBottom();
+      }
+    };
+
+    mediaRecorder.value.start(100);
+
+    isRecording.value = true;
+    recordingDuration.value = 0;
+    
+    recordingTimer.value = window.setInterval(() => {
+      recordingDuration.value++;
+    }, 1000);
+    
+    // Use nextTick to ensure canvas is rendered
+    nextTick(() => {
+      drawWavelet();
+    });
+    
+    // Vibrate
+    if ('vibrate' in navigator) navigator.vibrate(100);
+  } catch (err) {
+    console.error('Error starting recording:', err);
+    alert('Microphone access denied or error starting recorder. Please enable microphone permissions.');
+  }
+}
+
+async function stopRecording() {
+  if (mediaRecorder.value && isRecording.value) {
+    try {
+      mediaRecorder.value.stop();
+      isRecording.value = false;
+      
+      if (recordingTimer.value) {
+        clearInterval(recordingTimer.value);
+        recordingTimer.value = null;
+      }
+      
+      if (animationFrame.value) {
+        cancelAnimationFrame(animationFrame.value);
+      }
+      
+      if (stream.value) {
+        stream.value.getTracks().forEach(track => track.stop());
+      }
+      
+      if (audioContext.value) {
+        audioContext.value.close();
+        audioContext.value = null;
+      }
+      
+      scrollToBottom();
+    } catch (err) {
+      console.error('Error stopping recording and generating MP3:', err);
+      isRecording.value = false;
+    }
+  }
+}
+
+async function sendRecording() {
+  if (audioBlob.value) {
+    await escalations.sendAudio(audioBlob.value);
+    deleteRecording();
+    scrollToBottom();
+  }
+}
+
+function deleteRecording() {
+  if (audioPreviewUrl.value) {
+    URL.revokeObjectURL(audioPreviewUrl.value);
+  }
+  audioPreviewUrl.value = null;
+  audioBlob.value = null;
+  audioChunks.value = [];
+  isPlayingPreview.value = false;
+  recordingDuration.value = 0;
+}
+
+function togglePreviewPlayback() {
+  if (!audioPreviewElement.value) return;
+  
+  if (isPlayingPreview.value) {
+    audioPreviewElement.value.pause();
+  } else {
+    audioPreviewElement.value.play();
+  }
+  isPlayingPreview.value = !isPlayingPreview.value;
+}
+
+function cancelRecording() {
+  if (mediaRecorder.value && isRecording.value) {
+    mediaRecorder.value.stop();
+    isRecording.value = false;
+    audioChunks.value = [];
+    audioBlob.value = null;
+    
+    if (recordingTimer.value) {
+      clearInterval(recordingTimer.value);
+      recordingTimer.value = null;
+    }
+    
+    if (animationFrame.value) {
+      cancelAnimationFrame(animationFrame.value);
+    }
+    
+    if (stream.value) {
+      stream.value.getTracks().forEach(track => track.stop());
+    }
+    
+    if (audioContext.value) {
+      audioContext.value.close();
+      audioContext.value = null;
+    }
+  }
+}
+
+function drawWavelet() {
+  if (!canvasRef.value || !analyser.value) return;
+  
+  const canvas = canvasRef.value;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return;
+  
+  const bufferLength = analyser.value.frequencyBinCount;
+  const dataArray = new Uint8Array(bufferLength);
+  
+  const draw = () => {
+    if (!isRecording.value) return;
+    animationFrame.value = requestAnimationFrame(draw);
+    analyser.value!.getByteFrequencyData(dataArray);
+    
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    
+    const barWidth = (canvas.width / bufferLength) * 2;
+    let barHeight;
+    let x = 0;
+    
+    for (let i = 0; i < bufferLength; i++) {
+      // Scale barHeight better for small canvas
+      barHeight = (dataArray[i] / 255) * canvas.height;
+      
+      // Ensure a minimum height for visibility
+      const minHeight = 2;
+      const finalHeight = Math.max(minHeight, barHeight);
+      
+      ctx.fillStyle = `rgb(59, 130, 246)`; // primary-500
+      const y = (canvas.height - finalHeight) / 2;
+      
+      // Rounded bars
+      ctx.beginPath();
+      ctx.roundRect(x, y, barWidth - 1, finalHeight, 2);
+      ctx.fill();
+      
+      x += barWidth;
+    }
+  };
+  
+  draw();
+}
+
+function formatDuration(seconds: number) {
+  const mins = Math.floor(seconds / 60);
+  const secs = seconds % 60;
+  return `${mins}:${secs.toString().padStart(2, '0')}`;
+}
+
 const formatRemainingTime = computed(() => {
   const remaining = escalations.windowTimeRemaining;
   if (remaining <= 0) return 'Expired';
@@ -164,7 +398,7 @@ const isHumanMessage = (msg: { sent_by_agent_id?: string | null }) => {
   return !!msg.sent_by_agent_id;
 };
 
-// Long-press handlers
+// Long-press handlers for message context menu
 function handleTouchStart(msg: any, event: TouchEvent) {
   selectedMessage.value = msg;
   longPressTimer = window.setTimeout(() => {
@@ -186,6 +420,23 @@ function handleMouseDown(msg: any, event: MouseEvent) {
 
 function handleMouseUp() {
   if (longPressTimer) clearTimeout(longPressTimer);
+}
+
+// Long-press handler for Mic Button
+const micPressTimer = ref<number | null>(null);
+
+function handleMicPressStart(event: TouchEvent | MouseEvent) {
+  event.preventDefault();
+  micPressTimer.value = window.setTimeout(() => {
+    startRecording();
+  }, 300); // Short delay to distinguish from tap? Actually user said "long-pressing"
+}
+
+function handleMicPressEnd() {
+  if (micPressTimer.value) {
+    clearTimeout(micPressTimer.value);
+    micPressTimer.value = null;
+  }
 }
 
 function openContextMenu(x: number, y: number) {
@@ -412,7 +663,22 @@ const formatDateLabel = (date: Date) => {
                 alt="Sticker"
               />
             </div>
-            <p v-if="msg.content && msg.type !== 'sticker'" 
+            <div v-if="msg.type === 'audio' && msg.media_url" class="py-2 min-w-[240px]">
+              <div class="flex items-center gap-3">
+                <div class="w-10 h-10 rounded-full bg-white/20 flex items-center justify-center text-white">
+                  <svg class="w-6 h-6" fill="currentColor" viewBox="0 0 24 24">
+                    <path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3z"/>
+                    <path d="M17 11c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z"/>
+                  </svg>
+                </div>
+                <audio 
+                  :src="msg.media_url" 
+                  controls
+                  class="h-8 flex-1"
+                ></audio>
+              </div>
+            </div>
+            <p v-if="msg.content && msg.type !== 'sticker' && msg.type !== 'audio'" 
               :class="[
                 'text-[15px] leading-snug whitespace-pre-wrap break-words',
                 msg.direction === 'inbound' ? 'text-surface-900 dark:text-white' : 'text-white'
@@ -492,9 +758,10 @@ const formatDateLabel = (date: Date) => {
             />
             
             <button
+              v-if="!isRecording && !audioPreviewUrl"
               @click="openFileSelector"
               :disabled="escalations.sending"
-              class="px-3 py-2 bg-surface-100 dark:bg-surface-700 hover:bg-surface-200 dark:hover:bg-surface-600 disabled:opacity-50 text-surface-600 dark:text-surface-300 rounded-xl transition-colors"
+              class="px-3 py-2 bg-surface-100 dark:bg-surface-700 hover:bg-surface-200 dark:hover:bg-surface-600 disabled:opacity-50 text-surface-600 dark:text-surface-300 rounded-xl transition-colors shrink-0"
             >
               <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" />
@@ -502,20 +769,91 @@ const formatDateLabel = (date: Date) => {
             </button>
 
             <input
+              v-if="!isRecording && !audioPreviewUrl"
               v-model="messageInput"
               @keyup.enter="handleSend"
               type="text"
               :placeholder="selectedFile ? 'Add a caption (optional)...' : 'Type a message...'"
-              class="flex-1 px-3 py-2 bg-surface-50 dark:bg-surface-700 border border-surface-200 dark:border-surface-600 rounded-xl text-[15px] text-surface-900 dark:text-white placeholder-surface-400 focus:outline-none focus:ring-2 focus:ring-accent-500 focus:border-transparent"
+              class="flex-1 w-full min-w-0 px-3 py-2 bg-surface-50 dark:bg-surface-700 border border-surface-200 dark:border-surface-600 rounded-xl text-[15px] text-surface-900 dark:text-white placeholder-surface-400 focus:outline-none focus:ring-2 focus:ring-accent-500 focus:border-transparent"
             />
             
             <button
               @click="handleSend"
-              :disabled="escalations.sending || (!messageInput.trim() && !selectedFile)"
-              class="px-3 py-2 bg-primary-600 hover:bg-primary-700 disabled:bg-surface-100 dark:disabled:bg-surface-700 disabled:text-surface-400 dark:disabled:text-surface-500 disabled:cursor-not-allowed text-white rounded-xl transition-colors"
+              v-if="!isRecording && !audioPreviewUrl && (messageInput.trim() || selectedFile)"
+              :disabled="escalations.sending"
+              class="px-3 py-2 bg-primary-600 hover:bg-primary-700 disabled:bg-surface-100 dark:disabled:bg-surface-700 disabled:text-surface-400 dark:disabled:text-surface-500 disabled:cursor-not-allowed text-white rounded-xl transition-colors shrink-0"
             >
               <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
+              </svg>
+            </button>
+
+            <!-- Recording UI -->
+            <div v-if="isRecording" class="flex-1 min-w-0 flex items-center gap-3 px-3 py-2 bg-surface-100 dark:bg-surface-700 rounded-xl animate-pulse-subtle">
+              <button @click="cancelRecording" class="text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 p-1 rounded-full transition-colors shrink-0">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                </svg>
+              </button>
+              
+              <span class="text-xs font-semibold text-red-500 min-w-[40px] shrink-0">{{ formatDuration(recordingDuration) }}</span>
+              
+              <canvas ref="canvasRef" width="150" height="24" class="flex-1 min-w-0 h-6"></canvas>
+              
+              <button @click="stopRecording" title="Stop and Listen" class="w-8 h-8 bg-red-500 text-white rounded-lg flex items-center justify-center transition-colors shrink-0">
+                <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
+                  <rect x="6" y="6" width="12" height="12" />
+                </svg>
+              </button>
+            </div>
+
+            <!-- Preview UI -->
+            <div v-else-if="audioPreviewUrl" class="flex-1 min-w-0 flex items-center gap-3 px-3 py-2 bg-primary-50 dark:bg-primary-900/20 rounded-xl border border-primary-100 dark:border-primary-800/50">
+              <button @click="deleteRecording" class="text-surface-500 hover:text-red-500 transition-colors shrink-0">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                </svg>
+              </button>
+
+              <div class="flex items-center gap-2 flex-1 min-w-0">
+                <button @click="togglePreviewPlayback" class="w-8 h-8 bg-primary-600 text-white rounded-full flex items-center justify-center shrink-0">
+                  <svg v-if="!isPlayingPreview" class="w-4 h-4 ml-0.5" fill="currentColor" viewBox="0 0 24 24">
+                    <path d="M8 5v14l11-7z" />
+                  </svg>
+                  <svg v-else class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
+                    <path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z" />
+                  </svg>
+                </button>
+                <span class="text-xs font-medium text-primary-700 dark:text-primary-300 shrink-0">{{ formatDuration(recordingDuration) }}</span>
+                <audio 
+                  ref="audioPreviewElement" 
+                  :src="audioPreviewUrl" 
+                  @ended="isPlayingPreview = false" 
+                  class="hidden"
+                ></audio>
+              </div>
+
+              <button @click="sendRecording" :disabled="escalations.sending" class="px-3 py-2 bg-primary-600 hover:bg-primary-700 disabled:opacity-50 text-white rounded-xl transition-colors flex items-center gap-2 shrink-0">
+                <span v-if="escalations.sending" class="animate-spin w-4 h-4 border-2 border-white/30 border-t-white rounded-full"></span>
+                <svg v-else class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
+                </svg>
+              </button>
+            </div>
+            
+            <button
+              v-if="!isRecording && !audioPreviewUrl && !messageInput.trim() && !selectedFile"
+              @touchstart="handleMicPressStart"
+              @touchend="handleMicPressEnd"
+              @mousedown="handleMicPressStart"
+              @mouseup="handleMicPressEnd"
+              class="w-10 h-10 bg-primary-600 hover:bg-primary-700 text-white rounded-full flex items-center justify-center transition-all active:scale-125 shrink-0"
+              title="Hold to record"
+            >
+              <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 1c-1.66 0-3 1.34-3 3v8c0 1.66 1.34 3 3 3s3-1.34 3-3V4c0-1.66-1.34-3-3-3z" />
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 10v1a7 7 0 01-7 7 7 7 0 01-7-7v-1" />
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 18v4m-4 0h8" />
               </svg>
             </button>
           </div>
@@ -622,6 +960,13 @@ const formatDateLabel = (date: Date) => {
 
 .animate-slide-up { animation: slide-up 0.25s cubic-bezier(0.16, 1, 0.3, 1); }
 .animate-scale-in { animation: scale-in 0.15s cubic-bezier(0.34, 1.56, 0.64, 1); transform-origin: top left; }
+
+@keyframes pulse-subtle {
+  0% { opacity: 1; }
+  50% { opacity: 0.7; }
+  100% { opacity: 1; }
+}
+.animate-pulse-subtle { animation: pulse-subtle 2s infinite ease-in-out; }
 
 .highlight-message {
   animation: flash 1s ease-in-out 2;

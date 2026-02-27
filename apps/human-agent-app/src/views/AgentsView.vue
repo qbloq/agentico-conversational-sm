@@ -9,6 +9,8 @@ import {
   listAgents,
   updateAgentClients,
   updateAgentLevel,
+  updateAgentActive,
+  createAgent,
   type AgentLevel,
   type HumanAgent,
 } from '@/api/client';
@@ -23,6 +25,13 @@ const saving = ref<string | null>(null); // agentId being saved
 const editingAgent = ref<string | null>(null); // agentId being edited
 const editClientIds = ref<string[]>([]);
 const editLevel = ref<AgentLevel>('agent');
+const editIsActive = ref(true);
+
+// Add Agent modal state
+const showAddModal = ref(false);
+const newAgentPhone = ref('');
+const newAgentLevel = ref<AgentLevel>('agent');
+const creatingAgent = ref(false);
 
 const schemaClients = computed(() =>
   clientsStore.clients.filter(c => c.schema_name === auth.clientSchema)
@@ -63,12 +72,50 @@ function startEditing(agent: HumanAgent) {
   editingAgent.value = agent.id;
   editClientIds.value = agent.allowed_client_ids ? [...agent.allowed_client_ids] : [];
   editLevel.value = agent.level;
+  editIsActive.value = agent.is_active;
 }
 
 function cancelEditing() {
   editingAgent.value = null;
   editClientIds.value = [];
   editLevel.value = 'agent';
+  editIsActive.value = true;
+}
+
+function openAddModal() {
+  showAddModal.value = true;
+  newAgentPhone.value = '';
+  newAgentLevel.value = 'agent';
+}
+
+function closeAddModal() {
+  showAddModal.value = false;
+  newAgentPhone.value = '';
+  newAgentLevel.value = 'agent';
+}
+
+async function handleCreateAgent() {
+  if (!newAgentPhone.value.trim()) {
+    error.value = 'Phone number is required';
+    return;
+  }
+
+  creatingAgent.value = true;
+  error.value = null;
+
+  try {
+    const result = await createAgent(
+      auth.clientSchema,
+      newAgentPhone.value.trim(),
+      newAgentLevel.value
+    );
+    agents.value.push(result.agent);
+    closeAddModal();
+  } catch (e) {
+    error.value = e instanceof Error ? e.message : 'Failed to create agent';
+  } finally {
+    creatingAgent.value = false;
+  }
 }
 
 function toggleClientId(clientId: string) {
@@ -100,12 +147,16 @@ async function saveAgentClients(agentId: string) {
       (currentAgent.allowed_client_ids || []).join('|') !== (ids || []).join('|') ||
       (currentAgent.allowed_client_ids === null) !== (ids === null);
     const levelChanged = currentAgent.level !== editLevel.value;
+    const activeChanged = currentAgent.is_active !== editIsActive.value;
 
     if (clientsChanged) {
       await updateAgentClients(auth.clientSchema, agentId, ids);
     }
     if (levelChanged) {
       await updateAgentLevel(auth.clientSchema, agentId, editLevel.value);
+    }
+    if (activeChanged) {
+      await updateAgentActive(auth.clientSchema, agentId, editIsActive.value);
     }
 
     // Update local state
@@ -115,12 +166,14 @@ async function saveAgentClients(agentId: string) {
         ...agents.value[idx],
         allowed_client_ids: ids,
         level: editLevel.value,
+        is_active: editIsActive.value,
       };
     }
 
     editingAgent.value = null;
     editClientIds.value = [];
     editLevel.value = 'agent';
+    editIsActive.value = true;
   } catch (e) {
     error.value = e instanceof Error ? e.message : 'Failed to update agent';
   } finally {
@@ -140,6 +193,16 @@ async function saveAgentClients(agentId: string) {
             Manage which clients each agent can access
           </p>
         </div>
+        <button
+          v-if="auth.isManagerOrAbove"
+          @click="openAddModal"
+          class="px-3 py-1.5 bg-accent-600 hover:bg-accent-700 text-white text-sm font-medium rounded-lg transition-colors flex items-center gap-1.5"
+        >
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path>
+          </svg>
+          Add Agent
+        </button>
       </div>
     </header>
 
@@ -224,6 +287,19 @@ async function saveAgentClients(agentId: string) {
               <option value="admin">Admin</option>
             </select>
 
+            <div class="mb-3 flex items-center justify-between">
+              <span class="text-xs text-surface-500">Agent Status</span>
+              <label class="relative inline-flex items-center cursor-pointer">
+                <input
+                  type="checkbox"
+                  v-model="editIsActive"
+                  class="sr-only peer"
+                />
+                <div class="w-11 h-6 bg-surface-300 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-accent-300 dark:peer-focus:ring-accent-800 rounded-full peer dark:bg-surface-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-surface-600 peer-checked:bg-accent-600"></div>
+                <span class="ml-2 text-sm font-medium text-surface-700 dark:text-surface-300">{{ editIsActive ? 'Active' : 'Inactive' }}</span>
+              </label>
+            </div>
+
             <p class="text-xs text-surface-500 mb-2">Select clients this agent can access:</p>
             <div class="space-y-2 mb-3">
               <label
@@ -261,6 +337,69 @@ async function saveAgentClients(agentId: string) {
               </button>
             </div>
           </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Add Agent Modal -->
+    <div
+      v-if="showAddModal"
+      class="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm"
+      @click.self="closeAddModal"
+    >
+      <div class="bg-white dark:bg-surface-800 rounded-xl shadow-xl max-w-md w-full mx-4 overflow-hidden">
+        <div class="px-4 py-3 border-b border-surface-200 dark:border-surface-700">
+          <h3 class="text-lg font-semibold text-surface-900 dark:text-white">Add New Agent</h3>
+          <p class="text-sm text-surface-500">Create a new human agent account</p>
+        </div>
+
+        <div class="p-4 space-y-4">
+          <div>
+            <label class="block text-sm font-medium text-surface-700 dark:text-surface-300 mb-1">
+              Phone Number <span class="text-red-500">*</span>
+            </label>
+            <input
+              v-model="newAgentPhone"
+              type="tel"
+              class="w-full px-3 py-2 rounded-lg border border-surface-200 dark:border-surface-600 bg-white dark:bg-surface-700 text-sm text-surface-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-accent-500/50"
+              @keyup.enter="handleCreateAgent"
+            />
+            <p class="text-xs text-surface-400 mt-1">The agent will use this number to log in with OTP</p>
+          </div>
+
+          <div>
+            <label class="block text-sm font-medium text-surface-700 dark:text-surface-300 mb-1">
+              Role Level
+            </label>
+            <select
+              v-model="newAgentLevel"
+              class="w-full px-3 py-2 rounded-lg border border-surface-200 dark:border-surface-600 bg-white dark:bg-surface-700 text-sm text-surface-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-accent-500/50"
+            >
+              <option value="agent">Agent</option>
+              <option value="manager">Manager</option>
+              <option value="admin">Admin</option>
+            </select>
+          </div>
+
+          <div v-if="error && showAddModal" class="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-3 text-red-700 dark:text-red-400 text-sm">
+            {{ error }}
+          </div>
+        </div>
+
+        <div class="px-4 py-3 border-t border-surface-200 dark:border-surface-700 flex items-center justify-end gap-2">
+          <button
+            @click="closeAddModal"
+            class="px-4 py-2 text-surface-600 dark:text-surface-400 hover:text-surface-900 dark:hover:text-white text-sm font-medium transition-colors"
+          >
+            Cancel
+          </button>
+          <button
+            @click="handleCreateAgent"
+            :disabled="creatingAgent || !newAgentPhone.trim()"
+            class="px-4 py-2 bg-accent-600 hover:bg-accent-700 disabled:opacity-50 text-white text-sm font-medium rounded-lg transition-colors"
+          >
+            {{ creatingAgent ? 'Creating...' : 'Create Agent' }}
+          </button>
         </div>
       </div>
     </div>

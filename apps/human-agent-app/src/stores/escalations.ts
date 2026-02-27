@@ -13,6 +13,7 @@ import {
   sendTemplateMessage,
   sendImageMessage,
   sendVideoMessage,
+  sendAudioMessage,
   listTemplates,
   type Escalation,
   type EscalationDetail,
@@ -275,10 +276,59 @@ export const useEscalationsStore = defineStore('escalations', () => {
     }
   }
 
+  async function sendAudio(audioBlob: Blob, caption?: string): Promise<boolean> {
+    if (!currentEscalation.value) return false;
+
+    sending.value = true;
+    error.value = null;
+
+    try {
+      const result = await sendAudioMessage(
+        currentEscalation.value.id, 
+        audioBlob, 
+        currentEscalation.value.session.channel_user_id, // Phone number
+        caption,
+        replyingTo.value?.id
+      );
+      
+      // Create temporary URL for preview
+      const tempUrl = URL.createObjectURL(audioBlob);
+      
+      // Add to local messages (optimistic update)
+      messages.value.push({
+        id: result.messageId,
+        session_id: currentEscalation.value.session.id,
+        direction: 'outbound',
+        type: 'audio',
+        content: caption || null,
+        media_url: tempUrl,
+        reply_to_message_id: replyingTo.value?.id,
+        created_at: new Date().toISOString(),
+        sent_by_agent_id: 'current-agent',
+      });
+
+      // Clear replying to state
+      clearReplyingTo();
+
+      // Update status
+      if (currentEscalation.value.status === 'assigned') {
+        currentEscalation.value.status = 'in_progress';
+      }
+
+      return true;
+    } catch (e) {
+      error.value = e instanceof Error ? e.message : 'Failed to send audio';
+      return false;
+    } finally {
+      sending.value = false;
+    }
+  }
+
   async function fetchTemplates(): Promise<void> {
     loadingTemplates.value = true;
     try {
-      const result = await listTemplates();
+      const authStore = useAuthStore();
+      const result = await listTemplates(authStore.activeClientId);
       templates.value = result.templates;
     } catch (e) {
       console.error('Failed to fetch templates:', e);
@@ -435,6 +485,7 @@ export const useEscalationsStore = defineStore('escalations', () => {
     send,
     sendImage,
     sendVideo,
+    sendAudio,
     fetchTemplates,
     sendTemplate,
     clearCurrent,

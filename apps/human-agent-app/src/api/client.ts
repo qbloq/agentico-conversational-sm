@@ -295,6 +295,83 @@ export async function sendVideoMessage(
 
   return data;
 }
+import { useAuthStore } from '../stores/auth';
+
+export async function sendAudioMessage(
+  escalationId: string,
+  audioFile: Blob,
+  to: string,
+  caption?: string,
+  replyToMessageId?: string
+): Promise<{ success: boolean; messageId: string; mediaUrl: string }> {
+  // Extract active client ID from the Pinia auth store
+  const authStore = useAuthStore();
+  let clientId = authStore.activeClientId;
+  
+  if (!clientId) {
+    console.error("Client ID (cid) is completely missing from useAuthStore. Media API will fail to resolve credentials.");
+    // For local testing, default to a known working dev client ID if available
+    if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
+      clientId = 'client_parallelo'; // Default fallback just for dev testing if missing
+      console.log(`[Dev Fallback] Forcing clientId to ${clientId} for localhost testing.`);
+    } else {
+      throw new Error("Missing active client ID. Cannot upload media.");
+    }
+  }
+
+  console.log(`[ClientAPI] sendAudioMessage triggered. Target escalationId: ${escalationId}, resolved cid: ${clientId}`);
+
+  const formData = new FormData();
+  // Pass escalation mapping to the new API
+  const ext = audioFile.type ? audioFile.type.split(';')[0].split('/')[1] : 'ogg';
+  const fileName = `recording.${ext}`;
+  
+  // Explicit format required for Express multer
+  formData.append('to', to);
+  formData.append('isAudio', 'true');
+  formData.append('mimeType', audioFile.type || 'audio/mp4');
+  formData.append('file', audioFile, fileName);
+  if (caption) {
+    formData.append('caption', caption);
+  }
+  if (replyToMessageId) {
+    formData.append('replyToMessageId', replyToMessageId);
+  }
+
+  const token = getToken();
+  
+  // POST to the new Node Express Backend
+  let MEDIA_API_URL = `https://${window.location.hostname}:3001/api/media`;
+  try {
+    const metaEnv = (import.meta as any).env;
+    if (metaEnv && metaEnv.VITE_MEDIA_API_URL) {
+      MEDIA_API_URL = metaEnv.VITE_MEDIA_API_URL;
+    }
+  } catch(e) {}
+  
+  console.log(`[ClientAPI] Uploading audio buffer to Express Media API at: ${MEDIA_API_URL}/upload`);
+  
+  const response = await fetch(`${MEDIA_API_URL}/upload?cid=${clientId}&escalationId=${escalationId}`, {
+    method: 'POST',
+    // DO NOT set Content-Type header manually here; let browser fetch build the boundary for FormData
+    headers: {
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+    body: formData,
+  });
+
+  const data = await response.json();
+
+  if (!response.ok) {
+    if (response.status === 401 && onUnauthorizedCallback) {
+      onUnauthorizedCallback();
+    }
+    throw new Error(data.error || 'Request failed');
+  }
+
+  return data;
+}
+
 
 export async function sendTemplateMessage(
   escalationId: string,
@@ -320,8 +397,9 @@ export interface WhatsAppTemplate {
   components: any[];
 }
 
-export async function listTemplates(): Promise<{ templates: WhatsAppTemplate[] }> {
-  return request('/manage-whatsapp-templates/templates');
+export async function listTemplates(clientId?: string | null): Promise<{ templates: WhatsAppTemplate[] }> {
+  const params = clientId ? `?clientId=${encodeURIComponent(clientId)}` : '';
+  return request(`/manage-whatsapp-templates/templates${params}`);
 }
 
 // =============================================================================
@@ -698,6 +776,38 @@ export async function updateAgentLevel(
       schema,
       agentId,
       level,
+    }),
+  });
+}
+
+export async function createAgent(
+  schema: string,
+  phone: string,
+  level: AgentLevel = 'agent',
+): Promise<{ success: boolean; agent: HumanAgent }> {
+  return request('/manage-clients', {
+    method: 'POST',
+    body: JSON.stringify({
+      action: 'create-agent',
+      schema,
+      phone,
+      level,
+    }),
+  });
+}
+
+export async function updateAgentActive(
+  schema: string,
+  agentId: string,
+  isActive: boolean,
+): Promise<{ success: boolean; agent: HumanAgent }> {
+  return request('/manage-clients', {
+    method: 'POST',
+    body: JSON.stringify({
+      action: 'update-agent-active',
+      schema,
+      agentId,
+      isActive,
     }),
   });
 }

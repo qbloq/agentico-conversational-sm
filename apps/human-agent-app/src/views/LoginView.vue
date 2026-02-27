@@ -63,7 +63,6 @@ async function handleCompleteProfile() {
           <input
             v-model="phone"
             type="tel"
-            placeholder="+1234567890"
             class="w-full px-4 py-3 bg-white dark:bg-surface-800 border border-surface-200 dark:border-surface-700 rounded-xl text-surface-900 dark:text-white placeholder-surface-400 dark:placeholder-surface-500 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
           />
         </div>
@@ -143,7 +142,7 @@ async function handleCompleteProfile() {
 
         <div>
           <label class="block text-sm font-medium text-surface-700 dark:text-surface-300 mb-2">
-            Last Name
+            Last Name *
           </label>
           <input
             v-model="lastName"
@@ -165,7 +164,7 @@ async function handleCompleteProfile() {
 
         <button
           @click="handleCompleteProfile"
-          :disabled="auth.loading || !firstName"
+          :disabled="auth.loading || !firstName || !lastName"
           class="w-full py-3 bg-primary-600 hover:bg-primary-700 disabled:bg-surface-700 disabled:cursor-not-allowed text-white font-medium rounded-xl transition-colors"
         >
           {{ auth.loading ? 'Saving...' : 'Continue' }}
